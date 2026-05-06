@@ -152,61 +152,6 @@ services:
       retries: 3
       start_period: 30s
 
-  quant_scheduler:
-    image: xiz001/quant_data:5af1779
-    container_name: quant_scheduler
-    restart: always
-    command: ["python", "scheduler/task.py"]
-    environment:
-      - SLM_PROVIDER=lmstudio
-      - SLM_API_MODE=openai
-      - SLM_API_URL=http://host.docker.internal:1234/v1
-      - SLM_MODEL=qwen3.5-4b
-      - SLM_MAX_CONCURRENCY=1
-      - MONGO_URI=mongodb://root:root@mongo6:27017/quant_data?authSource=admin
-      - LOCAL_MONGO_URI=mongodb://root:root@mongo6:27017/quant_data?authSource=admin
-      - MYSQL_HOST=mysql8
-      - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=root
-      - MYSQL_DATABASE=workflow
-      - USE_MYSQL_BATCH_QUEUE=true
-      - RUN_STARTUP_INCREMENTAL_JOBS=true
-      - RUN_STARTUP_PRICE_HISTORY_BACKFILL=true
-      - RUN_STARTUP_GDELT_BACKFILL=true
-      - RUN_STARTUP_FEATURE_BUILD=false
-      - ENABLE_FINNHUB_JOB=true
-      - FINNHUB_JOB_MINUTES=30
-      - ENABLE_NEWSAPI_JOB=true
-      - NEWSAPI_JOB_MINUTES=60
-      - ENABLE_YAHOO_JOB=true
-      - YAHOO_JOB_MINUTES=60
-      - ENABLE_PRICE_HISTORY_BACKFILL_JOB=true
-      - PRICE_HISTORY_BACKFILL_JOB_TIME=06:30
-      - ENABLE_DAILY_GDELT_BACKFILL_JOB=true
-      - DAILY_GDELT_BACKFILL_JOB_TIME=05:15
-      - ENABLE_DAILY_PRICE_JOB=true
-      - DAILY_PRICE_JOB_TIME=07:30
-      - ENABLE_DAILY_FEATURE_JOB=true
-      - DAILY_FEATURE_JOB_TIME=08:00
-      - FEATURE_NEWS_COLLECTION=news_articles_company_matched_v1
-      - FEATURE_OUTPUT_COLLECTION=daily_symbol_features_company_matched_v1
-      - ENABLE_GDELT_BACKFILL_JOB=false
-    depends_on:
-      - mongodb
-      - mysql
-      - quant_api
-    networks:
-      - project-net
-    volumes:
-      - ../quant_data:/app
-      - /Volumes/Data24T/docker-volumes/gdelt_cache:/Volumes/Data24T/docker-volumes/gdelt_cache
-    healthcheck:
-      test: ["CMD", "python", "-c", "print('scheduler-ok')"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   # ======================================================
   # 4. Dify 平台
@@ -328,10 +273,44 @@ services:
     networks:
       - project-net
 # ======================================================
-# 网络
 # ======================================================
+  # 7. Kafka 消息队列
   # ======================================================
-  # 7. Airflow 任务调度
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: kafka
+    restart: always
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=4
+    volumes:
+      - /Users/xiz/docker-volumes/kafka_data:/bitnami/kafka
+    networks:
+      - project-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: always
+    ports:
+      - "15070:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=quant
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - project-net
+
+  # ======================================================
+  # 8. Airflow 任务调度
   # ======================================================
   airflow-postgres:
     image: postgres:15-alpine
