@@ -12,7 +12,7 @@ services:
     ports:
       - "23306:3306"
     volumes:
-      - /Users/xiz/docker-volumes/mysql_data:/var/lib/mysql
+      - /Volumes/Data4T/docker-volumes/mysql_data:/var/lib/mysql
     networks:
       - project-net
 
@@ -20,13 +20,14 @@ services:
     image: mongo:6.0
     container_name: mongo6
     restart: always
+    command: --wiredTigerCacheSizeGB 2
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
     ports:
       - "37018:27017"
     volumes:
-      - /Users/xiz/docker-volumes/mongo_data:/data/db
+      - /Volumes/Data4T/docker-volumes/mongo_data:/data/db
     networks:
       - project-net
 
@@ -39,7 +40,7 @@ services:
       POSTGRES_PASSWORD: dify
       POSTGRES_DB: dify
     volumes:
-      - /Volumes/Data24T/docker-volumes/dify_postgres:/var/lib/postgresql/data
+      - /Volumes/Data4T/docker-volumes/dify_postgres:/var/lib/postgresql/data
     networks:
       - project-net
 
@@ -65,7 +66,7 @@ services:
     container_name: qdrant
     restart: always
     volumes:
-      - /Volumes/Data24T/docker-volumes/qdrant_data:/qdrant/storage
+      - /Volumes/Data4T/docker-volumes/qdrant_data:/qdrant/storage
     networks:
       - project-net
 
@@ -195,7 +196,7 @@ services:
       CONSOLE_CORS_ALLOW_ORIGINS: "*"
       WEB_API_CORS_ALLOW_ORIGINS: "*"
     volumes:
-      - /Volumes/Data24T/docker-volumes/dify_storage:/app/storage
+      - /Volumes/Data4T/docker-volumes/dify_storage:/app/storage
     depends_on:
       - postgres
       - redis
@@ -212,7 +213,7 @@ services:
       <<: *dify_env
       MODE: worker
     volumes:
-      - /Volumes/Data24T/docker-volumes/dify_storage:/app/storage
+      - /Volumes/Data4T/docker-volumes/dify_storage:/app/storage
     depends_on:
       - dify-api
     networks:
@@ -248,7 +249,7 @@ services:
       --host 0.0.0.0
       --port 5000
     volumes:
-      - /Users/xiz/docker-volumes/mlflow_data:/mlflow
+      - /Volumes/Data4T/docker-volumes/mlflow_data:/mlflow
     networks:
       - project-net
 
@@ -291,7 +292,7 @@ services:
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
       - KAFKA_CFG_NUM_PARTITIONS=4
     volumes:
-      - /Users/xiz/docker-volumes/kafka_data:/bitnami/kafka
+      - /Volumes/Data4T/docker-volumes/kafka_data:/bitnami/kafka
     networks:
       - project-net
 
@@ -321,7 +322,7 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     volumes:
-      - /Users/xiz/docker-volumes/airflow_postgres:/var/lib/postgresql/data
+      - /Volumes/Data4T/docker-volumes/airflow_postgres:/var/lib/postgresql/data
     networks:
       - project-net
 
@@ -345,7 +346,7 @@ services:
       "
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
-      - /Users/xiz/docker-volumes/airflow_logs:/opt/airflow/logs
+      - /Volumes/Data4T/docker-volumes/airflow_logs:/opt/airflow/logs
     depends_on:
       - airflow-postgres
     networks:
@@ -361,7 +362,7 @@ services:
       - "15060:8080"
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
-      - /Users/xiz/docker-volumes/airflow_logs:/opt/airflow/logs
+      - /Volumes/Data4T/docker-volumes/airflow_logs:/opt/airflow/logs
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - airflow-postgres
@@ -376,7 +377,7 @@ services:
     command: scheduler
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
-      - /Users/xiz/docker-volumes/airflow_logs:/opt/airflow/logs
+      - /Volumes/Data4T/docker-volumes/airflow_logs:/opt/airflow/logs
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - airflow-postgres
