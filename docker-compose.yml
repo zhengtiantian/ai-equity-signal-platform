@@ -20,7 +20,7 @@ services:
     image: mongo:6.0
     container_name: mongo6
     restart: always
-    command: --wiredTigerCacheSizeGB 2
+    command: --wiredTigerCacheSizeGB 1
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
