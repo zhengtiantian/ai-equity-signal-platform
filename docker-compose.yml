@@ -346,9 +346,7 @@ services:
     command: >
       bash -c "
         airflow db migrate &&
-        airflow users create --username admin --password admin
-          --firstname Admin --lastname Admin --role Admin
-          --email admin@quant.local || true
+        airflow users create --username admin --password admin --firstname Admin --lastname Admin --role Admin --email admin@quant.local || true
       "
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
