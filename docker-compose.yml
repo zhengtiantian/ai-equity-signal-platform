@@ -331,7 +331,10 @@ services:
       - project-net
 
   airflow-init:
-    image: apache/airflow:2.10.4
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: quant_airflow:local
     container_name: airflow-init
     restart: "no"
     environment: &airflow-env
@@ -340,7 +343,6 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=
       AIRFLOW__WEBSERVER__SECRET_KEY: quant_airflow_secret
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-docker==3.10.0"
     command: >
       bash -c "
         airflow db migrate &&
@@ -357,7 +359,10 @@ services:
       - project-net
 
   airflow-webserver:
-    image: apache/airflow:2.10.4
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: quant_airflow:local
     container_name: airflow-webserver
     restart: always
     environment: *airflow-env
@@ -374,7 +379,10 @@ services:
       - project-net
 
   airflow-scheduler:
-    image: apache/airflow:2.10.4
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: quant_airflow:local
     container_name: airflow-scheduler
     restart: always
     environment: *airflow-env
@@ -391,3 +399,4 @@ services:
 networks:
   project-net:
     driver: bridge
+
