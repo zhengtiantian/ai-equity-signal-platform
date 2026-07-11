@@ -263,8 +263,8 @@ services:
     ports:
       - "18000:8083"
     environment:
-      - LOCAL_MODEL_NAME=qwen3.5-9b
-      - EMBED_MODEL=harrier-oss-v1-0.6b
+      - LOCAL_MODEL_NAME=qwen3.5-9b-mlx
+      - EMBED_MODEL=harrier-oss-v1-0.6b-mlx
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1
       - QUANT_API=http://quant_api:8081
       - DIFY_API=http://dify-api:5001
