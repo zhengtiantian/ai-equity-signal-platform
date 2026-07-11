@@ -263,11 +263,13 @@ services:
     ports:
       - "18000:8083"
     environment:
-      - LOCAL_MODEL_NAME=qwen3:8b-q4_K_M
-      - OPENAI_API_KEY=你的Key
+      - LOCAL_MODEL_NAME=qwen3.5-9b
+      - EMBED_MODEL=harrier-oss-v1-0.6b
+      - LM_STUDIO_URL=http://host.docker.internal:1234/v1
       - QUANT_API=http://quant_api:8081
       - DIFY_API=http://dify-api:5001
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - dify-api
       - quant_api
