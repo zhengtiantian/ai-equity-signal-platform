@@ -257,7 +257,7 @@ services:
   # 6. LangChain Agent
   # ======================================================
   langchain-agent:
-    image: xiz001/langchain_agent:530bf36
+    image: xiz001/langchain_agent:5a1e839
     container_name: langchain-agent
     restart: always
     ports:
