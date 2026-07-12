@@ -7,7 +7,7 @@ An end-to-end quantitative research and signal generation platform that processe
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        DATA COLLECTION LAYER                             │
-│         GDELT (8TB+) │ Finnhub │ NewsAPI │ Yahoo Finance                │
+│         GDELT (8TB+) │ Finnhub │ NewsAPI │ Yahoo Finance │ FMP          │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │ raw news
                                  ▼
@@ -29,8 +29,9 @@ An end-to-end quantitative research and signal generation platform that processe
 │   LLM:   avg_sentiment_3d/5d, sentiment_shift_5d, high_signal_count     │
 │   Earn:  surprise_pct_last, days_to_earnings, earnings_recency_weight   │
 │   Price: past_ret_20d/60d, volatility_20d/60d, volume_shock_20d         │
+│   Alt:   macro_*, retail_*, analyst_*, inst_holding_*, ah_gap/pm_gap    │
 │                                                                           │
-│   → 134K rows │ 100 symbols │ 7 return horizons (5–60d)                 │
+│   → 189K+ rows │ 100 symbols │ 7 return horizons (5–60d)               │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
                                  ▼
@@ -51,19 +52,19 @@ An end-to-end quantitative research and signal generation platform that processe
 │   Kafka ──▶ signal distribution ──▶ alerts / position tracking          │
 │   Spring Boot REST API (Keycloak JWT)                                   │
 │   React Dashboard: signal scores │ portfolio tracking │ trade alerts    │
-│   LangChain Agent + Qdrant RAG: natural language stock analysis         │
+│   quant_ai: RAG + Local LLM — natural language stock analysis           │
 └─────────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       ORCHESTRATION LAYER (Airflow)                      │
+│                       ORCHESTRATION LAYER (launchd)                      │
 │                                                                           │
-│   05:00  gdelt_backfill ─┐                                               │
-│          finnhub_news   ─┼──▶ price_update ──▶ feature_build            │
-│          yahoo_news     ─┘                                               │
-│   09:00  llm_pass_a ─┐                                                  │
-│          llm_pass_b ─┼──▶ snorkel_merge ──▶ feature_rebuild             │
-│   weekly model_training                                                  │
+│   05:15  gdelt_backfill        07:45  premarket_signals                 │
+│   06:00  inst_13f (Sun)        07:48  analyst_consensus                 │
+│   07:30  daily_price           07:50  macro_indicators                  │
+│   08:00  daily_symbol_features 08:30  score_daily_signals               │
+│   08:40  track_positions       09:00  data_quality_check                │
+│   20:30  retail_sentiment                                                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -77,11 +78,13 @@ An end-to-end quantitative research and signal generation platform that processe
 | Articles labeled | **840K+** |
 | Stock universe | **100 US equities** |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
+| Portfolio backtest Sharpe (20d, net of cost) | **0.77** (gross 0.92) vs SPY 0.54 |
+| Portfolio backtest Sharpe (60d, net of cost) | **0.73** (gross 0.77) vs SPY 0.47 |
 | Walk-forward Long-short annualized return | **+21.7%** |
-| Long-short Sharpe ratio | **0.85** |
+| Walk-forward Long-short Sharpe | **0.85** |
 | Hit rate | **63.6%** |
-| Best single-factor IC (60d) | **0.064** (`surprise_pct_last`) |
-| Docker microservices | **22** |
+| Best single-factor IC (60d) | **+0.198** (`inst_holding_pct_chg`) |
+| Docker microservices | **9 active** |
 
 ---
 
@@ -90,10 +93,10 @@ An end-to-end quantitative research and signal generation platform that processe
 | Repo | Description | Tech |
 |------|-------------|------|
 | [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Snorkel, Airflow |
-| [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, backtest orchestration, Kafka publishing | Java 17, Spring Boot 3, Keycloak |
-| [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, Redux Toolkit, Material-UI |
-| [quant_langchain](https://github.com/zhengtiantian/quant_langchain) | AI agent service: RAG news search, workflow generation | Python, LangChain, Qdrant |
-| [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose, 22 services |
+| [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
+| [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
+| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI assistant: RAG + local LLM natural language stock analysis | Python, FastAPI, LM Studio |
+| [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose |
 
 ---
 
@@ -103,16 +106,16 @@ An end-to-end quantitative research and signal generation platform that processe
 `Python` `LightGBM` `Ridge Regression` `Snorkel` `Gemma 3B` `Qwen 4B` `Ollama` `MLflow` `SHAP`
 
 ### Data Engineering
-`Apache Airflow` `Apache Kafka` `MongoDB` `MySQL` `Qdrant` `GDELT` `Finnhub API`
+`Apache Airflow` `Apache Kafka` `MongoDB` `MySQL` `GDELT` `Finnhub API` `SEC EDGAR`
 
 ### Backend
-`Java 17` `Spring Boot 3` `Keycloak` `REST API` `Kafka Producer/Consumer`
+`Java 21` `Spring Boot 3` `Keycloak` `REST API` `Kafka Producer/Consumer`
 
 ### Frontend & AI
-`React` `Redux Toolkit` `LangChain` `RAG` `Dify`
+`React` `TypeScript` `Vite` `RAG` `LM Studio` `FastAPI`
 
 ### Infrastructure
-`Docker` `Docker Compose` `22 microservices`
+`Docker` `Docker Compose` `launchd` (host scheduler)
 
 ---
 
@@ -129,10 +132,9 @@ An end-to-end quantitative research and signal generation platform that processe
 | `mlflow` | 15050 | Experiment tracking |
 | `kafka` | — | Signal event streaming |
 | `kafka-ui` | 15070 | Kafka topic management |
-| `qdrant` | — | Vector store (RAG) |
-| `langchain-agent` | 18000 | LangChain AI agent |
-| `dify-web` | 18089 | Dify AI workflow UI |
-| + 10 more | — | Postgres, Redis, RabbitMQ, Sandbox... |
+| `quant-ai` | 18000 | RAG + LLM assistant (runs as host process; container for reference) |
+
+> **Note:** `quant_ai` runs as a launchd host process (`com.quant.ai`) on port 18000 rather than through Docker, because VPNKit TCP prevents containers from reaching the LM Studio model server on the host.
 
 ---
 
@@ -141,6 +143,7 @@ An end-to-end quantitative research and signal generation platform that processe
 ### Prerequisites
 - Docker Desktop (16GB+ RAM recommended)
 - Ollama with `gemma3:4b` and `qwen3:4b` models
+- [LM Studio](https://lmstudio.ai/) running `qwen3.5-9b-mlx` + `nomic-embed-text` (for quant_ai)
 
 ### Start All Services
 
@@ -151,6 +154,15 @@ docker compose pull
 docker compose up -d
 ```
 
+### Start quant_ai (host process)
+
+```bash
+cd quant_ai
+launchctl load ~/Library/LaunchAgents/com.quant.ai.plist
+# or directly:
+bash run_host.sh
+```
+
 ### Access
 
 | Service | URL | Credentials |
@@ -159,37 +171,21 @@ docker compose up -d
 | Airflow | http://localhost:15060 | admin / admin |
 | MLflow | http://localhost:15050 | — |
 | Kafka UI | http://localhost:15070 | — |
-
-### Run Research Pipeline
-
-```bash
-git clone https://github.com/zhengtiantian/quant_data.git
-cd quant_data && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Feature build
-python research/daily_symbol_features.py
-
-# Train models (walk-forward, all horizons)
-python research/train_baseline_models.py --target all
-
-# Factor analysis: IC decay + SHAP + Long-short
-python research/factor_analysis.py --parts ic shap ls
-
-# Backtest with risk metrics
-python research/backtest_news_factor.py \
-  --collection daily_symbol_features_company_matched_v2 \
-  --horizons 20 60 --strategies top long_short
-```
+| quant_ai API | http://localhost:18000/docs | — |
 
 ---
 
 ## Roadmap
 
-- [ ] Transaction cost model (commission + slippage)
-- [ ] Market regime detection (VIX-based signal filtering)
-- [ ] Paper trading engine with OOS validation
-- [ ] LangGraph multi-agent research assistant
+- [x] Alt-data research layer (macro, retail, analyst, 13F, premarket)
+- [x] Transaction cost model (commission + liquidity-tiered slippage)
+- [x] Daily signal automation (launchd production scheduler)
+- [x] Paper-trading position tracker + exit alerts
+- [x] Data quality checks + factor analysis (IC decay, SHAP)
+- [x] RAG + local LLM assistant (quant_ai)
+- [ ] Dynamic factor re-weighting by regime
+- [ ] Paper trading stop-loss + rolling OOS-IC monitor
+- [ ] Airflow end-to-end verified (currently defined but not proven live)
 - [ ] FinBERT fine-tuning (200× inference speedup)
 
-See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for full roadmap.
+See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for the full roadmap.

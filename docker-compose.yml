@@ -1,6 +1,6 @@
 services:
   # ======================================================
-  # 1. 数据库与基础组件
+  # 1. Databases and infrastructure
   # ======================================================
   mysql:
     image: mysql:8.0
@@ -32,7 +32,7 @@ services:
       - project-net
 
   # ======================================================
-  # 2. Keycloak 身份认证
+  # 2. Keycloak identity and access management
   # ======================================================
   keycloak:
     image: xiz001/quant_keycloak:d471046
@@ -55,7 +55,7 @@ services:
       - project-net
 
   # ======================================================
-  # 3. Quant 平台
+  # 3. Quant platform
   # ======================================================
   quant_api:
     image: xiz001/quant_api:f7bd097
@@ -115,7 +115,7 @@ services:
       start_period: 30s
 
   # ======================================================
-  # 4. MLflow 实验追踪
+  # 4. MLflow experiment tracking
   # ======================================================
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.19.0
@@ -156,7 +156,7 @@ services:
       - project-net
 
   # ======================================================
-  # 6. Kafka 消息队列
+  # 6. Kafka message queue
   # ======================================================
   kafka:
     image: apache/kafka:3.7.0
@@ -196,7 +196,7 @@ services:
       - project-net
 
   # ======================================================
-  # 7. Airflow 任务调度
+  # 7. Airflow task scheduling
   # ======================================================
   airflow-postgres:
     image: postgres:15-alpine
