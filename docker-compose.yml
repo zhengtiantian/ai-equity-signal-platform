@@ -135,11 +135,11 @@ services:
       - project-net
 
   # ======================================================
-  # 5. LangChain Agent (runs as host process, container kept for reference)
+  # 5. quant_ai — RAG + Local LLM service (runs as host process; container kept for reference)
   # ======================================================
-  langchain-agent:
-    image: xiz001/langchain_agent:5c089e7
-    container_name: langchain-agent
+  quant-ai:
+    image: xiz001/quant_ai:6812ac3
+    container_name: quant-ai
     restart: always
     ports:
       - "18000:8083"
