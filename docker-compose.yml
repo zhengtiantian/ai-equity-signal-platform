@@ -31,45 +31,6 @@ services:
     networks:
       - project-net
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: dify-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: dify
-      POSTGRES_PASSWORD: dify
-      POSTGRES_DB: dify
-    volumes:
-      - /Volumes/Data4T/docker-volumes/dify_postgres:/var/lib/postgresql/data
-    networks:
-      - project-net
-
-  redis:
-    image: redis:7-alpine
-    container_name: dify-redis
-    restart: always
-    networks:
-      - project-net
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: dify-rabbitmq
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    networks:
-      - project-net
-
-  qdrant:
-    image: qdrant/qdrant:v1.9.1
-    container_name: qdrant
-    restart: always
-    volumes:
-      - /Volumes/Data4T/docker-volumes/qdrant_data:/qdrant/storage
-    networks:
-      - project-net
-
   # ======================================================
   # 2. Keycloak 身份认证
   # ======================================================
@@ -153,88 +114,8 @@ services:
       retries: 3
       start_period: 30s
 
-
   # ======================================================
-  # 4. Dify 平台
-  # ======================================================
-  sandbox:
-    image: langgenius/dify-sandbox:0.2.10
-    container_name: dify-sandbox
-    restart: always
-    networks:
-      - project-net
-
-  dify-api:
-    image: langgenius/dify-api:0.15.3
-    container_name: dify-api
-    restart: always
-    ports:
-      - "15001:5001"
-    environment: &dify_env
-      MODE: api
-      VERSION: 0.15.3
-      DEBUG: "true"
-      SECRET_KEY: "dify-secret-change-me"
-      DB_USERNAME: dify
-      DB_PASSWORD: dify
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: dify
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      VECTOR_STORE: qdrant
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: 6333
-      STORAGE_TYPE: local
-      STORAGE_LOCAL_PATH: /app/storage
-      CODE_EXECUTION_ENDPOINT: http://sandbox:8194
-      CODE_EXECUTION_API_KEY: dify-sandbox
-      CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
-      HTTP_ALLOW_CORS: "true"
-      CORS_ALLOW_ORIGINS: "*"
-      CONSOLE_CORS_ALLOW_ORIGINS: "*"
-      WEB_API_CORS_ALLOW_ORIGINS: "*"
-    volumes:
-      - /Volumes/Data4T/docker-volumes/dify_storage:/app/storage
-    depends_on:
-      - postgres
-      - redis
-      - qdrant
-      - sandbox
-    networks:
-      - project-net
-
-  dify-worker:
-    image: langgenius/dify-api:0.15.3
-    container_name: dify-worker
-    restart: always
-    environment:
-      <<: *dify_env
-      MODE: worker
-    volumes:
-      - /Volumes/Data4T/docker-volumes/dify_storage:/app/storage
-    depends_on:
-      - dify-api
-    networks:
-      - project-net
-
-  dify-web:
-    image: langgenius/dify-web:0.15.3
-    container_name: dify-web
-    restart: always
-    ports:
-      - "18089:3000"
-    environment:
-      CONSOLE_API_URL: http://dify-api:5001
-      APP_API_URL: http://dify-api:5001
-    depends_on:
-      - dify-api
-    networks:
-      - project-net
-
-  # ======================================================
-  # 5. MLflow 实验追踪
+  # 4. MLflow 实验追踪
   # ======================================================
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.19.0
@@ -254,7 +135,7 @@ services:
       - project-net
 
   # ======================================================
-  # 6. LangChain Agent
+  # 5. LangChain Agent (runs as host process, container kept for reference)
   # ======================================================
   langchain-agent:
     image: xiz001/langchain_agent:5c089e7
@@ -264,20 +145,18 @@ services:
       - "18000:8083"
     environment:
       - LOCAL_MODEL_NAME=qwen3.5-9b-mlx
-      - EMBED_MODEL=harrier-oss-v1-0.6b-mlx
+      - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1
       - QUANT_API=http://quant_api:8081
-      - DIFY_API=http://dify-api:5001
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - dify-api
       - quant_api
     networks:
       - project-net
-# ======================================================
-# ======================================================
-  # 7. Kafka 消息队列
+
+  # ======================================================
+  # 6. Kafka 消息队列
   # ======================================================
   kafka:
     image: apache/kafka:3.7.0
@@ -317,7 +196,7 @@ services:
       - project-net
 
   # ======================================================
-  # 8. Airflow 任务调度
+  # 7. Airflow 任务调度
   # ======================================================
   airflow-postgres:
     image: postgres:15-alpine
@@ -399,4 +278,3 @@ services:
 networks:
   project-net:
     driver: bridge
-
