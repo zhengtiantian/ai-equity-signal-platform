@@ -35,7 +35,7 @@ services:
   # 2. Keycloak identity and access management
   # ======================================================
   keycloak:
-    image: xiz001/quant_keycloak:d471046
+    image: xiz001/quant_keycloak:c74db2b
     container_name: quant_keycloak
     restart: always
     ports:
