@@ -58,7 +58,7 @@ services:
   # 3. Quant platform
   # ======================================================
   quant_api:
-    image: xiz001/quant_api:8c8a1b0
+    image: xiz001/quant_api:d31c511
     container_name: quant_api
     restart: always
     ports:
