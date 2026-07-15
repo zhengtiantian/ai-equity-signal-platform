@@ -230,7 +230,6 @@ bash run_host.sh
 - [ ] **E.6** WebSocket real-time push — live signal scores streamed to the React dashboard
 - [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API; entry/stop-loss overlay
 - [ ] **E.4** Kubernetes manifests — replace Docker Compose for production deployment
-- [ ] **E.8** Demo video — 3-minute end-to-end walkthrough for interviews
 
 ### Stock Universe
 - [ ] **G.2** Phase 2–4 expansion — energy/materials, international ADRs (BABA/JD/SE), REITs/financials
