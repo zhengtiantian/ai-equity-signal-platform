@@ -141,9 +141,12 @@ An end-to-end quantitative research and signal generation platform that processe
 ## Quick Start
 
 ### Prerequisites
-- Docker Desktop (16GB+ RAM recommended)
-- Ollama with `gemma3:4b` and `qwen3:4b` models
-- [LM Studio](https://lmstudio.ai/) running `qwen3.5-9b-mlx` + `nomic-embed-text` (for quant_ai)
+- Docker Desktop (48GB+ RAM recommended — all LLMs run via LM Studio)
+- [LM Studio](https://lmstudio.ai/) with the following models loaded:
+  - `gemma3:4b` — news labeling Pass A
+  - `qwen3:4b` — news labeling Pass B
+  - `qwen3.5-9b-mlx` — quant_ai chat assistant
+  - `nomic-embed-text` — quant_ai RAG embeddings
 
 ### Start All Services
 
