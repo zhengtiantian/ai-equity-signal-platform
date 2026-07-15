@@ -200,17 +200,39 @@ bash run_host.sh
 ### Live Trading
 - [ ] **Broker API integration (Alpaca)** — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
 
-### AI Engineering
-- [ ] **Strategy Studio → backtest execution** — wire the natural-language strategy generator to the Python backtest engine so users get real Sharpe / drawdown results without writing code
-- [ ] RAG upgrade (Qdrant) — replace MongoDB keyword search with vector similarity for quant_ai news Q&A
-- [ ] LangGraph multi-agent assistant — data_agent → analysis_agent → strategy_agent → risk_agent pipeline
-- [ ] FinBERT fine-tuning — replace dual-LLM labeling pipeline with a single fine-tuned model (~200× speedup)
-- [ ] Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (code written, not tested)
-- [ ] Active learning agent — surface low-confidence labels for human review
+### AI Engineering — LLM / RAG
+- [ ] **F.2** RAG upgrade (Qdrant) — replace MongoDB keyword search with vector similarity for quant_ai news Q&A
+- [ ] **F.5** FinBERT fine-tuning — replace dual-LLM labeling pipeline with a single fine-tuned model (~200× speedup)
+- [ ] **F.10** Strategy Studio → backtest execution — wire the natural-language strategy generator to the Python backtest engine
+- [ ] **F.11** News pre-filter SLM — distilbert binary classifier before dual-LLM pass; eliminates ~70% irrelevant GDELT articles
+- [ ] **F.12** Signal explanation generation — SLM generates plain-English "why this stock scored high" for each top signal
+- [ ] **F.13** Morning briefing agent — 07:00 pre-market summary for held positions: overnight news, regime, exit warnings
+- [ ] **F.14** Earnings surprise prediction — LLM aggregates pre-earnings signals → beat/miss probability factor
+- [ ] **F.15** SEC EDGAR + earnings transcript RAG — 10-K/10-Q and earnings calls embedded in Qdrant for natural language queries
+- [ ] **F.19** LLM factor hypothesis generator — LLM suggests new factor ideas from IC table + failure mode patterns
+
+### AI Engineering — Agents
+- [ ] **F.4** LangGraph multi-agent assistant — data_agent → analysis_agent → strategy_agent → risk_agent pipeline
+- [ ] **F.8** Active learning agent — surface low-confidence labels for human review
+- [ ] **F.9** Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (🟡 code written, not tested)
+- [ ] **F.16** Real-time news monitoring agent — 30-min polling for held positions; instant alert on sentiment spike
+- [ ] **F.17** Portfolio Manager Agent — signals + positions + regime → structured add/reduce/hold recommendation
+- [ ] **F.18** Backtest reflection agent — auto-diagnose weak years (2022/2024) and generate hypothesis report
+
+### MCP Integration
+- [ ] **I.1** quant_mcp_server — signals, news, positions, factor IC, regime, backtest trigger as MCP tools
+- [ ] **I.2** Claude Desktop integration — connect quant MCP server to Claude Desktop for natural language trading queries
+- [ ] **I.3** Alpaca order execution via MCP — LLM-driven order placement with server-side risk guardrails
+- [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance as MCP tools for agent use
+- [ ] **I.5** MCP inter-service communication — replace quant_ai → quant_api REST with MCP protocol
 
 ### Platform & Infrastructure
-- [ ] WebSocket real-time push — live signal scores streamed to the React dashboard
-- [ ] Kubernetes manifests — replace Docker Compose for production deployment
-- [ ] Demo video — 3-minute end-to-end walkthrough for interviews
+- [ ] **E.6** WebSocket real-time push — live signal scores streamed to the React dashboard
+- [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API; entry/stop-loss overlay
+- [ ] **E.4** Kubernetes manifests — replace Docker Compose for production deployment
+- [ ] **E.8** Demo video — 3-minute end-to-end walkthrough for interviews
+
+### Stock Universe
+- [ ] **G.2** Phase 2–4 expansion — energy/materials, international ADRs (BABA/JD/SE), REITs/financials
 
 See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for detailed specs and effort estimates.
