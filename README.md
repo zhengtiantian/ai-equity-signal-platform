@@ -103,7 +103,7 @@ An end-to-end quantitative research and signal generation platform that processe
 ## Tech Stack
 
 ### Data & ML
-`Python` `LightGBM` `Ridge Regression` `Snorkel` `Gemma 3B` `Qwen 4B` `Ollama` `MLflow` `SHAP`
+`Python` `LightGBM` `Ridge Regression` `Snorkel` `Gemma 3B` `Qwen 4B` `LM Studio` `MLflow` `SHAP`
 
 ### Data Engineering
 `Apache Airflow` `Apache Kafka` `MongoDB` `MySQL` `GDELT` `Finnhub API` `SEC EDGAR`
@@ -186,8 +186,9 @@ bash run_host.sh
 - [x] Paper-trading position tracker + exit alerts
 - [x] Data quality checks + factor analysis (IC decay, SHAP)
 - [x] RAG + local LLM assistant (quant_ai)
-- [ ] Dynamic factor re-weighting by regime
-- [ ] Paper trading stop-loss + rolling OOS-IC monitor
+- [x] Dynamic 4-regime weight switching (RISK_ON / NEUTRAL / STRESSED / RISK_OFF)
+- [x] Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
+- [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
 - [ ] Airflow end-to-end verified (currently defined but not proven live)
 - [ ] FinBERT fine-tuning (200× inference speedup)
 
