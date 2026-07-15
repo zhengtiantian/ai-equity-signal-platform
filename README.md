@@ -180,6 +180,7 @@ bash run_host.sh
 
 ## Roadmap
 
+### Completed
 - [x] Alt-data research layer (macro, retail, analyst, 13F, premarket)
 - [x] Transaction cost model (commission + liquidity-tiered slippage)
 - [x] Daily signal automation (launchd production scheduler)
@@ -189,7 +190,23 @@ bash run_host.sh
 - [x] Dynamic 4-regime weight switching (RISK_ON / NEUTRAL / STRESSED / RISK_OFF)
 - [x] Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
 - [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
-- [ ] Airflow end-to-end verified (currently defined but not proven live)
-- [ ] FinBERT fine-tuning (200× inference speedup)
 
-See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for the full roadmap.
+### Signal & Quant Research
+- [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
+- [ ] Beta neutralization + sector exposure limits for long-short portfolio
+- [ ] Airflow + Kafka end-to-end verified — DAGs defined but not yet proven live end-to-end
+
+### AI Engineering
+- [ ] **Strategy Studio → backtest execution** — wire the natural-language strategy generator to the Python backtest engine so users get real Sharpe / drawdown results without writing code
+- [ ] RAG upgrade (Qdrant) — replace MongoDB keyword search with vector similarity for quant_ai news Q&A
+- [ ] LangGraph multi-agent assistant — data_agent → analysis_agent → strategy_agent → risk_agent pipeline
+- [ ] FinBERT fine-tuning — replace dual-LLM labeling pipeline with a single fine-tuned model (~200× speedup)
+- [ ] Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (code written, not tested)
+- [ ] Active learning agent — surface low-confidence labels for human review
+
+### Platform & Infrastructure
+- [ ] WebSocket real-time push — live signal scores streamed to the React dashboard
+- [ ] Kubernetes manifests — replace Docker Compose for production deployment
+- [ ] Demo video — 3-minute end-to-end walkthrough for interviews
+
+See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for detailed specs and effort estimates.
