@@ -76,7 +76,7 @@ An end-to-end quantitative research and signal generation platform that processe
 |--------|-------|
 | Raw news data processed | **8TB+** (GDELT) |
 | Articles labeled | **840K+** |
-| Stock universe | **100 US equities** |
+| Stock universe | **103 equities** (100 US + HXSCL OTC) |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.77** (gross 0.92) vs SPY 0.54 |
 | Portfolio backtest Sharpe (60d, net of cost) | **0.73** (gross 0.77) vs SPY 0.47 |
@@ -190,6 +190,7 @@ bash run_host.sh
 - [x] Dynamic 4-regime weight switching (RISK_ON / NEUTRAL / STRESSED / RISK_OFF)
 - [x] Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
 - [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
+- [x] Stock universe expanded to 103 symbols (added STX / WDC / HXSCL)
 
 ### Signal & Quant Research
 - [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
