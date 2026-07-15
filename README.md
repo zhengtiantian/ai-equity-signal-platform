@@ -196,6 +196,9 @@ bash run_host.sh
 - [ ] Beta neutralization + sector exposure limits for long-short portfolio
 - [ ] Airflow + Kafka end-to-end verified — DAGs defined but not yet proven live end-to-end
 
+### Live Trading
+- [ ] **Broker API integration (Alpaca)** — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
+
 ### AI Engineering
 - [ ] **Strategy Studio → backtest execution** — wire the natural-language strategy generator to the Python backtest engine so users get real Sharpe / drawdown results without writing code
 - [ ] RAG upgrade (Qdrant) — replace MongoDB keyword search with vector similarity for quant_ai news Q&A
