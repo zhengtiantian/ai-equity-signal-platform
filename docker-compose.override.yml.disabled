@@ -1,0 +1,7 @@
+# Local-only override for testing freshly host-built images (not committed).
+# Production image tags come from the CI pipeline via the main compose file.
+services:
+  quant_api:
+    image: xiz001/quant_api:signals
+  quant_ui:
+    image: xiz001/quant_ui:signals
