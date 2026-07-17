@@ -100,6 +100,30 @@ services:
     environment:
       - OLLAMA_MODEL=qwen3:4b-q4_K_M
       - OLLAMA_API=http://host.docker.internal:11434
+      # Pipeline scheduling is owned by host Airflow. The in-container
+      # scheduler thread must stay fully disabled: its default cache paths
+      # (Data24T/Data6T) fall inside the container layer and fill the VM disk.
+      - RUN_STARTUP_INCREMENTAL_JOBS=false
+      - RUN_STARTUP_GDELT_BACKFILL=false
+      - RUN_STARTUP_PRICE_HISTORY_BACKFILL=false
+      - RUN_STARTUP_FEATURE_BUILD=false
+      - ENABLE_FINNHUB_JOB=false
+      - ENABLE_NEWSAPI_JOB=false
+      - ENABLE_YAHOO_JOB=false
+      - ENABLE_DAILY_PRICE_JOB=false
+      - ENABLE_DAILY_GDELT_BACKFILL_JOB=false
+      - ENABLE_GDELT_BACKFILL_JOB=false
+      - ENABLE_PREMARKET_JOB=false
+      - ENABLE_ANALYST_JOB=false
+      - ENABLE_RETAIL_JOB=false
+      - ENABLE_MACRO_JOB=false
+      - ENABLE_DAILY_FEATURE_JOB=false
+      - ENABLE_DAILY_SIGNAL_JOB=false
+      - ENABLE_DAILY_POSITION_JOB=false
+      - ENABLE_DATA_QUALITY_JOB=false
+      - ENABLE_DAILY_BACKTEST_JOB=false
+      - ENABLE_PRICE_HISTORY_BACKFILL_JOB=false
+      - ENABLE_INST13F_JOB=false
     depends_on:
       - quant_api
     networks:
@@ -206,6 +230,8 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    ports:
+      - "25432:5432"
     volumes:
       - /Volumes/Data4T/docker-volumes/airflow_postgres:/var/lib/postgresql/data
     networks:
@@ -257,7 +283,12 @@ services:
     networks:
       - project-net
 
+  # Scheduling runs on the macOS host (launchd com.quant.airflow-scheduler):
+  # containers have no internet egress under the VPN, and a second scheduler
+  # on the same DB orphans the host scheduler's task instances.
+  # profiles: ["disabled"] keeps it out of a plain `docker compose up -d`.
   airflow-scheduler:
+    profiles: ["disabled"]
     build:
       context: .
       dockerfile: Dockerfile.airflow
