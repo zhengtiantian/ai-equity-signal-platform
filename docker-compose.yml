@@ -138,7 +138,7 @@ services:
   # 5. quant_ai — RAG + Local LLM service (runs as host process; container kept for reference)
   # ======================================================
   quant-ai:
-    image: xiz001/quant_ai:e6130ea
+    image: xiz001/quant_ai:82221ed
     container_name: quant-ai
     restart: always
     ports:
