@@ -115,7 +115,7 @@ An end-to-end quantitative research and signal generation platform that processe
 `React` `TypeScript` `Vite` `RAG` `LM Studio` `FastAPI`
 
 ### Infrastructure
-`Docker` `Docker Compose` `launchd` (host scheduler)
+`Docker` `Docker Compose` `launchd` (host scheduler) `Multi-node work queue` (MySQL-backed, 2× MacBook workers + RTX 5090 inference node)
 
 ---
 
@@ -191,6 +191,7 @@ bash run_host.sh
 - [x] Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
 - [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
 - [x] Stock universe expanded to 103 symbols (added STX / WDC / HXSCL)
+- [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
 
 ### Signal & Quant Research
 - [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
@@ -238,6 +239,7 @@ bash run_host.sh
 ### Platform & Infrastructure
 - [ ] **E.6** WebSocket real-time push — live signal scores streamed to the React dashboard
 - [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API; entry/stop-loss overlay
+- [ ] **E.10** Inference node health check + failover — probe the RTX 5090 GPU node (LM Studio) and auto-switch `SLM_API_URL` to the local Mac instance when it is unreachable; pass-through degradation stays as last resort
 - [ ] **E.4** Kubernetes manifests — replace Docker Compose for production deployment
 
 ### Stock Universe
