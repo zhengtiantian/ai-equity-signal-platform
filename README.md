@@ -197,6 +197,14 @@ bash run_host.sh
 - [ ] Beta neutralization + sector exposure limits for long-short portfolio
 - [ ] Airflow + Kafka end-to-end verified — DAGs defined but not yet proven live end-to-end
 
+### Signal Research Rigor (low priority — QR interview defense)
+- [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — remove survivorship/selection bias of the hand-picked tech list
+- [ ] **M.2** PIT data hygiene audit — purge future-dated articles; verify signal-available-time vs data-creation-time across all features
+- [ ] **M.3** IC significance — Newey-West t-stats, IC decay/half-life, per-year/per-regime stability tables
+- [ ] **M.4** Sentiment orthogonalization — residual IC after neutralizing momentum/reversal/size/sector (does news add info beyond price?)
+- [ ] **M.5** Overfitting defenses — untouched final holdout, experiment/trial registry, deflated Sharpe
+- [ ] **M.6** Research report writeup — paper-style: hypothesis, method, results, failure cases, honest limitations
+
 ### Live Trading
 - [ ] **Broker API integration (Alpaca)** — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
 
