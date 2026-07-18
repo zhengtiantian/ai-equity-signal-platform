@@ -218,6 +218,7 @@ bash run_host.sh
 - [ ] **F.16** Real-time news monitoring agent — 30-min polling for held positions; instant alert on sentiment spike
 - [ ] **F.17** Portfolio Manager Agent — signals + positions + regime → structured add/reduce/hold recommendation
 - [ ] **F.18** Backtest reflection agent — auto-diagnose weak years (2022/2024) and generate hypothesis report
+- [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on watchlist → LLM triages sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
 - [ ] **I.1** quant_mcp_server — signals, news, positions, factor IC, regime, backtest trigger as MCP tools
