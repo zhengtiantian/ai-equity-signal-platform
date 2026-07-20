@@ -57,14 +57,16 @@ An end-to-end quantitative research and signal generation platform that processe
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       ORCHESTRATION LAYER (launchd)                      │
+│              ORCHESTRATION LAYER (Airflow, host-based) — 14 DAGs        │
 │                                                                           │
-│   05:15  gdelt_backfill        07:45  premarket_signals                 │
-│   06:00  inst_13f (Sun)        07:48  analyst_consensus                 │
-│   07:30  daily_price           07:50  macro_indicators                  │
-│   08:00  daily_symbol_features 08:30  score_daily_signals               │
-│   08:40  track_positions       09:00  data_quality_check                │
-│   20:30  retail_sentiment                                                │
+│   Scheduled (7)                          Manual / on-demand (7)         │
+│   */30min  quant_intraday_news           backfill_1_gdelt_collect       │
+│   06:30 d. price_history_backfill          → backfill_2_company_match   │
+│   07:30 d. daily_signal_pipeline             → backfill_3/4_llm_enrich  │
+│   20:30 d. quant_retail_sentiment              → backfill_5_snorkel     │
+│   04:00 Su gdelt_batch_verify                    → backfill_6_features  │
+│   06:00 Su weekly_inst13f_holdings       quant_news_validation          │
+│   07:00 Su weekly_model_training           (quality audit report)       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -192,11 +194,13 @@ bash run_host.sh
 - [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
 - [x] Stock universe expanded to 103 symbols (added STX / WDC / HXSCL)
 - [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
+- [x] Airflow migration — 14 production DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed), running live: 7 on cron schedule (intraday news, daily signal pipeline, price/retail/13F/model-training, weekly batch self-heal check) + 7 manual (split GDELT history backfill pipeline, news quality audit)
+- [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps missed by transient download failures (claim_next_batch never revisits 'done' batches on its own)
 
 ### Signal & Quant Research
 - [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
 - [ ] Beta neutralization + sector exposure limits for long-short portfolio
-- [ ] Airflow + Kafka end-to-end verified — DAGs defined but not yet proven live end-to-end
+- [ ] Kafka end-to-end verified — signal→alert/position consumer chain defined but not yet proven live
 
 ### Signal Research Rigor (low priority — QR interview defense)
 - [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — remove survivorship/selection bias of the hand-picked tech list
