@@ -7,7 +7,7 @@ services:
     container_name: mysql8
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: workflow
     ports:
       - "23306:3306"
@@ -23,7 +23,7 @@ services:
     command: --wiredTigerCacheSizeGB 1
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     ports:
       - "37018:27017"
     volumes:
@@ -44,9 +44,9 @@ services:
       - KC_DB=mysql
       - KC_DB_URL=jdbc:mysql://mysql8:3306/keycloak?useSSL=false&allowPublicKeyRetrieval=true
       - KC_DB_USERNAME=root
-      - KC_DB_PASSWORD=root
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
       - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
     volumes:
       - ../quant_keycloak/quant-realm.json:/opt/keycloak/data/import/quant-realm.json:ro
     depends_on:
@@ -228,7 +228,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
       POSTGRES_DB: airflow
     ports:
       - "25432:5432"
@@ -246,14 +246,14 @@ services:
     restart: "no"
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-      AIRFLOW__CORE__FERNET_KEY: ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=
-      AIRFLOW__WEBSERVER__SECRET_KEY: quant_airflow_secret
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     command: >
       bash -c "
         airflow db migrate &&
-        airflow users create --username admin --password admin --firstname Admin --lastname Admin --role Admin --email admin@quant.local || true
+        airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname Admin --role Admin --email admin@quant.local || true
       "
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
