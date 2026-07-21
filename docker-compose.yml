@@ -1,3 +1,14 @@
+# Default json-file log rotation for every service. Without this, Docker
+# keeps a single unbounded *-json.log per container; a crash-loop (e.g. a
+# producer retrying an unreachable kafka host) once grew quant_api's log to
+# ~103G and filled the whole Docker VM disk, crashing every DB container.
+# Cap: 50MB x 3 files = 150MB max per container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # ======================================================
   # 1. Databases and infrastructure
@@ -6,6 +17,7 @@ services:
     image: mysql:8.0
     container_name: mysql8
     restart: always
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: workflow
@@ -20,6 +32,7 @@ services:
     image: mongo:6.0
     container_name: mongo6
     restart: always
+    logging: *default-logging
     command: --wiredTigerCacheSizeGB 1
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
@@ -38,6 +51,7 @@ services:
     image: xiz001/quant_keycloak:c74db2b
     container_name: quant_keycloak
     restart: always
+    logging: *default-logging
     ports:
       - "18082:8080"
     environment:
@@ -61,6 +75,7 @@ services:
     image: xiz001/quant_api:d31c511
     container_name: quant_api
     restart: always
+    logging: *default-logging
     ports:
       - "18081:8081"
     depends_on:
@@ -80,6 +95,7 @@ services:
     image: xiz001/quant_ui:4e32b96
     container_name: quant_ui
     restart: always
+    logging: *default-logging
     ports:
       - "18080:80"
     depends_on:
@@ -97,6 +113,7 @@ services:
     image: xiz001/quant_data:e165324
     container_name: quant_data
     restart: always
+    logging: *default-logging
     environment:
       - OLLAMA_MODEL=qwen3:4b-q4_K_M
       - OLLAMA_API=http://host.docker.internal:11434
@@ -145,6 +162,7 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.19.0
     container_name: mlflow
     restart: always
+    logging: *default-logging
     ports:
       - "15050:5000"
     command: >
@@ -165,6 +183,7 @@ services:
     image: xiz001/quant_ai:e6130ea
     container_name: quant-ai
     restart: always
+    logging: *default-logging
     ports:
       - "18000:8083"
     environment:
@@ -186,6 +205,7 @@ services:
     image: apache/kafka:3.7.0
     container_name: kafka
     restart: always
+    logging: *default-logging
     environment:
       - KAFKA_NODE_ID=0
       - KAFKA_PROCESS_ROLES=controller,broker
@@ -209,6 +229,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     restart: always
+    logging: *default-logging
     ports:
       - "15070:8080"
     environment:
@@ -226,6 +247,7 @@ services:
     image: postgres:15-alpine
     container_name: airflow-postgres
     restart: always
+    logging: *default-logging
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
@@ -244,6 +266,7 @@ services:
     image: quant_airflow:local
     container_name: airflow-init
     restart: "no"
+    logging: *default-logging
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres/airflow
@@ -270,6 +293,7 @@ services:
     image: quant_airflow:local
     container_name: airflow-webserver
     restart: always
+    logging: *default-logging
     environment: *airflow-env
     command: webserver
     ports:
@@ -295,6 +319,7 @@ services:
     image: quant_airflow:local
     container_name: airflow-scheduler
     restart: always
+    logging: *default-logging
     environment: *airflow-env
     command: scheduler
     volumes:
