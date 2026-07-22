@@ -110,7 +110,7 @@ services:
       start_period: 30s
 
   quant_data:
-    image: xiz001/quant_data:e3d51c5
+    image: xiz001/quant_data:236e9ce
     container_name: quant_data
     restart: always
     logging: *default-logging
