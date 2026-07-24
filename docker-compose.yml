@@ -72,7 +72,7 @@ services:
   # 3. Quant platform
   # ======================================================
   quant_api:
-    image: xiz001/quant_api:d31c511
+    image: xiz001/quant_api:agent-data-dev
     container_name: quant_api
     restart: always
     logging: *default-logging
@@ -92,7 +92,7 @@ services:
       start_period: 30s
 
   quant_ui:
-    image: xiz001/quant_ui:4e32b96
+    image: xiz001/quant_ui:agent-dev
     container_name: quant_ui
     restart: always
     logging: *default-logging
@@ -177,9 +177,14 @@ services:
       - project-net
 
   # ======================================================
-  # 5. quant_ai — RAG + Local LLM service (runs as host process; container kept for reference)
+  # 5. quant_ai — RAG + agent service. RUNS AS HOST PROCESS on :18000
+  # (launchd com.quant.ai): under the VPN, containers cannot reach the host's
+  # LM Studio at all (host.docker.internal/LAN both unroutable), so the
+  # containerised copy can never serve LLM traffic. profiles: ["disabled"]
+  # keeps it out of `docker compose up -d` and from stealing port 18000.
   # ======================================================
   quant-ai:
+    profiles: ["disabled"]
     image: xiz001/quant_ai:e6130ea
     container_name: quant-ai
     restart: always
@@ -191,6 +196,15 @@ services:
       - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1
       - QUANT_API=http://quant_api:8081
+      # ReAct agent tools read mongo directly (news sentiment aggregation, features)
+      - LOCAL_MONGO_URI=mongodb://root:root@mongodb:27017/?authSource=admin
+      # vendored linux wheels (pymongo) — image can't pip install under VPN
+      - PYTHONPATH=/app/.vendor
+    volumes:
+      # dev bind-mounts so code changes apply on container restart (no image rebuild)
+      - ../quant_ai/main.py:/app/main.py:ro
+      - ../quant_ai/agent.py:/app/agent.py:ro
+      - ../quant_ai/.vendor_linux:/app/.vendor:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
