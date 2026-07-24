@@ -198,7 +198,6 @@ bash run_host.sh
 - [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
 - [x] Airflow migration — 14 production DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed), running live: 7 on cron schedule (intraday news, daily signal pipeline, price/retail/13F/model-training, weekly batch self-heal check) + 7 manual (split GDELT history backfill pipeline, news quality audit)
 - [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps missed by transient download failures (claim_next_batch never revisits 'done' batches on its own)
-- [x] MCP server (`quant_mcp`) — stdio MCP server exposing six read-only platform tools (news sentiment, features, ranked signals, positions, performance, universe) through the same `quant_api` layer the agent uses; registered with Claude Desktop, verified end-to-end over the real MCP protocol from an arbitrary working directory
 - [x] ReAct research agent — hand-written tool-calling loop on local qwen3.5-9b: the LLM autonomously queries platform data tools (news sentiment over 845K labeled articles, engineered features) and writes a grounded research note; tools go through a new Java data layer (`quant_api /api/agent-data/*`) with direct-mongo fallback; guardrails (read-only tools, per-step dedupe, cross-step cache, max-steps cap) covered by unit tests; SSE streaming of the live tool-call trace into a new React "AI Agent" tab
 
 ### Signal & Quant Research
@@ -239,7 +238,8 @@ bash run_host.sh
 - [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on watchlist → LLM triages sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
-> quant_mcp_server (I.1) and Claude Desktop integration (I.2) shipped — see Completed. Items below extend them.
+- [x] **I.1** quant_mcp_server — six read-only MCP tools (news sentiment, features, ranked signals, positions, performance, universe) over stdio, served through the `quant_api` layer
+- [x] **I.2** Claude Desktop integration — registered in `claude_desktop_config.json`, verified end-to-end over the real MCP protocol
 - [ ] **I.3** Alpaca order execution via MCP — LLM-driven order placement with server-side risk guardrails
 - [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance as MCP tools for agent use
 - [ ] **I.5** MCP inter-service communication — replace quant_ai → quant_api REST with MCP protocol
