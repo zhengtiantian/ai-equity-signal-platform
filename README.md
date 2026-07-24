@@ -184,73 +184,79 @@ bash run_host.sh
 
 ## Roadmap
 
-### Completed
-- [x] Alt-data research layer (macro, retail, analyst, 13F, premarket)
-- [x] Transaction cost model (commission + liquidity-tiered slippage)
-- [x] Daily signal automation (launchd production scheduler)
-- [x] Paper-trading position tracker + exit alerts
-- [x] Data quality checks + factor analysis (IC decay, SHAP)
-- [x] RAG + local LLM assistant (quant_ai)
-- [x] Dynamic 4-regime weight switching (RISK_ON / NEUTRAL / STRESSED / RISK_OFF)
-- [x] Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
-- [x] ETL unit tests (90 tests, CI-enforced via GitHub Actions)
-- [x] Stock universe expanded to 103 symbols (added STX / WDC / HXSCL)
-- [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
-- [x] Airflow migration — 14 production DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed), running live: 7 on cron schedule (intraday news, daily signal pipeline, price/retail/13F/model-training, weekly batch self-heal check) + 7 manual (split GDELT history backfill pipeline, news quality audit)
-- [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps missed by transient download failures (claim_next_batch never revisits 'done' batches on its own)
-- [x] ReAct research agent — hand-written tool-calling loop on local qwen3.5-9b: the LLM autonomously queries platform data tools (news sentiment over 845K labeled articles, engineered features) and writes a grounded research note; tools go through a new Java data layer (`quant_api /api/agent-data/*`) with direct-mongo fallback; guardrails (read-only tools, per-step dedupe, cross-step cache, max-steps cap) covered by unit tests; SSE streaming of the live tool-call trace into a new React "AI Agent" tab
+Every item carries a stable ID shared with [PROJECT_PLAN.md](PROJECT_PLAN.md), which holds the
+detailed spec and effort estimate for each. Checked items are shipped and running.
+
+**Recent milestones:** ReAct research agent (F.21) · MCP server + Claude Desktop (I.1/I.2) ·
+Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
+
+### Data & Pipeline
+- [x] **D.1/D.2/D.4/D.7/D.8** Alt-data research layer — macro, retail, analyst, 13F, premarket
+- [x] **C.1** Daily signal automation — now an Airflow DAG (originally a launchd job)
+- [x] **C.4/C.5** Paper-trading position tracker + exit alerts
+- [x] **C.7/C.9** Data quality checks + factor analysis report (IC decay, SHAP)
+- [x] **C.8** ETL unit tests — 90 tests, CI-enforced via GitHub Actions
+- [x] Airflow migration — 10 DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed): 7 on cron (intraday news, daily signal pipeline, price/retail/13F/model training, weekly batch self-heal) + 3 manual (2-stage news backfill, quality audit)
+- [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps left by transient download failures
+- [x] Multi-node distributed workers — GDELT batch workers on multiple machines pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (RTX 5090, LM Studio)
 
 ### Signal & Quant Research
-- [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
-- [ ] Beta neutralization + sector exposure limits for long-short portfolio
-- [ ] Kafka end-to-end verified — signal→alert/position consumer chain defined but not yet proven live
+- [x] **H.1** Transaction cost model — commission + liquidity-tiered slippage
+- [x] **H.2** Dynamic 4-regime weight switching — RISK_ON / NEUTRAL / STRESSED / RISK_OFF
+- [x] **H.3** Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
+- [ ] **H.4** Rolling OOS IC dashboard — visualise the IC trend over time in the React UI
+- [ ] **B.1** Long-short portfolio enhancement — beta neutralization, sector exposure limits
+- [ ] **Stage 7 (remaining)** Kafka end-to-end verification + execution-log API — the signal→alert/position consumer chain is defined but not yet proven live. The Airflow half of Stage 7 is done (see Data & Pipeline)
 
-### Signal Research Rigor (low priority — QR interview defense)
-- [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — remove survivorship/selection bias of the hand-picked tech list
-- [ ] **M.2** PIT data hygiene audit — purge future-dated articles; verify signal-available-time vs data-creation-time across all features
-- [ ] **M.3** IC significance — Newey-West t-stats, IC decay/half-life, per-year/per-regime stability tables
-- [ ] **M.4** Sentiment orthogonalization — residual IC after neutralizing momentum/reversal/size/sector (does news add info beyond price?)
+### Signal Research Rigor (QR interview defense)
+- [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — removes the survivorship/selection bias of the hand-picked tech list
+- [ ] **M.2** PIT data hygiene audit — purge future-dated articles (the corpus contains GKG rows dated 2028–2037) and verify signal-available-time vs data-creation-time across all features
+- [ ] **M.3** IC significance — Newey-West t-stats, IC decay/half-life, per-year and per-regime stability tables
+- [ ] **M.4** Sentiment orthogonalization — residual IC after neutralizing momentum/reversal/size/sector: does news add information beyond price?
 - [ ] **M.5** Overfitting defenses — untouched final holdout, experiment/trial registry, deflated Sharpe
 - [ ] **M.6** Research report writeup — paper-style: hypothesis, method, results, failure cases, honest limitations
 
 ### Live Trading
-- [ ] **Broker API integration (Alpaca)** — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
+- [ ] **G.1** Broker API integration (Alpaca) — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
 
 ### AI Engineering — LLM / RAG
-- [ ] **F.2** RAG upgrade (Qdrant) — replace MongoDB keyword search with vector similarity for quant_ai news Q&A
-- [ ] **F.5** FinBERT fine-tuning — replace dual-LLM labeling pipeline with a single fine-tuned model (~200× speedup)
-- [ ] **F.10** Strategy Studio → backtest execution — wire the natural-language strategy generator to the Python backtest engine
-- [ ] **F.11** News pre-filter SLM — distilbert binary classifier before dual-LLM pass; eliminates ~70% irrelevant GDELT articles
-- [ ] **F.12** Signal explanation generation — SLM generates plain-English "why this stock scored high" for each top signal
-- [ ] **F.13** Morning briefing agent — 07:00 pre-market summary for held positions: overnight news, regime, exit warnings
-- [ ] **F.14** Earnings surprise prediction — LLM aggregates pre-earnings signals → beat/miss probability factor
-- [ ] **F.15** SEC EDGAR + earnings transcript RAG — 10-K/10-Q and earnings calls embedded in Qdrant for natural language queries
-- [ ] **F.19** LLM factor hypothesis generator — LLM suggests new factor ideas from IC table + failure mode patterns
+- [ ] **F.2** Persistent vector store (Qdrant) — quant_ai currently embeds its knowledge folder into an in-memory numpy index rebuilt on every start; move to Qdrant so news and filings can be searched at corpus scale
+- [ ] **F.5** FinBERT fine-tuning — replace the dual-LLM labeling pipeline with a single fine-tuned model (~200× inference speedup)
+- [ ] **F.10** Strategy Studio → backtest execution — wire the natural-language strategy generator to `backtest_portfolio.py` so generated strategies produce real Sharpe / drawdown numbers
+- [ ] **F.11** Fast news pre-filter — an LLM relevance filter already runs ahead of the dual-LLM pass (`slm_filter.py`); replace it with a distilbert binary classifier for throughput, since relevance judgement does not need a 4B model
+- [ ] **F.12** Signal explanation generation — SLM writes a two-sentence "why this stock scored high" for each top signal, shown inline in SignalsPanel
+- [ ] **F.14** Earnings surprise prediction — in the 10-day pre-earnings window, aggregate news sentiment + analyst consensus into a beat/miss probability factor
+- [ ] **F.15** SEC EDGAR + earnings transcript RAG — 10-K/10-Q risk sections and earnings calls embedded for natural language queries over filing content
+- [ ] **F.19** LLM factor hypothesis generator — prompt the model with the current IC table + failure modes to suggest new factor ideas for human review
 
 ### AI Engineering — Agents
 - [x] **F.21** Single-agent ReAct research loop — hand-written tool-calling loop on local qwen3.5-9b; read-only platform tools through `quant_api /api/agent-data/*` with mongo fallback; guardrails (per-step dedupe, cross-step cache, max-steps cap, thinking-model content fallback) covered by unit tests; SSE streaming into the React "AI Agent" tab
-- [ ] **F.4** Multi-agent assistant — sentiment/fundamental/technical specialist agents feeding an orchestrator (extends the shipped F.21 loop; LangGraph optional)
-- [ ] **F.8** Active learning agent — surface low-confidence labels for human review
-- [ ] **F.9** Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (🟡 code written, not tested)
-- [ ] **F.16** Real-time news monitoring agent — 30-min polling for held positions; instant alert on sentiment spike
-- [ ] **F.17** Portfolio Manager Agent — signals + positions + regime → structured add/reduce/hold recommendation
-- [ ] **F.18** Backtest reflection agent — auto-diagnose weak years (2022/2024) and generate hypothesis report
-- [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on watchlist → LLM triages sentiment washout vs falling knife → contrarian entry candidates with reasoning
+- [ ] **F.4** Multi-agent assistant — sentiment/fundamental/technical specialists feeding an orchestrator; extends the shipped F.21 loop (LangGraph optional)
+- [ ] **F.6** Rule validator agent — interactive rule-debugging loop on top of F.21 (🟡 `tools/rule_validator_agent.py` written, not tested)
+- [ ] **F.7** Airflow adaptive scheduling agent — adjust collection windows from data-quality metrics
+- [ ] **F.8** Active learning agent — surface low-confidence LLM labels for human review; closes the annotation feedback loop
+- [ ] **F.9** Rule optimization agent — sample → LLM judge → diagnose FP/FN → modify rules (🟡 `tools/rule_optimizer.py` written, not tested)
+- [ ] **F.13** Morning briefing agent — 07:00 pre-market summary for held positions: overnight news, regime, exit warnings
+- [ ] **F.16** Real-time news monitoring agent — 30-minute polling for held positions; alerts on a sentiment spike or negative event cluster
+- [ ] **F.17** Portfolio Manager agent — signals + positions + regime → structured add/reduce/hold recommendation
+- [ ] **F.18** Backtest reflection agent — auto-diagnose weak-year IC failures (2022/2024) and generate a hypothesis report
+- [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on the watchlist → triage sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
 - [x] **I.1** quant_mcp_server — six read-only MCP tools (news sentiment, features, ranked signals, positions, performance, universe) over stdio, served through the `quant_api` layer
 - [x] **I.2** Claude Desktop integration — registered in `claude_desktop_config.json`, verified end-to-end over the real MCP protocol
-- [ ] **I.3** Alpaca order execution via MCP — LLM-driven order placement with server-side risk guardrails
-- [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance as MCP tools for agent use
-- [ ] **I.5** MCP inter-service communication — replace quant_ai → quant_api REST with MCP protocol
+- [ ] **I.3** Alpaca order execution via MCP — order tools behind server-side pre-trade guardrails, so agents trade through the same interface
+- [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance wrapped as MCP tools so agents decide what to fetch
+- [ ] **I.5** MCP inter-service communication — replace the quant_ai → quant_api REST calls with MCP for dynamic tool discovery
 
 ### Platform & Infrastructure
-- [ ] **E.6** WebSocket real-time push — live signal scores streamed to the React dashboard
-- [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API; entry/stop-loss overlay
-- [ ] **E.10** Inference node health check + failover — probe the RTX 5090 GPU node (LM Studio) and auto-switch `SLM_API_URL` to the local Mac instance when it is unreachable; pass-through degradation stays as last resort
+- [x] **E.2** CI/CD GitHub Actions — tests and image builds run on every push
+- [x] **E.7** Root README + architecture diagram
 - [ ] **E.4** Kubernetes manifests — replace Docker Compose for production deployment
+- [ ] **E.6** WebSocket real-time push — stream live signal scores to the dashboard instead of polling
+- [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API, entry/stop-loss overlay per position; no hourly data stored locally
+- [ ] **E.10** Inference node health check + failover — probe the RTX 5090 GPU node and auto-switch `SLM_API_URL` to the local Mac instance when unreachable; pass-through degradation as last resort
 
 ### Stock Universe
-- [ ] **G.2** Phase 2–4 expansion — energy/materials, international ADRs (BABA/JD/SE), REITs/financials
-
-See [quant_data/PROJECT_PLAN.md](https://github.com/zhengtiantian/quant_data/blob/main/PROJECT_PLAN.md) for detailed specs and effort estimates.
+- [x] Universe at 103 symbols — 100 US + HXSCL OTC (added STX / WDC / HXSCL)
+- [ ] **G.2** Phase 2–4 expansion — energy/materials (XOM, CVX, NEE, LIN, APD), international ADRs (BABA, JD, PDD, SE), then REITs/financials
