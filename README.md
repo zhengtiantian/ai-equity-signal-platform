@@ -228,8 +228,8 @@ bash run_host.sh
 - [ ] **F.19** LLM factor hypothesis generator — LLM suggests new factor ideas from IC table + failure mode patterns
 
 ### AI Engineering — Agents
-> Single-agent ReAct foundation shipped (see Completed) — items below build on it.
-- [ ] **F.4** Multi-agent assistant — sentiment/fundamental/technical specialist agents feeding an orchestrator (extends the shipped ReAct loop; LangGraph optional)
+- [x] **F.21** Single-agent ReAct research loop — hand-written tool-calling loop on local qwen3.5-9b; read-only platform tools through `quant_api /api/agent-data/*` with mongo fallback; guardrails (per-step dedupe, cross-step cache, max-steps cap, thinking-model content fallback) covered by unit tests; SSE streaming into the React "AI Agent" tab
+- [ ] **F.4** Multi-agent assistant — sentiment/fundamental/technical specialist agents feeding an orchestrator (extends the shipped F.21 loop; LangGraph optional)
 - [ ] **F.8** Active learning agent — surface low-confidence labels for human review
 - [ ] **F.9** Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (🟡 code written, not tested)
 - [ ] **F.16** Real-time news monitoring agent — 30-min polling for held positions; instant alert on sentiment spike
