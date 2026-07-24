@@ -97,7 +97,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Snorkel, Airflow |
 | [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
 | [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
-| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI assistant: RAG + local LLM natural language stock analysis | Python, FastAPI, LM Studio |
+| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI assistant: ReAct tool-calling research agent + RAG stock Q&A | Python, FastAPI, LM Studio |
 | [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose |
 
 ---
@@ -114,7 +114,7 @@ An end-to-end quantitative research and signal generation platform that processe
 `Java 21` `Spring Boot 3` `Keycloak` `REST API` `Kafka Producer/Consumer`
 
 ### Frontend & AI
-`React` `TypeScript` `Vite` `RAG` `LM Studio` `FastAPI`
+`React` `TypeScript` `Vite` `RAG` `ReAct Agent` `Function Calling` `SSE Streaming` `LM Studio` `FastAPI`
 
 ### Infrastructure
 `Docker` `Docker Compose` `launchd` (host scheduler) `Multi-node work queue` (MySQL-backed, 2× MacBook workers + RTX 5090 inference node)
@@ -134,7 +134,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | `mlflow` | 15050 | Experiment tracking |
 | `kafka` | — | Signal event streaming |
 | `kafka-ui` | 15070 | Kafka topic management |
-| `quant-ai` | 18000 | RAG + LLM assistant (runs as host process; container for reference) |
+| `quant-ai` | 18000 | ReAct research agent + RAG assistant (host process via launchd; container disabled by profile) |
 
 > **Note:** `quant_ai` runs as a launchd host process (`com.quant.ai`) on port 18000 rather than through Docker, because VPNKit TCP prevents containers from reaching the LM Studio model server on the host.
 
@@ -196,6 +196,7 @@ bash run_host.sh
 - [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
 - [x] Airflow migration — 14 production DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed), running live: 7 on cron schedule (intraday news, daily signal pipeline, price/retail/13F/model-training, weekly batch self-heal check) + 7 manual (split GDELT history backfill pipeline, news quality audit)
 - [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps missed by transient download failures (claim_next_batch never revisits 'done' batches on its own)
+- [x] ReAct research agent — hand-written tool-calling loop on local qwen3.5-9b: the LLM autonomously queries platform data tools (news sentiment over 840K labeled articles, engineered features) and writes a grounded research note; tools go through a new Java data layer (`quant_api /api/agent-data/*`) with direct-mongo fallback; guardrails (read-only tools, per-step dedupe, cross-step cache, max-steps cap) covered by unit tests; SSE streaming of the live tool-call trace into a new React "AI Agent" tab
 
 ### Signal & Quant Research
 - [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
@@ -225,7 +226,8 @@ bash run_host.sh
 - [ ] **F.19** LLM factor hypothesis generator — LLM suggests new factor ideas from IC table + failure mode patterns
 
 ### AI Engineering — Agents
-- [ ] **F.4** LangGraph multi-agent assistant — data_agent → analysis_agent → strategy_agent → risk_agent pipeline
+> Single-agent ReAct foundation shipped (see Completed) — items below build on it.
+- [ ] **F.4** Multi-agent assistant — sentiment/fundamental/technical specialist agents feeding an orchestrator (extends the shipped ReAct loop; LangGraph optional)
 - [ ] **F.8** Active learning agent — surface low-confidence labels for human review
 - [ ] **F.9** Rule optimization agent — iterative LLM-judge loop that auto-improves news relevance rules (🟡 code written, not tested)
 - [ ] **F.16** Real-time news monitoring agent — 30-min polling for held positions; instant alert on sentiment spike
