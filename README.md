@@ -206,7 +206,8 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [x] **H.3** Volatility-adaptive stop-loss (2×vol_20d, clamped 4–12%) + rolling OOS IC monitor
 - [ ] **H.4** Rolling OOS IC dashboard — visualise the IC trend over time in the React UI
 - [ ] **B.1** Long-short portfolio enhancement — beta neutralization, sector exposure limits
-- [ ] **Stage 7 (remaining)** Kafka end-to-end verification + execution-log API — the signal→alert/position consumer chain is defined but not yet proven live. The Airflow half of Stage 7 is done (see Data & Pipeline)
+- [x] **Stage 7** Kafka end-to-end verified — publishing 20 signals advanced the consumer offsets across all four partitions with zero lag and the consumer logged the deserialized events. Getting there required fixing a consumer that could not deserialize its own producer's records (the producer omits Spring type headers by design) and, lacking an `ErrorHandlingDeserializer`, re-read the same offset forever at 100% CPU
+- [ ] **Stage 7 (remaining)** Execution-log API — surface DAG/task run history through the REST API
 
 ### Signal Research Rigor (QR interview defense)
 - [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — removes the survivorship/selection bias of the hand-picked tech list

@@ -72,7 +72,7 @@ services:
   # 3. Quant platform
   # ======================================================
   quant_api:
-    image: xiz001/quant_api:115a9ca
+    image: xiz001/quant_api:kafka-fix
     container_name: quant_api
     restart: always
     logging: *default-logging
