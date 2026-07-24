@@ -7,7 +7,7 @@ An end-to-end quantitative research and signal generation platform that processe
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        DATA COLLECTION LAYER                             │
-│         GDELT (8TB+) │ Finnhub │ NewsAPI │ Yahoo Finance │ FMP          │
+│         GDELT (13TB) │ Finnhub │ NewsAPI │ Yahoo Finance │ FMP          │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │ raw news
                                  ▼
@@ -20,7 +20,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │                                    │                                     │
 │                       llm_sentiment_final / event_type                  │
 └────────────────────────────────┬────────────────────────────────────────┘
-                                 │ 840K labeled articles
+                                 │ 845K labeled articles
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      FEATURE ENGINEERING LAYER                           │
@@ -52,19 +52,20 @@ An end-to-end quantitative research and signal generation platform that processe
 │   Kafka ──▶ signal distribution ──▶ alerts / position tracking          │
 │   Spring Boot REST API (Keycloak JWT)                                   │
 │   React Dashboard: signal scores │ portfolio tracking │ trade alerts    │
-│   quant_ai: RAG + Local LLM — natural language stock analysis           │
+│   quant_ai: ReAct tool-calling research agent + RAG stock Q&A           │
+│   quant_mcp: MCP server (stdio) — platform data in Claude Desktop       │
 └─────────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│              ORCHESTRATION LAYER (Airflow, host-based) — 14 DAGs        │
+│              ORCHESTRATION LAYER (Airflow, host-based) — 10 DAGs        │
 │                                                                           │
-│   Scheduled (7)                          Manual / on-demand (7)         │
-│   */30min  quant_intraday_news           backfill_1_gdelt_collect       │
-│   06:30 d. price_history_backfill          → backfill_2_company_match   │
-│   07:30 d. daily_signal_pipeline             → backfill_3/4_llm_enrich  │
-│   20:30 d. quant_retail_sentiment              → backfill_5_snorkel     │
-│   04:00 Su gdelt_batch_verify                    → backfill_6_features  │
+│   Scheduled (7)                          Manual / on-demand (3)         │
+│   */30min  quant_intraday_news           backfill_1_collect_and_match   │
+│   06:30 d. price_history_backfill          (GDELT ⟶ SLM company match)  │
+│   07:30 d. daily_signal_pipeline                                        │
+│   20:30 d. quant_retail_sentiment        backfill_2_enrich_and_features │
+│   04:00 Su gdelt_batch_verify              (LLM A/B ⟶ merge ⟶ features) │
 │   06:00 Su weekly_inst13f_holdings       quant_news_validation          │
 │   07:00 Su weekly_model_training           (quality audit report)       │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -76,8 +77,8 @@ An end-to-end quantitative research and signal generation platform that processe
 
 | Metric | Value |
 |--------|-------|
-| Raw news data processed | **8TB+** (GDELT) |
-| Articles labeled | **840K+** |
+| Raw news data processed | **13TB** (GDELT GKG, 2016→present) |
+| Articles labeled | **845K+** |
 | Stock universe | **103 equities** (100 US + HXSCL OTC) |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.77** (gross 0.92) vs SPY 0.54 |
@@ -86,7 +87,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | Walk-forward Long-short Sharpe | **0.85** |
 | Hit rate | **63.6%** |
 | Best single-factor IC (60d) | **+0.198** (`inst_holding_pct_chg`) |
-| Docker microservices | **9 active** |
+| Platform services | **13 active** (11 Docker containers + 2 host processes) |
 
 ---
 
@@ -98,6 +99,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
 | [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
 | [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI assistant: ReAct tool-calling research agent + RAG stock Q&A | Python, FastAPI, LM Studio |
+| quant_mcp | MCP server (stdio): platform data as tools for Claude Desktop / any MCP client | Python, MCP SDK |
 | [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose |
 
 ---
@@ -128,7 +130,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | `quant_ui` | 18080 | React signal dashboard |
 | `quant_api` | 18081 | Spring Boot REST API |
 | `quant_keycloak` | 18082 | Auth server |
-| `mongo6` | 37018 | MongoDB (840K articles, feature store) |
+| `mongo6` | 37018 | MongoDB (845K articles, feature store) |
 | `mysql8` | 23306 | MySQL (workflow, user data) |
 | `airflow-webserver` | 15060 | Airflow DAG management |
 | `mlflow` | 15050 | Experiment tracking |
@@ -196,7 +198,8 @@ bash run_host.sh
 - [x] Multi-node distributed workers — GDELT batch workers on multiple machines (MacBook Pro M5 Pro 48G + MacBook Pro M5) pull from a shared MySQL task queue (crash-safe retry, idempotent upserts); LLM/SLM inference offloaded to a dedicated GPU node (Ryzen 9800X + RTX 5090 + 96G, LM Studio)
 - [x] Airflow migration — 14 production DAGs on a host-based scheduler (macOS fork/setproctitle crash loop fixed), running live: 7 on cron schedule (intraday news, daily signal pipeline, price/retail/13F/model-training, weekly batch self-heal check) + 7 manual (split GDELT history backfill pipeline, news quality audit)
 - [x] GDELT batch self-healing — weekly job re-derives each 'done' batch's expected files and reopens any with gaps missed by transient download failures (claim_next_batch never revisits 'done' batches on its own)
-- [x] ReAct research agent — hand-written tool-calling loop on local qwen3.5-9b: the LLM autonomously queries platform data tools (news sentiment over 840K labeled articles, engineered features) and writes a grounded research note; tools go through a new Java data layer (`quant_api /api/agent-data/*`) with direct-mongo fallback; guardrails (read-only tools, per-step dedupe, cross-step cache, max-steps cap) covered by unit tests; SSE streaming of the live tool-call trace into a new React "AI Agent" tab
+- [x] MCP server (`quant_mcp`) — stdio MCP server exposing six read-only platform tools (news sentiment, features, ranked signals, positions, performance, universe) through the same `quant_api` layer the agent uses; registered with Claude Desktop, verified end-to-end over the real MCP protocol from an arbitrary working directory
+- [x] ReAct research agent — hand-written tool-calling loop on local qwen3.5-9b: the LLM autonomously queries platform data tools (news sentiment over 845K labeled articles, engineered features) and writes a grounded research note; tools go through a new Java data layer (`quant_api /api/agent-data/*`) with direct-mongo fallback; guardrails (read-only tools, per-step dedupe, cross-step cache, max-steps cap) covered by unit tests; SSE streaming of the live tool-call trace into a new React "AI Agent" tab
 
 ### Signal & Quant Research
 - [ ] Rolling OOS IC signal quality dashboard — visualize IC trend over time in the React UI
@@ -236,8 +239,7 @@ bash run_host.sh
 - [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on watchlist → LLM triages sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
-- [ ] **I.1** quant_mcp_server — signals, news, positions, factor IC, regime, backtest trigger as MCP tools
-- [ ] **I.2** Claude Desktop integration — connect quant MCP server to Claude Desktop for natural language trading queries
+> quant_mcp_server (I.1) and Claude Desktop integration (I.2) shipped — see Completed. Items below extend them.
 - [ ] **I.3** Alpaca order execution via MCP — LLM-driven order placement with server-side risk guardrails
 - [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance as MCP tools for agent use
 - [ ] **I.5** MCP inter-service communication — replace quant_ai → quant_api REST with MCP protocol
