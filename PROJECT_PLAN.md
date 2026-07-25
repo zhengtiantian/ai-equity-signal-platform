@@ -461,14 +461,14 @@ All 840,212 articles in `news_articles_company_matched_v2` tagged with:
 
 - Pass A (Gemma): `llm_sentiment_a`, `llm_event_type_a`, `llm_signal_strength_a` — 100%
 - Pass B (Qwen): `llm_sentiment_b`, `llm_event_type_b`, `llm_signal_strength_b` — 100%
-- Snorkel merge: `llm_sentiment_final`, `llm_disagreement`, `llm_label_model_probs` — 100%
+- Dual-LLM merge: `llm_sentiment_final`, `llm_disagreement`, `llm_label_model_probs` — 100%
 - Inter-model agreement rate 77.3%; mean sentiment +0.296 (overall positive bias)
 
 Deliverable: `research/labeling/llm_enrich_articles.py`, `research/snorkel_label_merge.py`
 
 Resume framing:
-*"Enriched 840K financial news articles with two-pass LLM ensemble (Gemma +
-Qwen), aggregated via Snorkel Label Model achieving 77.3% inter-model
+*"Enriched 845K financial news articles with two-pass LLM ensemble (Gemma +
+Qwen), merged by a hand-written dual-LLM reconciler achieving 77.3% inter-model
 agreement on sentiment, event type, and signal strength labels."*
 
 ### 3.5.2 Event-level daily features ✅ Done 2026-05-22
@@ -633,7 +633,7 @@ The project should be considered healthy if:
 Do next (in priority order, updated 2026-06-20):
 
 1. **H.1 Backtest with transaction costs + liquidity filter** (2 days) — current Sharpe 0.70-0.84 is pre-cost; quantitative interviews always ask this, highest ROI
-2. **Stage 7 validation** — Airflow DAG end-to-end run, Kafka producer/consumer actual operation, execution log API live (still the biggest gap for interview storytelling; C-series has used launchd as a replacement for daily scheduling, but not Airflow)
+2. ~~**Stage 7 validation**~~ ✅ **Done** — Airflow now runs the full DAG set from a host `launchd` scheduler (containers cannot reach the host LLM under VPN), and the Kafka producer/consumer path was verified end to end after fixing a deserializer mismatch that had the consumer stuck in a poison-pill retry loop. Signals publish and are consumed with zero lag.
 3. **E.7 README + architecture diagram** (1 day) — required for all interviews, currently missing, fastest result
 4. **H.2.2 Dynamic factor weights** (regime-aware) — regime_mult base multiplier already exists; needs extension to auto-switch factor weight sets in volatile market
 5. **H.3.2/H.3.3 Paper trading improvements** — position tracking and exit triggers already exist; missing OOS IC monitoring and -5% stop-loss rule
@@ -645,7 +645,7 @@ Completed:
 - year stability analysis ✅
 - earnings Layer 1 / 2 / 3 ✅
 - Ridge + LightGBM + Ensemble baseline (60d IC = 0.10, Top5 = +6.7%) ✅
-- Stage 3.5.1 LLM article tagging (840K articles, Gemma + Qwen + Snorkel merge) ✅
+- Stage 3.5.1 LLM article tagging (845K articles, Gemma + Qwen + dual-LLM merge) ✅
 - Stage 3.5.2 event-level daily features (134K rows, 100% LLM coverage) ✅
 - Stage 3.5.3 event-driven backtest (min20d, +1.40% vs fixed 20d +1.22%) ✅
 - Stage 3.5.4 multi-horizon labels (10/15/30/45/60d) ✅
@@ -675,9 +675,9 @@ Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.
 ## A. Data Engineer Interview Roadmap
 
 ### Currently Available (can discuss directly)
-- MongoDB 840K+ articles + 675M GKG inverted index (large-scale document storage + full-text search)
+- MongoDB 845K+ articles + 675M GKG inverted index (large-scale document storage + full-text search)
 - Python ETL pipeline: news collection → company matching → feature build (multiple data sources, incremental/full load)
-- LLM batch inference pipeline (840K articles, two passes + Snorkel Label Model)
+- LLM batch inference pipeline (845K articles, two passes + dual-LLM merge)
 - Docker Compose multi-service orchestration (MongoDB / MySQL / Kafka / Airflow / MLflow / Qdrant)
 - Airflow DAG definitions (DAG structure, task dependencies, SLA)
 
@@ -704,7 +704,7 @@ Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.
 | Data lineage diagram | Which tables depend on which source; can use OpenLineage | New | 3 days |
 
 ### Complete DE interview story (after filling gaps)
-*"Built a financial news processing system covering 100 stocks: established full-text index on GDELT raw data (675M records); Python ETL cleaned and matched 840K articles with idempotency design and data quality checks; Airflow scheduled 5 DAGs for daily incremental updates; Kafka publishes daily trading signals (complete producer/consumer pipeline); MLflow tracked 100+ model experiments; entire system deployable with a single Docker Compose command."*
+*"Built a financial news processing system covering 100 stocks: established full-text index on GDELT raw data (675M records); Python ETL cleaned and matched 845K articles with idempotency design and data quality checks; Airflow scheduled 5 DAGs for daily incremental updates; Kafka publishes daily trading signals (complete producer/consumer pipeline); MLflow tracked 100+ model experiments; entire system deployable with a single Docker Compose command."*
 
 ---
 
@@ -714,8 +714,8 @@ Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.
 - Walk-forward validation (not backtest overfitting), IC=0.059 (60d), 100 symbol universe
 - Multi-factor model: news quality + momentum + earnings events + LLM sentiment
 - Event-driven backtest framework (min_hold=20d, +1.40% excess return, outperforming fixed holding baseline)
-- LLM dual-model ensemble labeling (Gemma + Qwen + Snorkel, 77.3% agreement rate)
-- 840K articles with three-dimensional labels: sentiment / event type / signal strength
+- LLM dual-model ensemble labeling (Gemma + Qwen + dual-LLM merge, 77.3% agreement rate)
+- 845K articles with three-dimensional labels: sentiment / event type / signal strength
 
 ### Critical Gaps — Must Fill (quantitative interview essentials)
 
@@ -744,7 +744,7 @@ Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.
 | Paper trading live verification record | Out-of-sample real-world performance, most convincing in interviews | C.6 | Ongoing |
 
 ### Complete quantitative interview story (after filling gaps)
-*"Built a news-driven multi-factor model on a 100-stock tech universe: 840K articles labeled by Gemma+Qwen dual-model LLM ensemble (77.3% agreement); walk-forward validation 60d Rank IC=0.059, Information Ratio=X.X; event-driven holding framework achieved +1.40% excess return in an average of 13.7 days (after transaction costs +X.X%), annualized Sharpe=X.X, max drawdown X%, long-short annualized excess X%."*
+*"Built a news-driven multi-factor model on a 100-stock tech universe: 845K articles labeled by Gemma+Qwen dual-model LLM ensemble (77.3% agreement); walk-forward validation 60d Rank IC=0.059, Information Ratio=X.X; event-driven holding framework achieved +1.40% excess return in an average of 13.7 days (after transaction costs +X.X%), annualized Sharpe=X.X, max drawdown X%, long-short annualized excess X%."*
 
 ---
 
@@ -1090,7 +1090,7 @@ risk_agent      → position sizing, stop-loss conditions, final output: positio
 - Status: [ ] Pending development (3 days)
 
 ### F.8 LLM annotation active learning Agent (disagreement sample handling)
-**Current state:** Gemma + Qwen disagreement rate is 22.7%; merged blindly via Snorkel Dawid-Skene voting.
+**Current state:** Gemma + Qwen disagreement rate is 22.7%; merged blindly by the dual-LLM reconciler (`merge_ab_labels.py`).
 
 **Upgrade direction:**
 - For high-uncertainty samples where label_model_probs < 0.7, agent actively intervenes:
@@ -1674,7 +1674,7 @@ for article in articles:
 
 ### J.3 Daily LLM Sentiment Enrichment for New Articles
 
-**Goal**: Run Gemma 3B + Qwen 4B dual-pass labeling on new articles each morning so `llm_sentiment_final` stays current (currently only historical 840K articles have labels; new daily articles don't get scored).
+**Goal**: Run Gemma 3B + Qwen 4B dual-pass labeling on new articles each morning so `llm_sentiment_final` stays current (currently only historical 845K articles have labels; new daily articles don't get scored).
 
 **Current gap**: Articles arriving via Finnhub/NewsAPI/Yahoo daily do not have `llm_sentiment_final` or `event_type` fields. The LLM labeling was a one-time batch job on historical data.
 
@@ -2170,7 +2170,7 @@ incremental IC in earnings windows" beats a flashy Sharpe 3.0 backtest in any QR
 **唯一的例外条件**: 若未来升级为高频/盘中策略，需处理每秒千条以上 tick 数据，可考虑用 **Go** 编写 tick processor（goroutine 并发模型适合 WebSocket 流处理）。当前 J.5 盘中止损监控用 Python asyncio 足够。
 
 **现有技术栈不替换的理由:**
-- Python: data/ML pipeline 生态无可替代（pandas/LightGBM/Snorkel/LM Studio SDK）
+- Python: data/ML pipeline 生态无可替代（pandas/LightGBM/LM Studio SDK）
 - Java Spring Boot: REST API 生产级可用，团队已有代码资产
 - React/TypeScript: 前端无替代方案
 
