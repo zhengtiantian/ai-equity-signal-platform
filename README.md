@@ -15,7 +15,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │                       NLP / LLM LABELING LAYER                           │
 │                                                                           │
 │   SLM company match ──▶  Pass A: Gemma 3B  ──┐                          │
-│                                               ├──▶ Snorkel (77.3% agr.) │
+│                                               ├──▶ merge (77.3% agr.)   │
 │                          Pass B: Qwen 4B   ──┘                          │
 │                                    │                                     │
 │                       llm_sentiment_final / event_type                  │
@@ -79,7 +79,7 @@ An end-to-end quantitative research and signal generation platform that processe
 |--------|-------|
 | Raw news data processed | **13TB** (GDELT GKG, 2016→present) |
 | Articles labeled | **845K+** |
-| Stock universe | **103 equities** (100 US + HXSCL OTC) |
+| Stock universe | **100 US equities** |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.77** (gross 0.92) vs SPY 0.54 |
 | Portfolio backtest Sharpe (60d, net of cost) | **0.73** (gross 0.77) vs SPY 0.47 |
@@ -95,7 +95,7 @@ An end-to-end quantitative research and signal generation platform that processe
 
 | Repo | Description | Tech |
 |------|-------------|------|
-| [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Snorkel, Airflow |
+| [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Airflow |
 | [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
 | [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
 | [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI interface: ReAct research agent, RAG stock Q&A, and the platform's MCP server | Python, FastAPI, MCP SDK, LM Studio |
@@ -106,7 +106,7 @@ An end-to-end quantitative research and signal generation platform that processe
 ## Tech Stack
 
 ### Data & ML
-`Python` `LightGBM` `Ridge Regression` `Snorkel` `Gemma 3B` `Qwen 4B` `LM Studio` `MLflow` `SHAP`
+`Python` `LightGBM` `Ridge Regression` `Gemma 3B` `Qwen 4B` `LM Studio` `MLflow` `SHAP`
 
 ### Data Engineering
 `Apache Airflow` `Apache Kafka` `MongoDB` `MySQL` `GDELT` `Finnhub API` `SEC EDGAR`
@@ -258,5 +258,5 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [ ] **E.10** Inference node health check + failover — probe the RTX 5090 GPU node and auto-switch `SLM_API_URL` to the local Mac instance when unreachable; pass-through degradation as last resort
 
 ### Stock Universe
-- [x] Universe at 103 symbols — 100 US + HXSCL OTC (added STX / WDC / HXSCL)
+- [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
 - [ ] **G.2** Phase 2–4 expansion — energy/materials (XOM, CVX, NEE, LIN, APD), international ADRs (BABA, JD, PDD, SE), then REITs/financials
