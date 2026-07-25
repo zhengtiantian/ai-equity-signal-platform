@@ -248,7 +248,7 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [x] **I.2** Claude Desktop integration — registered in `claude_desktop_config.json`, verified end-to-end over the real MCP protocol
 - [ ] **I.3** Alpaca order execution via MCP — order tools behind server-side pre-trade guardrails, so agents trade through the same interface
 - [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance wrapped as MCP tools so agents decide what to fetch
-- [ ] **I.5** MCP inter-service communication — replace the quant_ai → quant_api REST calls with MCP for dynamic tool discovery
+- [x] **I.5** MCP inter-service communication — quant_ai's research agent is now an MCP client (`mcp_client.py`) that discovers its tool surface from quant_mcp over stdio instead of implementing tools itself. The MCP server became the single tool definition, the agent went from 2 tools to 6 without new agent code, and 139 lines of duplicated tool/mongo/REST logic came out of `agent.py`
 
 ### Platform & Infrastructure
 - [x] **E.2** CI/CD GitHub Actions — tests and image builds run on every push
