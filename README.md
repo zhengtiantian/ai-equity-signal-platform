@@ -53,7 +53,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │   Spring Boot REST API (Keycloak JWT)                                   │
 │   React Dashboard: signal scores │ portfolio tracking │ trade alerts    │
 │   quant_ai: ReAct tool-calling research agent + RAG stock Q&A           │
-│   quant_mcp: MCP server (stdio) — platform data in Claude Desktop       │
+│   quant_ai/mcp_server.py: MCP (stdio) — platform tools for any client   │
 └─────────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
@@ -98,8 +98,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Snorkel, Airflow |
 | [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
 | [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
-| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI assistant: ReAct tool-calling research agent + RAG stock Q&A | Python, FastAPI, LM Studio |
-| quant_mcp | MCP server (stdio): platform data as tools for Claude Desktop / any MCP client | Python, MCP SDK |
+| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI interface: ReAct research agent, RAG stock Q&A, and the platform's MCP server | Python, FastAPI, MCP SDK, LM Studio |
 | [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose |
 
 ---
@@ -244,11 +243,11 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on the watchlist → triage sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
-- [x] **I.1** quant_mcp_server — six read-only MCP tools (news sentiment, features, ranked signals, positions, performance, universe) over stdio, served through the `quant_api` layer
+- [x] **I.1** MCP server (`quant_ai/mcp_server.py`) — six read-only MCP tools (news sentiment, features, ranked signals, positions, performance, universe) over stdio, served through the `quant_api` layer
 - [x] **I.2** Claude Desktop integration — registered in `claude_desktop_config.json`, verified end-to-end over the real MCP protocol
 - [ ] **I.3** Alpaca order execution via MCP — order tools behind server-side pre-trade guardrails, so agents trade through the same interface
 - [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance wrapped as MCP tools so agents decide what to fetch
-- [x] **I.5** MCP inter-service communication — quant_ai's research agent is now an MCP client (`mcp_client.py`) that discovers its tool surface from quant_mcp over stdio instead of implementing tools itself. The MCP server became the single tool definition, the agent went from 2 tools to 6 without new agent code, and 139 lines of duplicated tool/mongo/REST logic came out of `agent.py`
+- [x] **I.5** MCP inter-service communication — quant_ai's research agent is now an MCP client (`mcp_client.py`) that discovers its tool surface from `mcp_server.py` over stdio instead of implementing tools itself. The MCP server became the single tool definition (and was folded into quant_ai, since the dependency conflict that had justified a separate project was gone), the agent went from 2 tools to 6 without new agent code, and 139 lines of duplicated tool/mongo/REST logic came out of `agent.py`
 
 ### Platform & Infrastructure
 - [x] **E.2** CI/CD GitHub Actions — tests and image builds run on every push
