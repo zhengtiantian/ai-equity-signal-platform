@@ -186,7 +186,7 @@ bash run_host.sh
 Every item carries a stable ID shared with [PROJECT_PLAN.md](PROJECT_PLAN.md), which holds the
 detailed spec and effort estimate for each. Checked items are shipped and running.
 
-**Recent milestones:** manual holdings tracker with live quotes (P.1) · ReAct research
+**Recent milestones:** manual holdings tracker (P.1) · ReAct research
 agent (F.21) · MCP server + Claude Desktop (I.1/I.2) · Airflow migration (10 DAGs) ·
 multi-node distributed GDELT workers.
 
