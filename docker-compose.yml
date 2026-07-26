@@ -72,7 +72,7 @@ services:
   # 3. Quant platform
   # ======================================================
   quant_api:
-    image: xiz001/quant_api:089c2d6
+    image: xiz001/quant_api:9307bbe
     container_name: quant_api
     restart: always
     logging: *default-logging
@@ -96,7 +96,7 @@ services:
       start_period: 30s
 
   quant_ui:
-    image: xiz001/quant_ui:77f6a7e
+    image: xiz001/quant_ui:c671889
     container_name: quant_ui
     restart: always
     logging: *default-logging
