@@ -96,7 +96,7 @@ services:
       start_period: 30s
 
   quant_ui:
-    image: xiz001/quant_ui:77f6a7e
+    image: xiz001/quant_ui:c671889
     container_name: quant_ui
     restart: always
     logging: *default-logging
