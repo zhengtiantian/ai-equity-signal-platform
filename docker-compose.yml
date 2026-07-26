@@ -78,6 +78,10 @@ services:
     logging: *default-logging
     ports:
       - "18081:8081"
+    environment:
+      # Live quotes for the holdings page (P.1). Optional: unset falls back to the last
+      # daily close from stock_prices_history rather than failing the page.
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
     depends_on:
       - mysql
       - mongodb

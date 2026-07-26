@@ -186,8 +186,9 @@ bash run_host.sh
 Every item carries a stable ID shared with [PROJECT_PLAN.md](PROJECT_PLAN.md), which holds the
 detailed spec and effort estimate for each. Checked items are shipped and running.
 
-**Recent milestones:** ReAct research agent (F.21) · MCP server + Claude Desktop (I.1/I.2) ·
-Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
+**Recent milestones:** manual holdings tracker with live quotes (P.1) · ReAct research
+agent (F.21) · MCP server + Claude Desktop (I.1/I.2) · Airflow migration (10 DAGs) ·
+multi-node distributed GDELT workers.
 
 ### Data & Pipeline
 - [x] **D.1/D.2/D.4/D.7/D.8** Alt-data research layer — macro, retail, analyst, 13F, premarket
@@ -216,7 +217,8 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [ ] **M.5** Overfitting defenses — untouched final holdout, experiment/trial registry, deflated Sharpe
 - [ ] **M.6** Research report writeup — paper-style: hypothesis, method, results, failure cases, honest limitations
 
-### Live Trading
+### Portfolio & Live Trading
+- [x] **P.1** Manual holdings tracker — the only positions the platform knew about were synthetic: `track_positions.py` mechanically opens the day's top-5 signals, so there was nowhere to record what is actually held. **Transactions are the source of truth and holdings are derived** — storing a holding row with an `avgCost` field makes it unmaintainable, because editing the quantity leaves no way to recompute what the average should now be. `portfolio_transactions` (symbol, side, quantity, price, tradeDate, fee, note) with full CRUD so any mis-keyed trade can be corrected, plus a freely editable `portfolio_cash` balance; quantity, running weighted-average cost, unrealised and realised P&L, and weight as a share of *total* capital are folded from the log on read. Live quotes from Finnhub behind a 20s TTL cache (60 req/min free tier cannot survive a page polling 20 symbols), stretched off-hours, falling back to the last `stock_prices_history` close and labelling it as such rather than passing a stale number off as live. Surfaces: `/api/portfolio/*` on quant_api, a "My Holdings" tab in quant_ui, and `get_my_holdings` / `get_my_transactions` MCP tools — which makes the portfolio readable by Claude Desktop, Codex, and quant_ai's agent at once. 10 unit tests cover the money maths on a pure `replay()` fold (average cost after mixed buys, realised P&L against the average *at the time of sale*, full exit and re-entry, capped overselling). Prerequisite for F.17 and G.1 — neither position sizing nor a 5%-per-position guardrail means anything measured against a portfolio nobody owns. Holdings are personal financial data: they stay in the local database and never reach a seed file, fixture, or commit.
 - [ ] **G.1** Broker API integration (Alpaca) — wire daily signals to real order execution; pre-trade guardrails: max 5% per position, daily loss kill-switch, whitelist-only symbols, fill reconciliation against paper positions; Stage 1 paper account → Stage 2 live with small capital
 
 ### AI Engineering — LLM / RAG
@@ -238,15 +240,23 @@ Airflow migration (10 DAGs) · multi-node distributed GDELT workers.
 - [ ] **F.9** Rule optimization agent — sample → LLM judge → diagnose FP/FN → modify rules (🟡 `tools/rule_optimizer.py` written, not tested)
 - [ ] **F.13** Morning briefing agent — 07:00 pre-market summary for held positions: overnight news, regime, exit warnings
 - [ ] **F.16** Real-time news monitoring agent — 30-minute polling for held positions; alerts on a sentiment spike or negative event cluster
-- [ ] **F.17** Portfolio Manager agent — signals + positions + regime → structured add/reduce/hold recommendation
+- [ ] **F.17** Portfolio Manager agent — a **review layer over the rule engine**, not a replacement for it. `track_positions.py` already decides entries, exits, and stops deterministically; an LLM would be both worse and non-reproducible at that job. The agent instead reviews each rule decision against what rules structurally cannot see: the news behind a price move (a stop triggered by a sector-wide selloff that has already reversed is a whipsaw, not a signal), and portfolio-level facts no per-position rule considers (sector concentration, total exposure against the current regime). Output is a machine-consumable decision table — `agree` / `flag` per action with `target_weight_pct` and cited evidence — so it can later drive G.1 execution.
+Three deterministic gates run after the model replies: JSON schema (one repair round-trip, then fail loudly), **grounding** (every cited `(tool, field, value)` must appear in a real observation from this run, so fabricated numbers are dropped rather than prayed against), and business rules (whitelist, ≤5% per position, exit only what is held). Depends on P.1.
+- [ ] **F.22** Agent evaluation harness — golden cases in `eval/cases.yaml` plus a report. Whether a recommendation *makes money* cannot be scored without waiting for the market; what can be scored are the failure modes that actually keep agents out of production: schema validity rate, **grounding rate** (fraction of cited evidence that is real), tool precision/recall against the tools a case requires, run-to-run stability (Jaccard overlap across N runs of one input), and cost in steps and latency. The rule engine doubles as the baseline — the agent's job is not to differ from it, but to be justifiably different when it does.
 - [ ] **F.18** Backtest reflection agent — auto-diagnose weak-year IC failures (2022/2024) and generate a hypothesis report
 - [ ] **F.20** Dip-buy scanner agent — negative-news burst / earnings miss / drawdown on the watchlist → triage sentiment washout vs falling knife → contrarian entry candidates with reasoning
 
 ### MCP Integration
-- [x] **I.1** MCP server (`quant_ai/mcp_server.py`) — six read-only MCP tools (news sentiment, features, ranked signals, positions, performance, universe) over stdio, served through the `quant_api` layer
+- [x] **I.1** MCP server (`quant_ai/mcp_server.py`) — eight read-only MCP tools (news sentiment, features, ranked signals, rule-generated positions, the user's own holdings and trade log, backtest performance, universe) over stdio, served through the `quant_api` layer
 - [x] **I.2** Claude Desktop integration — registered in `claude_desktop_config.json`, verified end-to-end over the real MCP protocol
 - [ ] **I.3** Alpaca order execution via MCP — order tools behind server-side pre-trade guardrails, so agents trade through the same interface
 - [ ] **I.4** External data MCP tools — Finnhub / SEC EDGAR / yfinance wrapped as MCP tools so agents decide what to fetch
+- [ ] **I.6** `search_news` — full-text search over the 845K labeled articles, filterable by symbol and date, returning headline, date, sentiment and source. The largest gap in the current surface: every existing tool returns a pre-computed aggregate, so a client can learn that a symbol averaged +0.31 sentiment but cannot read a single article behind it. Turns the server from something that reports conclusions into something that can be interrogated.
+- [ ] **I.7** `get_feature_history` — feature time series for a symbol (selected fields, N days). `get_stock_features` returns only the latest row, so "is sentiment improving or deteriorating" is currently unanswerable.
+- [ ] **I.8** `screen_universe` — screen the 100-symbol universe by feature thresholds (e.g. positive momentum with deteriorating sentiment), so the client can pose its own question instead of only consuming rankings the platform chose.
+- [ ] **I.9** `get_factor_performance` — per-factor IC by year and horizon from the stability analysis; the evidence behind *why* a signal ranks where it does.
+- [ ] **I.10** Secondary tools — `compare_symbols` (convenience over two calls), `get_pipeline_status` (data freshness, last DAG run), `search_gkg` (675M-row GKG inverted index).
+- [ ] **I.11** Codex CLI as a third MCP client — register the same `mcp_server.py` alongside Claude Desktop and quant_ai's agent. Config only, no new code: the point of the stdio server is that clients are free.
 - [x] **I.5** MCP inter-service communication — quant_ai's research agent is now an MCP client (`mcp_client.py`) that discovers its tool surface from `mcp_server.py` over stdio instead of implementing tools itself. The MCP server became the single tool definition (and was folded into quant_ai, since the dependency conflict that had justified a separate project was gone), the agent went from 2 tools to 6 without new agent code, and 139 lines of duplicated tool/mongo/REST logic came out of `agent.py`
 
 ### Platform & Infrastructure

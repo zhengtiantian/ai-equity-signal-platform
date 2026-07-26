@@ -1358,9 +1358,78 @@ Write to alerts collection → push to quant_ui (WebSocket, E.6)
 }
 ```
 
-**Implementation**: LangGraph 2-node graph (analysis_agent → recommendation_agent); reads `daily_signals` + `positions` + `regime` → structured JSON → stored in MongoDB + displayed in UI.
+**Revised design (2026-07-26) — review layer, not replacement**
 
-- Status: [ ] Pending (3 days; simpler version of F.4 LangGraph; can do before F.4)
+The output format above assumed the agent decides. It should not. `track_positions.py`
+already decides entries, exits, stops and holding periods deterministically, and a local
+9B model would be both worse and non-reproducible at that job. Replacing tuned rules with
+an LLM is a step backwards, and "why do you think the model beats your rules" is a
+question with no good answer.
+
+The agent reviews the rule engine's decisions instead, covering the two things rules
+structurally cannot do:
+
+1. **Read why a price moved.** A stop fires at −8%; the rule sees only the number. The
+   agent pulls the news (I.6) and can distinguish a sector-wide selloff that has already
+   reversed — a whipsaw exit — from a company-specific failure.
+2. **Reason about the portfolio.** The rules are per-position. Nothing asks whether four
+   of five holdings are semiconductors, or whether total exposure suits a RISK_OFF regime.
+
+**Output**: a decision table, one row per rule action — `agree` / `flag`,
+`target_weight_pct`, confidence, reasoning, and `evidence[]` where each entry is a
+`(tool, field, value)` triple. Machine-consumable, so G.1 can later execute it.
+
+**Three deterministic gates after the model replies** — none of them trust the model:
+- **Schema** — valid JSON, typed fields, `action` in enum, weight in 0–100. One repair
+  round-trip with the specific error, then fail loudly rather than emit garbage.
+- **Grounding** — every cited `(tool, field, value)` must appear in a real observation
+  from this run (float tolerance). Citations that do not are dropped with the
+  recommendation. The point is not to ask the model to avoid inventing numbers; it is to
+  make invented numbers non-viable.
+- **Business rules** — symbol in the 100-name whitelist, ≤5% per position, exits only
+  against something actually held.
+
+**Depends on**: P.1 (a real portfolio to review), I.6 (news the agent can read).
+Evaluated by F.22.
+
+**Implementation**: `quant_ai/portfolio_agent.py` reusing `mcp_client`; no changes to
+`agent.py`, `mcp_server.py`, or `mcp_client.py`. LangGraph is not needed — the existing
+hand-written loop plus a validator is smaller and easier to test.
+
+- Status: [ ] Pending (1.5–2 days; do after P.1)
+
+---
+
+### F.22 Agent Evaluation Harness
+
+**Goal**: Answer "how do you know the agent is any good" with numbers instead of a demo.
+
+**What cannot be evaluated**: whether a recommendation makes money. That needs the market
+to pass. Claiming otherwise would be dishonest.
+
+**What can be evaluated** — and these are the failure modes that actually keep agents out
+of production:
+
+| Metric | Definition |
+|---|---|
+| Schema validity | passed first try / passed after one repair / failed |
+| **Grounding rate** | cited evidence that is real ÷ total citations |
+| Tool recall | required tools that were called |
+| Tool precision | called tools that were required |
+| Stability | Jaccard overlap of the recommendation set across N runs of one input |
+| Cost | steps, wall-clock, tokens |
+
+The existing 7 unit tests mock the LLM, so they prove the loop is correct — not that the
+decisions are. This closes that gap.
+
+**Baseline**: the rule engine. The agent's job is not to differ from it; it is to be
+justifiably different when it does. Agreement rate is itself a signal — too high and the
+agent adds nothing, too low and it cannot be trusted.
+
+**Implementation**: `quant_ai/eval/cases.yaml` (golden cases: prompt, required tools,
+forbidden tools, schema, assertions) and `quant_ai/eval/run_eval.py` producing a report.
+
+- Status: [ ] Pending (0.5–1 day; build alongside F.17)
 
 ---
 
@@ -1455,7 +1524,7 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Implementation**: Python `mcp` SDK (`pip install mcp`); standalone FastAPI server on port 18002; reads directly from MongoDB. Register in Claude Desktop `claude_desktop_config.json` for local use.
 
-- Status: [ ] Pending (3 days)
+ - Status: [x] Done — six read-only tools over stdio, served through quant_api with a mongo fallback
 
 ---
 
@@ -1472,7 +1541,7 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Interview value**: "The platform is MCP-native — any Claude client can query live signals and positions without writing a single line of integration code."
 
-- Status: [ ] Pending (0.5 day after I.1)
+ - Status: [x] Done — registered in claude_desktop_config.json, verified over the real MCP protocol
 
 ---
 
@@ -1526,7 +1595,108 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Interview value**: Demonstrates understanding of MCP as a service mesh protocol for AI systems, not just a chatbot feature.
 
-- Status: [ ] Pending (3 days; do after I.1)
+ - Status: [x] Done — quant_ai's agent is an MCP client (mcp_client.py); quant_mcp was folded into quant_ai
+
+---
+
+### I.6 `search_news` — full-text search over labeled articles
+
+**Goal**: Let a client read the articles, not just the average.
+
+**Current state**: every tool on the server returns a pre-computed aggregate. A client can learn that AAPL averaged +0.31 sentiment over 90 days; it cannot read one headline behind that number, cannot ask what happened on the day of a drawdown, and has no way to check whether the aggregate is driven by ten articles or ten thousand.
+
+**Tool**: `search_news(query, symbol=None, from_date=None, to_date=None, limit=20)` over the 845K labeled articles in `news_articles_company_matched_v2`, returning headline, date, source, `llm_sentiment_final`, and `llm_disagreement`. Needs a text index on title/body.
+
+**Why it matters**: this is the difference between a server that reports conclusions and one that can be interrogated. It is also what lets F.17 explain a stop-loss — a mechanical rule sees −8%, only an article says whether that was a sector selloff or a company-specific failure.
+
+- Status: [ ] Pending (0.5 day; highest-value tool remaining)
+
+---
+
+### I.7 `get_feature_history` — feature time series
+
+**Goal**: Make trends visible. `get_stock_features` returns only the latest row, so "is sentiment improving or deteriorating" is unanswerable today.
+
+**Tool**: `get_feature_history(symbol, fields, days=90)` → the selected feature columns from `daily_symbol_features` as a date-ordered series. Field whitelist, and a row cap so a client cannot pull the whole store into a context window.
+
+- Status: [ ] Pending (0.5 day)
+
+---
+
+### I.8 `screen_universe` — client-driven screening
+
+**Goal**: Let the client pose its own question instead of only consuming rankings the platform chose. "Find symbols with positive 20-day momentum but deteriorating news sentiment" is currently impossible without a new endpoint per question.
+
+**Tool**: `screen_universe(criteria, limit=20)` — a constrained filter expression over whitelisted feature fields with comparison operators only. No free-form query strings reach the database.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+### I.9 `get_factor_performance` — the evidence behind a ranking
+
+**Goal**: Expose per-factor IC by year and horizon from the existing stability analysis, so a client can explain *why* a signal ranks where it does, and can tell a factor that works from one that worked once.
+
+- Status: [ ] Pending (0.5 day)
+
+---
+
+### I.10 Secondary tools
+
+`compare_symbols(a, b)` (convenience over two calls), `get_pipeline_status()` (data freshness, last DAG run, row counts), `search_gkg(entity)` (675M-row GKG inverted index — large, but less useful for single-name work than I.6).
+
+- Status: [ ] Pending (1 day for all three)
+
+---
+
+### I.11 Codex CLI as a third MCP client
+
+**Goal**: Register the same `mcp_server.py` with Codex CLI alongside Claude Desktop and quant_ai's own agent.
+
+**Work**: configuration only — no new code. That is the point worth making: one stdio server, three unrelated clients, and adding the third cost nothing because the tool surface is the contract.
+
+- Status: [ ] Pending (0.5 day, mostly verification)
+
+---
+
+## P. Portfolio Holdings
+
+### P.1 Manual holdings tracker
+
+**Goal**: Record what is actually held. Everything the platform currently calls a "position" is synthetic — `track_positions.py` mechanically opens the day's top-5 signals and closes on rule triggers. That is a strategy simulation, not a portfolio, and there is nowhere to say "I own 10 NVDA from 2026-05-12".
+
+**Data**: a `portfolio_holdings` collection — symbol, quantity, entry price, entry date, note, open/closed — plus an optional cash balance, so a weight is a share of total capital rather than a share of whatever happens to be invested.
+
+**Surface**:
+- `quant_api` — CRUD endpoints under `/api/portfolio/holdings`
+- `quant_ui` — a holdings page with a table and free-form add / edit / close
+- `mcp_server.py` — a read-only `get_my_holdings` tool, which makes the portfolio visible to Claude Desktop, Codex, and quant_ai's agent at once
+
+**Why first**: both F.17 and G.1 depend on it. Neither position sizing nor a "≤5% per position" guardrail means anything measured against a portfolio nobody owns.
+
+**Handling**: holdings are personal financial data. They stay in the local database and must never reach a seed file, a test fixture, or a commit.
+
+**Delivered (2026-07-26)**
+
+- `HoldingService.replay()` is a pure fold over the trade log, extracted specifically so
+  the money maths is testable without a database or a quote provider. 10 unit tests:
+  weighted average across mixed buys, realised P&L priced against the average *at the
+  time of the sale* (folding from the end state gets this wrong), sell leaving the average
+  untouched, full exit then re-entry starting fresh, overselling capped and flagged rather
+  than producing a negative position.
+- `QuoteService` caches Finnhub quotes for 20s. The free tier is 60 requests/minute and
+  serves one symbol per call, so a page polling 20 symbols every 5s would be rate-limited
+  immediately; the UI polls the cache instead and only a miss reaches Finnhub. Off-hours
+  the TTL stretches to 15 minutes since prices are not moving. On failure or a missing
+  token it serves the last `stock_prices_history` close tagged `source: daily-close`, and
+  the UI labels it — a stale number presented as live is worse than an honest close.
+- `IllegalArgumentException` now maps to 400/404 in `ApiExceptionHandler`; without it the
+  hand-rolled input checks surfaced as 500s with no actionable message.
+- MCP gained `get_my_holdings` and `get_my_transactions` (8 tools total). Because the
+  server is the tool contract, Claude Desktop, Codex and quant_ai's agent all gained the
+  portfolio at once with no client changes.
+
+- Status: [x] Done — API + UI + MCP; F.17 is unblocked
 
 ---
 
