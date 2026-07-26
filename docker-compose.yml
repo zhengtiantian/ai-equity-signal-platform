@@ -33,7 +33,11 @@ services:
     container_name: mongo6
     restart: always
     logging: *default-logging
-    command: --wiredTigerCacheSizeGB 1
+    # 4GB, not the WiredTiger default (~half of RAM) and not the 1GB this used to be.
+    # The news full-text index alone is 2.1GB; with a 1GB cache every search re-read it
+    # from disk and took 0.2-6s, warm or cold. The VM already reserves 15.6GB, so this
+    # is spending an allocation that exists rather than taking memory from macOS.
+    command: --wiredTigerCacheSizeGB 4
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
