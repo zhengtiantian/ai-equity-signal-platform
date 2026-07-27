@@ -268,6 +268,59 @@ multi-node distributed GDELT workers.
 - [ ] **E.9** UI intraday price chart — TradingView Lightweight Charts + Alpaca bars API, entry/stop-loss overlay per position; no hourly data stored locally
 - [ ] **E.10** Inference node health check + failover — probe the RTX 5090 GPU node and auto-switch `SLM_API_URL` to the local Mac instance when unreachable; pass-through degradation as last resort
 
+### News Propagation — events outside the universe (N-series)
+
+The pipeline matches an article to a company by name, so an event only registers when the
+article names a covered symbol. When ChangXin Memory listed and rose 471%, US memory names
+moved — but no article about ChangXin mentions Micron, so the platform saw nothing. The
+corpus is not the limitation: ChangXin appears in 173 articles, 53 of them in 2026. The
+missing piece is propagation, and the honest question is not "can this be captured" but
+"does capturing it predict anything".
+
+- [x] **N.0** Intraday collector schema repair — *prerequisite, done*. The finnhub /
+  newsapi / yahoo collectors wrote documents with neither `date` nor `symbol`, and
+  `slm_company_match_v2.build_query()` requires a symbol, so **every article they collected
+  from 2026-04-13 onward stopped dead in `news_articles`**: never matched, never labeled,
+  never featurised, never in a signal. 9,636 articles accumulated that way — the freshest
+  news in the platform was the only news nothing downstream could see, which is precisely
+  why same-day alerting was impossible. A shared `collectors/news/_canonical.py` now
+  derives `date` from `publishedAt` and assigns a *candidate* symbol from the 100 company
+  rule files; the SLM validator downstream still decides whether the match is real.
+  Matching is deliberately conservative — AAPL's primary keyword is `Apple Inc.`, not bare
+  `Apple` — because a wrong symbol pollutes that ticker's sentiment aggregate while a
+  missing one merely omits an article, and the validator can reject a bad candidate but
+  never sees an article that has none. Backfill: 41% of the stranded articles match a
+  covered company; the remaining 5,688 are general and macro news, kept unmatched on
+  purpose since they are exactly the raw material N.1–N.3 need.
+- [ ] **N.1** Influencer entity registry — a second dictionary alongside `company_rules`,
+  for entities that are *not* in the universe but move it: foundries and memory makers
+  (ChangXin, TSMC, Samsung, SK Hynix, ASML), macro actors (OPEC, the Fed, export-control
+  announcements), and named conflicts. Each maps to affected symbols **with a direction**,
+  because the sign is not derivable from the entity alone — a competitor's successful IPO
+  is bearish for incumbents while rising DRAM prices are bullish for the same names.
+- [ ] **N.2** Theme labels in the labeling pipeline — the dual-LLM pass already reads every
+  article, so a theme tag (memory cycle, AI capex, export controls, energy, conflict) is
+  close to zero marginal cost. Themes cover what an entity registry cannot enumerate in
+  advance; the registry covers what a theme is too coarse to catch.
+- [ ] **N.3** Theme → symbol exposure matrix — which of the 100 are exposed to "DRAM
+  oversupply", and how strongly. Seeded from the `sector` field already in the feature
+  store, extended by LLM proposal under human review, and expressed as an exposure weight
+  rather than a boolean.
+- [ ] **N.4** **Event-study validation — the point of the whole series.** When a theme or
+  influencer event fires, what is the distribution of *excess* returns (already
+  benchmark-adjusted via `excess_ret_*`) for exposed symbols over 1/5/20 days? Reporting
+  absolute returns here would be worthless: memory stocks falling on a day the whole market
+  fell proves nothing. Two failure modes get measured explicitly — **hindsight bias**, by
+  fixing the event list before looking at returns rather than starting from a move and
+  hunting for its cause, and **statistical power**, by reporting how many independent
+  events a theme actually has. A theme that fires five times a year cannot support a
+  factor, whatever the point estimate says.
+- [ ] **N.5** Holdings alerting on validated themes — extends F.16 from symbol-scoped to
+  theme-scoped, and **only for themes N.4 found predictive**. Themes that explain without
+  predicting stay available as a research tool: telling the user why a position moved today
+  is genuinely useful, and is a different claim from telling them what to buy tomorrow.
+  Keeping those two apart is the discipline this series is built around.
+
 ### Stock Universe
 - [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
 - [ ] **G.2** Phase 2–4 expansion — energy/materials (XOM, CVX, NEE, LIN, APD), international ADRs (BABA, JD, PDD, SE), then REITs/financials

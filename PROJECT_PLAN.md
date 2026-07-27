@@ -1700,6 +1700,156 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 ---
 
+## N. News Propagation — events outside the universe
+
+**The problem.** ChangXin Memory listed and rose 471%; US memory names fell the same day.
+The platform saw nothing, because it matches articles to companies by name and no article
+about ChangXin mentions Micron. Generalised: any event whose *source* sits outside the
+100-symbol universe — a foreign competitor, an export-control ruling, a war, an OPEC
+decision — is invisible, however much it moves the portfolio.
+
+**What is not the problem.** The corpus already covers these entities: ChangXin appears in
+173 articles, 53 of them in 2026. The N.0 repair also revealed 5,688 recent articles that
+name no covered company at all — general and macro news, sitting unused. The raw material
+is there. What is missing is a propagation mechanism and, more importantly, evidence that
+propagation predicts anything.
+
+**The trap this series is designed around.** The motivating observation — "memory fell
+today, ChangXin listed today, therefore ChangXin caused it" — is a post-hoc narrative.
+Financial media supplies three plausible causes for every move. Building the capture
+without the validation produces a machine that always has an explanation and never has an
+edge. N.4 is therefore not a checkpoint at the end; it is the deliverable, and N.1–N.3
+exist to feed it.
+
+**How the industry does this**, for calibration:
+
+| Approach | Who | Mechanism |
+|---|---|---|
+| Entity relationship graphs | Bloomberg SPLC, FactSet Revere, LSEG | curated competitor / supplier / customer edges; news propagates N hops |
+| Thematic tagging | RavenPack, Accern | articles tagged by theme; themes mapped to exposure |
+| Statistical co-movement | Barra, PCA factor models | peer groups learned from returns rather than curated |
+| Event studies | standard academic method | distribution of abnormal returns after an event |
+
+That Bloomberg and RavenPack charge heavily for exactly this says both that it is valuable
+and that it is hard.
+
+---
+
+### N.0 Intraday collector schema repair — **done**
+
+The finnhub / newsapi / yahoo collectors wrote `{source, title, description, content, url,
+impact, publishedAt, collectedAt, language, meta}` — no `date`, no `symbol`. GDELT queries
+per company and therefore writes both. Since `slm_company_match_v2.build_query()` requires
+`{"symbol": {"$exists": True, "$ne": None}}`, everything the intraday collectors wrote from
+2026-04-13 onward was invisible to the matcher: 9,636 articles, never labeled, never
+featurised, never in a signal.
+
+The consequence is exactly the capability being asked for here — same-day alerting was
+impossible because same-day news never left the raw collection.
+
+`collectors/news/_canonical.py` derives `date` from `publishedAt` in GDELT's
+`YYYYMMDDHHMMSS` form and assigns a candidate symbol by keyword-matching the 100 company
+rule files. Design notes worth keeping:
+
+- **Candidate, not verdict.** The SLM validator downstream is where match accuracy is
+  already engineered; this layer only has to get an article *into* that queue.
+- **Conservative by construction.** AAPL's primary keyword is `Apple Inc.`, not bare
+  `Apple`, so "Apple to pay Italy 318 million euros" gets no symbol. That is the right
+  trade: a wrong symbol pollutes a ticker's sentiment aggregate permanently, a missing one
+  costs a single article, and the validator can reject a bad candidate but never sees an
+  article that has none.
+- **One symbol per article**, because `url` is UNIQUE on `news_articles` — the same
+  one-article-one-company shape GDELT produces.
+- **Unmatched articles are kept.** 5,688 of the backfilled set name no covered company;
+  they are macro and general-market news, which is the input N.1–N.3 need.
+
+- Status: [x] Done — collectors patched, `tools/backfill_intraday_canonical.py` written and
+  dry-run verified (41% match rate)
+
+---
+
+### N.1 Influencer entity registry
+
+**Goal**: name the entities that move the portfolio without being in it.
+
+A dictionary parallel to `company_rules`: foundries and memory makers (ChangXin, TSMC,
+Samsung, SK Hynix, ASML), macro actors (OPEC, the Fed, export-control bodies), named
+conflicts and their commodity exposure.
+
+Each entry maps to affected symbols **with a direction**, because direction is not
+derivable from the entity. A competitor's successful IPO is bearish for incumbents; rising
+DRAM prices are bullish for the same names; the entity is identical in both.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+### N.2 Theme labels in the labeling pipeline
+
+**Goal**: cover what an entity list cannot enumerate in advance.
+
+The dual-LLM pass already reads every article, so a theme tag costs almost nothing at the
+margin. Themes: memory cycle, AI capex, export controls, energy, conflict, rates, supply
+chain.
+
+Entity registry and themes are complementary — the registry is precise about known actors,
+themes catch the ones nobody listed.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+### N.3 Theme → symbol exposure matrix
+
+**Goal**: which of the 100 are exposed to "DRAM oversupply", and how much.
+
+Seeded from the `sector` field already in `daily_symbol_features`, extended by LLM proposal
+under human review. Expressed as an exposure weight rather than a boolean: MU is not
+exposed to the memory cycle in the same degree as AAPL is.
+
+- Status: [ ] Pending (1.5 days)
+
+---
+
+### N.4 Event-study validation — **the deliverable**
+
+**Goal**: decide whether any of this predicts, or merely explains.
+
+For each theme and influencer event: the distribution of **excess** returns for exposed
+symbols over 1 / 5 / 20 days. Excess, not absolute — `excess_ret_*` already exists in the
+feature store, and reporting absolute returns would let "memory fell on a day the whole
+market fell" masquerade as a finding.
+
+Two failure modes get measured rather than assumed away:
+
+- **Hindsight bias** — the event list is fixed before returns are examined. Starting from a
+  move and hunting for its cause reliably finds one.
+- **Statistical power** — report the count of *independent* events per theme. A theme
+  firing five times a year cannot support a factor whatever its point estimate; that is a
+  result to publish in the report, not a reason to suppress the theme.
+
+A negative result here is a successful outcome for this stage. It redirects N.5 rather than
+blocking it.
+
+- Status: [ ] Pending (2 days)
+
+---
+
+### N.5 Holdings alerting on validated themes
+
+Extends F.16 from symbol-scoped to theme-scoped, gated on N.4: only themes shown to predict
+generate an alert.
+
+Themes that explain without predicting stay available as a research tool through the MCP
+surface. Telling the user *why* a position moved today is genuinely useful and is a
+different claim from telling them what to buy tomorrow. Keeping the two apart is the
+discipline the series is built around, and conflating them is how a news feature becomes a
+losing strategy.
+
+- Status: [ ] Pending (1 day)
+
+---
+
 ## J. Pipeline Workflow Orchestration & Daily Enrichment
 
 ### J.0 Current Pipeline Overview
