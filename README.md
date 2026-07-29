@@ -83,8 +83,10 @@ An end-to-end quantitative research and signal generation platform that processe
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.69** (gross 0.83) vs SPY 0.54 — *was 0.78 before the M.7 look-ahead fix* |
 | Portfolio backtest Sharpe (60d, net of cost) | 0.73 (gross 0.77) vs SPY 0.47 — **stale, pending re-run** |
-| Walk-forward Long-short annualized return | +21.7% — **stale, retraining after M.7** |
-| Walk-forward Long-short Sharpe | 0.85 — **stale, retraining after M.7** |
+| Walk-forward Ensemble Rank IC (60d) | **0.0563** aggregate — but **negative in 4 of 9 years**, see below |
+| Walk-forward Long-short annualized return | **+17.1%** — *was +21.7% before M.7* |
+| Walk-forward Long-short Sharpe | **0.58** — *was reported 0.85; the long leg alone is 0.81, see below* |
+| Walk-forward short-leg contribution | **−0.03% annualized, Sharpe −0.00** — the short side adds nothing |
 | Hit rate (20d portfolio, net) | **62.9%** |
 | Best single-factor IC (60d) | ~~+0.198 (`inst_holding_pct_chg`)~~ — **withdrawn, contaminated by look-ahead (see M.7)**. The 13F holdings are stored without a date and broadcast to every historical trade date, so this factor was reading the present. Institutions accumulate what has already risen, which is precisely the spurious correlation that produces a high IC here. Removed from the feature set, the four regime weight dicts, and the model inputs; the backtest was re-run and cost 0.09 Sharpe. |
 | Platform services | **13 active** (11 Docker containers + 2 host processes) |
@@ -101,6 +103,44 @@ An end-to-end quantitative research and signal generation platform that processe
 > hand-picked in 2026 and backtested from 2016, so it consists of names that survived and
 > did well. That selection bias is very likely worth more than the 0.09 just removed, and
 > until it is closed no figure here should be read as an achievable return.
+>
+> **The bigger problem the re-run exposed: the signal is not stable across years.** The
+> ML path barely moved when the leaked factor was removed — 60d ensemble IC went 0.059 →
+> 0.0563 — but the year-by-year breakdown behind that aggregate is:
+>
+> | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+> |---|---|---|---|---|---|---|---|---|
+> | +0.037 | +0.136 | **+0.220** | −0.028 | **−0.122** | **+0.239** | −0.036 | +0.010 | −0.102 |
+>
+> **Four of nine years are negative**, and the aggregate is carried almost entirely by 2019,
+> 2020 and 2023. An IC of 0.056 assembled from +0.24 and −0.12 is not a 0.056 signal; it is
+> something that works in particular years and reverses in others, with no way to know in
+> advance which kind of year you are in. The two best years are a recovery and a melt-up and
+> the worst is a bear market, which is what a momentum or beta proxy looks like rather than
+> news alpha. **M.3** (Newey-West t-stats, IC decay, per-regime stability) and **M.4**
+> (residual IC after neutralising momentum/size/sector) are the tests that would settle it,
+> and neither has been run.
+>
+> **The short leg does nothing.** The long-short re-run gives long +17.1% at Sharpe 0.81 and
+> short −0.03% at Sharpe −0.00, so the spread Sharpe of 0.58 is the long leg diluted by a
+> leg that neither earns nor hedges. In substance this is a long-only strategy wearing a
+> long-short label, which also means **M.9 borrow costs would push the short leg net
+> negative** — paying to hold something that returns zero. The previously reported 0.85 is
+> closest to the long leg's 0.81, so it may have been the long leg mislabelled as the spread
+> all along.
+>
+> **A separate bug the re-run surfaced:** `factor_analysis.py` reports max drawdown as
+> −100.00% on every leg, and −99.99% / −98.50% / −93.77% year by year. A true −100% is total
+> ruin, so these are not results. The cause is compounding overlapping forward returns —
+> a 60-day forward return is recomputed every day, and chaining those as if they were
+> sequential periods diverges to −100% regardless of the underlying performance. Drawdown
+> figures from this script should not be quoted until it is fixed.
+>
+> Note also which path the leak actually damaged. The ML models barely used the constant
+> factor — a tree or a ridge sees a column with no variance and largely ignores it. The
+> hand-weighted regime scorer gave it 0.5–1.2 weight by fiat, and that is where the entire
+> 0.09 Sharpe came from. Hand-set weights were more easily fooled than the models, because
+> the models at least looked at the data.
 
 ---
 
@@ -238,6 +278,8 @@ multi-node distributed GDELT workers.
 - [ ] **M.4** Sentiment orthogonalization — residual IC after neutralizing momentum/reversal/size/sector: does news add information beyond price?
 - [ ] **M.5** Overfitting defenses — untouched final holdout, experiment/trial registry, deflated Sharpe
 - [ ] **M.6** Research report writeup — paper-style: hypothesis, method, results, failure cases, honest limitations
+- [ ] **M.10** 🔴 **Max-drawdown calculation is wrong — blocker on any drawdown claim.** `factor_analysis.py` reports −100.00% for the long leg, the short leg and the spread, and −99.99% / −98.50% / −93.77% year by year. A true −100% is total ruin, so these are not results but an artifact: a 60-day forward return is recomputed every trading day, and chaining overlapping returns as though they were sequential periods diverges toward −100% whatever the underlying performance. Either compound non-overlapping periods only, or build an equity curve from the actual rebalance schedule the way `backtest_portfolio.py` does — its −42% drawdown is plausible, which is the tell that the two scripts disagree about what a period is. Until fixed, no drawdown from the factor-analysis path may be quoted.
+- [ ] **M.11** Short leg earns nothing — decide whether to keep it. The re-run gives long +17.1% at Sharpe 0.81 against short −0.03% at Sharpe −0.00, so the 0.58 spread Sharpe is the long leg diluted by a leg that neither earns nor hedges. This is a long-only strategy carrying a long-short label. Two honest resolutions: report long-only and say so, or make the short side actually work (B.1 beta neutralisation, sector limits, and a screen for names where the signal is genuinely negative rather than merely bottom-ranked). **M.9 makes this urgent** — adding borrow costs to a leg returning zero pushes it net negative, so the current framing is not just imprecise, it flatters the result.
 - [ ] **M.8** Turnover and capacity reporting — the backtest prices a round trip per position (H.1) but never reports **how many round trips there are**. At a 5-day horizon fed by daily signals, turnover could be high enough that the cost model, though honest per trade, understates the total drag by a wide margin. Report annualised turnover, cost as a share of gross return, and the capital level at which the liquidity filter starts binding — a strategy that works at $50k and not at $5m is a different claim.
 - [ ] **M.9** Short-side borrow costs — the long-short Sharpe of 0.85 charges commission and slippage on both legs but nothing for **carrying** the short: no borrow fee, no hard-to-borrow screen, no recall risk. On the names most likely to be shorted by a news-sentiment signal, borrow is exactly where it is expensive. Until this is modelled, the long-short number is optimistic by an unmeasured amount and the long-only figures are the more defensible ones to quote.
 
