@@ -2419,14 +2419,20 @@ Index: { symbol: 1, timestamp: -1 }  (unique compound)
 
 ---
 
-## M. Signal Research Rigor (Quant Researcher Interview Defense — low priority)
+## M. Signal Research Rigor
 
 Hardens the signal research so its claims survive a quant-researcher-style interrogation
-(IC significance? out-of-sample? survivorship bias? why not overfit?). Low priority:
-only invest here when targeting Quant Researcher roles — for Quant Dev / platform /
-AI-engineer interviews the current walk-forward + cost-adjusted results are sufficient.
-Accepted risk: rigorous treatment may show the signal is weaker than current numbers;
-that outcome is itself a defensible research finding when written up honestly.
+(IC significance? out-of-sample? survivorship bias? why not overfit?).
+
+**This section was previously marked low priority. M.7 changes that.** The rest of the
+series is about strengthening claims that are broadly sound; M.7 is a confirmed defect
+that makes the headline factor invalid, and M.1 is selection bias built into the universe
+before any model runs. Those two are blockers — for G.1 live execution, and for quoting
+any Sharpe figure without a caveat. M.2–M.6 remain optional polish aimed at QR roles.
+
+Accepted risk, stated plainly: rigorous treatment will probably show the signal is weaker
+than the current numbers. That outcome is itself a defensible research finding when written
+up honestly, and it is strictly better than discovering it after committing capital.
 
 ### M.1 Point-in-Time Universe (kill survivorship & selection bias)
 Replace the hand-picked 103-stock tech universe with point-in-time S&P 500 membership
@@ -2464,6 +2470,85 @@ Paper-style writeup: hypothesis → data → methodology → results → failure
 limitations. An honest "post-cost alpha is marginal, but sentiment shows orthogonal
 incremental IC in earnings windows" beats a flashy Sharpe 3.0 backtest in any QR interview.
 - Effort: 3 days — Status: [ ] Pending
+
+---
+
+### M.7 13F look-ahead leak — **blocker**
+
+**The defect.** `inst_13f_holdings` contains exactly 100 documents, one per symbol, with
+fields `{_id, symbol, collectedAt, inst_holding_pct, inst_holding_pct_chg, total_shares}`
+— **no date, no quarter, no filing date**. `attach_inst13f_features()` in
+`research/features/daily_symbol_features.py` left-joins on symbol alone, and its own
+docstring states the intent: *"These values are quarterly; broadcast to all trade_dates for
+each symbol."* A feature row dated 2018-03-15 therefore carries institutional holdings
+collected in 2026.
+
+**Why it matters more than a normal PIT slip.** `inst_holding_pct_chg` was reported as the
+best single factor at **IC +0.198**, the strongest number in the Key Results table. It
+scores that well *because* it leaks. Institutions accumulate what has already risen, so
+projecting today's holdings backwards across eight years manufactures precisely the
+correlation the IC is measuring. The factor is not merely unproven — it is measuring the
+future, and it carries weight in `score_daily_signals.py` (0.5–0.6 depending on regime),
+so the contamination reaches the live signal, not just the backtest.
+
+**What makes this diagnosable rather than diffuse**: every other alt-data source in the
+same file handles time correctly, which is what makes 13F an oversight rather than a design
+philosophy.
+
+| Source | Join | Verdict |
+|---|---|---|
+| analyst | on `YYYY-MM`; docstring says *"avoids lookahead"* | correct |
+| retail | symbol + date, 1,365 rows | correct |
+| macro | dated, 16,369 rows | correct |
+| **13F** | **symbol only, 100 rows, broadcast** | **leaking** |
+
+**Fix.** Source historical 13F with **filing dates** — SEC EDGAR exposes them, and the
+45-day statutory reporting lag is the entire point: a Q1 position becomes public in mid-May,
+so it may only enter a feature row dated on or after its filing date, never its reporting
+period. Join as-of filing date, forward-fill until the next filing.
+
+**If point-in-time 13F cannot be obtained, remove the factor.** Keeping a factor known to
+read the future, with a caveat in a footnote, is worse than dropping it: the number stays in
+circulation and the weight stays in the scorer. Then re-run the backtest and publish
+whatever Sharpe survives — the drop is the finding.
+
+- Effort: 2 days (1 if the decision is removal) — Status: [ ] **Pending — blocks G.1**
+
+---
+
+### M.8 Turnover and capacity reporting
+
+H.1 prices a round trip per position — commission 5bps plus liquidity-tiered slippage
+10/30bps, charged on entry and exit, with a filter excluding symbol-dates too thin to
+execute. That model is sound per trade. What is missing is **how many trades there are**.
+
+At a 5-day horizon fed by daily signals, turnover may be high enough that a per-trade cost
+model which is honest in isolation understates total drag substantially. Report:
+
+- annualised turnover
+- transaction cost as a share of gross return
+- the capital level at which the liquidity filter begins to bind
+
+The last one converts "this strategy works" into a claim with a size attached. A result
+that holds at $50k and not at $5m is a different result, and the difference is the first
+thing a professional will ask about.
+
+- Effort: 1 day — Status: [ ] Pending
+
+---
+
+### M.9 Short-side borrow costs
+
+The long-short Sharpe of 0.85 charges commission and slippage on both legs but nothing for
+**carrying** the short: no borrow fee, no hard-to-borrow screen, no recall risk. On exactly
+the names a negative news-sentiment signal would select, borrow is where it is most
+expensive — the correlation between "bad news" and "expensive to short" is not incidental.
+
+Until this is modelled the long-short figure is optimistic by an unmeasured amount, and the
+**long-only results are the more defensible ones to quote**.
+
+- Effort: 1 day (a flat borrow-rate assumption is a legitimate first pass, provided the
+  assumption is stated) — Status: [ ] Pending
 
 ---
 
