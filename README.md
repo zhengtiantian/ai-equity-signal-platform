@@ -29,7 +29,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │   LLM:   avg_sentiment_3d/5d, sentiment_shift_5d, high_signal_count     │
 │   Earn:  surprise_pct_last, days_to_earnings, earnings_recency_weight   │
 │   Price: past_ret_20d/60d, volatility_20d/60d, volume_shock_20d         │
-│   Alt:   macro_*, retail_*, analyst_*, inst_holding_*, ah_gap/pm_gap    │
+│   Alt:   macro_*, retail_*, analyst_*, ah_gap/pm_gap                    │
 │                                                                           │
 │   → 189K+ rows │ 100 symbols │ 7 return horizons (5–60d)               │
 └────────────────────────────────┬────────────────────────────────────────┘
@@ -39,8 +39,8 @@ An end-to-end quantitative research and signal generation platform that processe
 │                          ML MODEL LAYER                                   │
 │                                                                           │
 │   Ridge ──┐                                                              │
-│           ├──▶ Ensemble ──▶ Walk-forward IC=0.059 │ Sharpe=0.85         │
-│   LightGBM┘               Long-short return +21.7% annualized           │
+│           ├──▶ Ensemble ──▶ Walk-forward (retraining, see M.7)          │
+│   LightGBM┘               Portfolio 20d net Sharpe 0.69 vs SPY 0.54     │
 │                                                                           │
 │   MLflow: experiment tracking │ SHAP: feature importance                │
 └────────────────────────────────┬────────────────────────────────────────┘
@@ -81,13 +81,26 @@ An end-to-end quantitative research and signal generation platform that processe
 | Articles labeled | **845K+** |
 | Stock universe | **100 US equities** |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
-| Portfolio backtest Sharpe (20d, net of cost) | **0.77** (gross 0.92) vs SPY 0.54 |
-| Portfolio backtest Sharpe (60d, net of cost) | **0.73** (gross 0.77) vs SPY 0.47 |
-| Walk-forward Long-short annualized return | **+21.7%** |
-| Walk-forward Long-short Sharpe | **0.85** |
-| Hit rate | **63.6%** |
-| Best single-factor IC (60d) | ~~+0.198 (`inst_holding_pct_chg`)~~ — **withdrawn, contaminated by look-ahead (see M.7)**. The 13F holdings are stored without a date and broadcast to every historical trade date, so this factor was reading the present. Institutions accumulate what has already risen, which is precisely the spurious correlation that produces a high IC here. The honest figure is unknown until M.7 is fixed and the backtest re-run. |
+| Portfolio backtest Sharpe (20d, net of cost) | **0.69** (gross 0.83) vs SPY 0.54 — *was 0.78 before the M.7 look-ahead fix* |
+| Portfolio backtest Sharpe (60d, net of cost) | 0.73 (gross 0.77) vs SPY 0.47 — **stale, pending re-run** |
+| Walk-forward Long-short annualized return | +21.7% — **stale, retraining after M.7** |
+| Walk-forward Long-short Sharpe | 0.85 — **stale, retraining after M.7** |
+| Hit rate (20d portfolio, net) | **62.9%** |
+| Best single-factor IC (60d) | ~~+0.198 (`inst_holding_pct_chg`)~~ — **withdrawn, contaminated by look-ahead (see M.7)**. The 13F holdings are stored without a date and broadcast to every historical trade date, so this factor was reading the present. Institutions accumulate what has already risen, which is precisely the spurious correlation that produces a high IC here. Removed from the feature set, the four regime weight dicts, and the model inputs; the backtest was re-run and cost 0.09 Sharpe. |
 | Platform services | **13 active** (11 Docker containers + 2 host processes) |
+
+> **Why some figures moved down (2026-07-29).** M.7 removed `inst_holding_pct_chg`, a factor
+> that was reading the future: its 13F source stores one dateless row per symbol, broadcast
+> to every trade date, so 79 of 100 symbols carried a single constant across all eight years
+> — "who institutions were accumulating in 2026", applied to rows dated 2018. Re-running the
+> backtest without it cost **0.09 Sharpe** (0.78 → 0.69 net), which is the honest measure of
+> what the leak was worth. The strategy survives it and still beats SPY net of cost, so the
+> remaining factors were carrying real signal rather than riding on the leak.
+>
+> **0.69 is still an upper bound.** M.1 has not been done: the 100-symbol universe was
+> hand-picked in 2026 and backtested from 2016, so it consists of names that survived and
+> did well. That selection bias is very likely worth more than the 0.09 just removed, and
+> until it is closed no figure here should be read as an achievable return.
 
 ---
 
@@ -218,7 +231,7 @@ multi-node distributed GDELT workers.
 > a cash loss, so **G.1 stays blocked on M.7 and M.1** regardless of how ready the
 > execution plumbing looks.
 
-- [ ] **M.7** 🔴 **13F look-ahead leak — blocker.** `inst_13f_holdings` holds exactly 100 documents, one per symbol, with **no date, quarter, or filing-date field at all** — only `collectedAt`. `attach_inst13f_features()` then left-joins on symbol alone and, in its own words, *"broadcast[s] to all trade_dates"*. A feature row for 2018-03-15 therefore carries 2026 institutional holdings. This is not a diffuse rigor concern: `inst_holding_pct_chg` was the **best single factor at IC +0.198**, and it scores that well *because* it leaks — institutions accumulate what has already risen, so projecting today's holdings backwards manufactures exactly that correlation. Notably every other alt-data source in the same file is correct: `attach_analyst_features` joins on `YYYY-MM` and its docstring says *"avoids lookahead"*, retail carries symbol+date across 1,365 rows, macro carries dates across 16,369. Only 13F is broadcast. Fix requires historical 13F with filing dates (SEC EDGAR full-text search exposes them) joined as-of the filing date, not the reporting period — the 45-day statutory lag is the whole point. **If point-in-time 13F cannot be obtained, the correct action is to remove the factor entirely**, not to keep a factor known to be reading the future. Then re-run the backtest and publish whatever Sharpe survives.
+- [x] **M.7** **13F look-ahead leak — fixed, factor removed.** `inst_13f_holdings` holds exactly 100 documents, one per symbol, with **no date, quarter, or filing-date field at all** — only `collectedAt`. `attach_inst13f_features()` then left-joins on symbol alone and, in its own words, *"broadcast[s] to all trade_dates"*. A feature row for 2018-03-15 therefore carries 2026 institutional holdings. This is not a diffuse rigor concern: `inst_holding_pct_chg` was the **best single factor at IC +0.198**, and it scores that well *because* it leaks — institutions accumulate what has already risen, so projecting today's holdings backwards manufactures exactly that correlation. Notably every other alt-data source in the same file is correct: `attach_analyst_features` joins on `YYYY-MM` and its docstring says *"avoids lookahead"*, retail carries symbol+date across 1,365 rows, macro carries dates across 16,369. Only 13F is broadcast. Fix requires historical 13F with filing dates (SEC EDGAR full-text search exposes them) joined as-of the filing date, not the reporting period — the 45-day statutory lag is the whole point. **Outcome: point-in-time 13F does not exist in the platform** — `inst_13f_raw` holds 595 rows across three quarters (2025-09 … 2026-03), with no filing-date field, against a feature store spanning 2016–2026. So the factor was removed rather than repaired, behind `ENABLE_INST13F_FEATURES` (default off) in all four places it reached: the feature join, the four regime weight dicts, the model input list, and the `inst_outflow` exit rule — which, being driven by a per-symbol constant, either fired for a symbol every single day or never, making it a permanent blacklist dressed as an exit signal. **Re-running the backtest cost 0.09 Sharpe: 0.78 → 0.69 net, gross 0.92 → 0.83.** That is the honest price of the leak, and the strategy survives it — still 0.69 against SPY's 0.54 net of cost, so the other factors were carrying real signal rather than riding along. Re-enabling requires backfilling filing-dated 13F from EDGAR and joining as-of the filing date, never the reporting period; the join seam is left in place so that becomes a flag rather than a rewrite. Walk-forward figures are retraining.
 - [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — removes the survivorship/selection bias of the hand-picked tech list
 - [ ] **M.2** PIT data hygiene audit — purge future-dated articles (the corpus contains GKG rows dated 2028–2037) and verify signal-available-time vs data-creation-time across all features
 - [ ] **M.3** IC significance — Newey-West t-stats, IC decay/half-life, per-year and per-regime stability tables
