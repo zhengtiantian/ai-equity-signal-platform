@@ -2943,17 +2943,72 @@ normalising against a contaminated sector mean penalises the cleanest names in a
 sector. **This is the M.7 shape again**: a hand-weighted factor in the regime scorer given
 high weight on top of an input nobody had validated.
 
-**Not yet measured, and not to be asserted**: the effect on IC, Sharpe, or ranking. That
-needs a deduplicated feature rebuild and a re-run of the walk-forward, which is the next
-step, not a conclusion available now.
+#### M.12 step 2 — measured impact (2026-07-30)
+
+Two shadow feature sets built from the same code at the same moment, differing only in
+`NEWS_DEDUPE_SYNDICATION`: `daily_symbol_features_m12_off` and `_m12_on`, 191,467 rows each.
+The off build was verified a genuine no-op first — 4,000 sampled symbol-days across
+`article_count`, `news_burst_20d`, `news_count_20d`, `sent_wavg`, `unique_url_count`
+differed from production on **0 rows**. Dedupe removed 278,327 news rows (16.0%) and
+133,169 sentiment rows (15.8%).
+
+**The ML walk-forward barely notices** (rank IC, aggregate):
+
+| target | model | IC off | IC on | delta |
+|---|---|---|---|---|
+| 60d | Ensemble | 0.0572 | 0.0549 | −0.0023 |
+| 60d | Ridge | 0.0491 | 0.0465 | −0.0026 |
+| 60d | LightGBM | 0.0413 | 0.0413 | ±0.0000 |
+| 20d | Ensemble | 0.0225 | 0.0202 | −0.0023 |
+
+Every cell moves by less than 0.005 and the signs are not consistent — the LightGBM Ranker
+gains +0.0051 at 20d and loses −0.0066 at 45d. Without error bars none of this is
+distinguishable from noise, and it is **not** being claimed as an effect.
+
+**The regime scorer does notice** (`backtest_portfolio.py`, which imports `compute_score`
+and `_WEIGHTS_BY_REGIME` directly — the same path the live signal takes; 132 rebalances,
+20d hold, costs on):
+
+| | off (duplicates in) | on (deduped) |
+|---|---|---|
+| **net Sharpe** | 0.654 | **0.580** |
+| net annualised | 19.64% | 16.76% |
+| total return | 5.54× | 4.07× |
+| gross Sharpe | 0.794 | 0.729 |
+| max drawdown | −42.08% | **−39.56%** |
+| win rate | 63.64% | **65.15%** |
+
+**This is the M.7 pattern repeating exactly.** The ML models shrug (−0.0023 IC) because a
+tree or a ridge treats `news_burst_20d` as one column among a hundred and learns its actual
+predictive weight from data. The hand-weighted scorer assigned it **0.9 by fiat** and lost
+**0.074 Sharpe** when the input was cleaned. Twice now, the damage from a contaminated
+factor has landed almost entirely on the hand-calibrated weights rather than the fitted
+ones — **the models at least look at the data before deciding how much to trust a column.**
+
+Note the deduped run has a *better* drawdown (−39.56% vs −42.08%) and a *better* win rate
+(65.15% vs 63.64%). It is a lower-return, lower-risk profile, not a uniformly worse one.
+
+**The counter-argument worth stating**: a story syndicated to 402 stations genuinely does
+have unusual reach, and reach may carry information. That does not rescue the current
+feature — `article_count` claims to count distinct news and does not. If reach is the
+signal, it belongs in a named feature that measures reach deliberately and can be tested on
+its own, not smuggled in through a broken count.
+
+**Conclusion**: the 0.074 Sharpe was being earned from an artifact of how GDELT ingests
+syndication networks. Removing it is correct for the same reason M.7 was correct, and the
+published number should come down again.
 
 **Fix, once the impact is known**: deduplicate on `(symbol, date, title)` inside
 `load_news_frame()` and `load_llm_sentiment_frame()` rather than at aggregation time, so
 every downstream feature inherits it. The collectors should also stop ingesting syndicated
 copies, but the feature layer must not depend on that being true.
 
-- Effort: 0.5 day to fix, 1 day to rebuild and re-run the walk-forward — Status: 🟡
-  Measured, not yet fixed
+- Status: 🟡 Measured and implemented behind `NEWS_DEDUPE_SYNDICATION`, **default off** —
+  flipping the default is a production behaviour change that lowers the headline Sharpe
+  from 0.654 to 0.580 on the shadow comparison, so it is held until that is a deliberate
+  decision rather than a side effect. Remaining: flip the default, rebuild production
+  features, re-publish the affected numbers in the README, and stop the collectors
+  ingesting syndicated copies in the first place.
 
 ---
 
