@@ -81,9 +81,10 @@ An end-to-end quantitative research and signal generation platform that processe
 | Articles labeled | **845K+** |
 | Stock universe | **100 US equities** |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
-| Portfolio backtest Sharpe (20d, net of cost) | **0.69** (gross 0.83) vs SPY 0.54 — *was 0.78 before the M.7 look-ahead fix* |
-| Portfolio backtest Sharpe (60d, net of cost) | 0.73 (gross 0.77) vs SPY 0.47 — **stale, pending re-run** |
-| Walk-forward Ensemble Rank IC (60d) | **0.0563** aggregate — but **negative in 4 of 9 years**, see below |
+| Portfolio backtest Sharpe (20d, net of cost) | **0.58** (gross 0.73) vs SPY 0.54 — *0.78 → 0.69 after the M.7 look-ahead fix, → 0.58 after the M.12 syndication fix* |
+| Portfolio backtest Sharpe (60d, net of cost) | **0.60** (gross 0.65) vs SPY 0.47 — re-run 2026-07-30, no longer stale |
+| Portfolio backtest max drawdown (20d, net) | **−39.6%** — *improved from −42.1%; the deduped signal is lower-return and lower-risk* |
+| Walk-forward Ensemble Rank IC (60d) | **0.0523** aggregate — but **negative in 4 of 9 years**, see below |
 | Walk-forward Long-short annualized return | **+17.1%** — *was +21.7% before M.7* |
 | Walk-forward Long-short Sharpe | **0.58** — *was reported 0.85; the long leg alone is 0.81, see below* |
 | Walk-forward short-leg contribution | **−0.03% annualized, Sharpe −0.00** — the short side adds nothing |
@@ -91,6 +92,23 @@ An end-to-end quantitative research and signal generation platform that processe
 | Best single-factor IC (60d) | ~~+0.198 (`inst_holding_pct_chg`)~~ — **withdrawn, contaminated by look-ahead (see M.7)**. The 13F holdings are stored without a date and broadcast to every historical trade date, so this factor was reading the present. Institutions accumulate what has already risen, which is precisely the spurious correlation that produces a high IC here. Removed from the feature set, the four regime weight dicts, and the model inputs; the backtest was re-run and cost 0.09 Sharpe. |
 | Platform services | **13 active** (11 Docker containers + 2 host processes) |
 
+> **Why the figures moved down again (2026-07-30).** M.12 found that GDELT ingests every
+> site of a syndication network as a separate article — one McDonald's story appears **402
+> times** with a byte-identical body across 402 `*.iheart.com` subdomains, so that symbol-day
+> carried 412 rows for 11 distinct stories. Corpus-wide 16% of rows are syndicated copies,
+> but the share runs **2.3% to 52.4% per symbol** and correlates with sector, so it distorted
+> a cross-sectional rank rather than shifting a level. Deduplicating on `(symbol, date,
+> title)` cost **0.074 net Sharpe** (0.654 → 0.580 on a controlled shadow comparison), and
+> that 0.074 was being earned from an artifact of a news-ingestion quirk. Drawdown and win
+> rate both *improved*.
+>
+> **The pattern worth noting, because it is now the second instance.** The ML walk-forward
+> barely moved (60d Ensemble IC 0.0572 → 0.0549, inside noise) while the hand-weighted regime
+> scorer lost 0.074 Sharpe — exactly as in M.7, where the models ignored a constant factor and
+> the scorer had assigned it 0.5–1.2 by fiat. **Both times the damage from a contaminated
+> factor landed on hand-calibrated weights rather than fitted ones**, because a tree or a
+> ridge learns how much to trust a column from the data and a hand-set 0.9 does not.
+>
 > **Why some figures moved down (2026-07-29).** M.7 removed `inst_holding_pct_chg`, a factor
 > that was reading the future: its 13F source stores one dateless row per symbol, broadcast
 > to every trade date, so 79 of 100 symbols carried a single constant across all eight years

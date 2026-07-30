@@ -3003,12 +3003,40 @@ published number should come down again.
 every downstream feature inherits it. The collectors should also stop ingesting syndicated
 copies, but the feature layer must not depend on that being true.
 
-- Status: 🟡 Measured and implemented behind `NEWS_DEDUPE_SYNDICATION`, **default off** —
-  flipping the default is a production behaviour change that lowers the headline Sharpe
-  from 0.654 to 0.580 on the shadow comparison, so it is held until that is a deliberate
-  decision rather than a side effect. Remaining: flip the default, rebuild production
-  features, re-publish the affected numbers in the README, and stop the collectors
-  ingesting syndicated copies in the first place.
+#### M.12 step 3 — shipped (2026-07-30)
+
+`NEWS_DEDUPE_SYNDICATION` now defaults to **true**; production features rebuilt (191,467
+rows, 278,327 news and 133,169 sentiment duplicates dropped). Final published numbers:
+
+| | before M.12 | after |
+|---|---|---|
+| 20d net Sharpe | 0.69 | **0.58** (gross 0.73) |
+| 20d net annualised | 20.9% | **16.8%** |
+| 20d max drawdown | −42.1% | **−39.6%** |
+| 20d win rate | 63.6% | **65.2%** |
+| 60d net Sharpe | 0.73 *(stale)* | **0.60** (gross 0.65) |
+| 60d Ensemble rank IC | 0.0563 | **0.0523** |
+
+Per-year 60d Ensemble IC after the fix — still negative in 4 of 9 years, unchanged in shape:
+
+    2018 +0.021  2019 +0.135  2020 +0.220  2021 −0.030  2022 −0.128
+    2023 +0.226  2024 −0.037  2025 +0.017  2026 −0.129
+
+**Deployment note.** The Airflow DAGs run host code, not the container:
+`_host_common.py` sets `PYTHON = f"{ROOT}/.venv311/bin/python"` and issues
+`cd {ROOT} && {PYTHON} {ROOT}/{script}` against `/Users/xiz/Quant_trade/quant_data`. So this
+fix reached production the moment the default flipped, with no image rebuild needed — and
+the same was true of M.7. Worth recording because the deployed container is genuinely stale
+(compose pins `e650994`, the running container is `e165324` from nine days earlier, and
+`e650994` was never even pulled locally); that staleness is real but affects nothing on the
+daily path, since every `ENABLE_*` job in the container is disabled and the host scheduler
+owns the DAGs.
+
+- Status: [x] Done — flag default-on, production rebuilt, numbers republished.
+  **Remaining**: the collectors still ingest syndicated copies, so the raw collections keep
+  growing 16% faster than the information in them. Fixing it upstream is a separate item —
+  the feature layer must keep its own guard regardless, since it cannot depend on the
+  collectors being correct.
 
 ---
 
