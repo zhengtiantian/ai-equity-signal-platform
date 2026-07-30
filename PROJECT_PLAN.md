@@ -1793,8 +1793,50 @@ documents need a `search_document: ` prefix and queries a `search_query: ` one. 
 and vectors still come back, dimensions still match, nothing errors, and retrieval is just
 quietly worse. Both benchmark strategies apply the prefix.
 
-- Status: 🟡 In progress — qdrant deployed (`v1.18.3`, host port 26333, storage bind-mounted
-  to Data4T, 2 GB cap, log rotation); corpus measured; embedding pipeline not yet written
+#### R.1 delivered (2026-07-30)
+
+Full pass complete: **851,071 read → 729,101 indexed**, 121,970 duplicates skipped, in
+**158.8 min (2.65 h) at 76.5 vec/s** — against the 2.7 h predicted from the 1K benchmark.
+The duplicate count matched the independent mongo aggregate exactly (121,970), which is
+the check that the pipeline's dedupe key and the measurement agreed on what a duplicate is.
+
+`tools/index_news.py` (index), `tools/search_news.py` (query), `tools/bench_embed.py` and
+`tools/measure_lengths.js` (the scripts behind every number quoted here), `tools/bench_search.py`
+(latency). Committing them is the point: the numbers are reproducible rather than asserted.
+
+**A bug caught only because retrieval was tested before the 2.65 h run, not after.** The
+`date` field carries two formats, and **33.2% of the corpus is the 14-character
+`YYYYMMDDHHMMSS` form**. Parsing only the 8-character case left a third of the corpus with
+a null `date_int`, invisible to every date-range filter — silently, since nothing errors.
+That filter is the guard against retrieving future news for a past date, so a quietly
+broken one is worse than none: it looks like the guard is there. Normalised to the first 8
+characters; points with a null `date_int` after the fix: **0**.
+
+**Memory: the configuration mistake and its fix.** The service came up at **1.838 GiB of
+its 2 GiB cap (92%)** — `ON_DISK_PAYLOAD` only moves the payload, and 729,101 × 768 ×
+float32 = 2.24 GB of vectors was never going to fit. Setting `on_disk: true` on the vector
+config (online, via `PATCH /collections`, no re-embedding) dropped it to **423 MiB (21%)**,
+a 4.3× reduction with disk unchanged at 2.7 GB.
+
+| | before | after |
+|---|---|---|
+| container memory | 1.838 GiB (92% of cap) | **423 MiB (21%)** |
+| search p50, unfiltered | 81.90 ms | 4.44 ms |
+| search p99, unfiltered | 1016.63 ms | 237.74 ms |
+| search p50, date-filtered | 4.75 ms | 4.23 ms |
+| embed p50 | 16.77 ms | 10.66 ms |
+
+**The honest reading of that table**: the change is not why latency improved. Enabling
+`on_disk` triggered an 80-second re-optimization, so "before" was an unoptimized index in
+RAM and "after" is an optimized one on disk — two variables moved. What the numbers do
+support is the useful conclusion: **memory-mapping the vectors cost no measurable latency
+at this corpus size**, because 2.7 GB sits comfortably in the OS page cache. The 4.3×
+memory saving is free here. It would not be at 10× the corpus, and that is the version of
+this question worth being able to discuss.
+
+- Status: [x] Done — 729,101 vectors, green, p50 15 ms end-to-end including embedding.
+  Remaining for R.8: incremental daily indexing (a pipeline needing a full reindex to stay
+  current is not a pipeline) and a content-hash embedding cache
 
 ---
 
