@@ -1007,11 +1007,15 @@ resolve_slm_endpoint():
 - Status: [ ] Pending development (2 days)
 
 ### F.2 Vector database news semantic search (RAG)
-- Qdrant already deployed; add embeddings for `news_articles_company_matched_v2`
-- Endpoint: `/search?q=NVIDIA earnings beat Q3` → returns relevant articles + LLM summary
-- Embedding model: `nomic-embed-text` (LM Studio local)
-- Add search box to quant_ui
-- Status: [ ] Pending development (corresponds to 5.3.1; prototype in 2-3 days)
+
+> **Superseded by R.1–R.4.** This entry claimed "Qdrant already deployed" — that was never
+> true; there is no `qdrant` service in `docker-compose.yml`. The scope also stopped at a
+> search box, which is the part that does not answer the depth question. Kept for the UI
+> surface only; the retrieval work itself now lives in the R-series.
+
+- Endpoint: `/search?q=NVIDIA earnings beat Q3` → relevant articles + LLM summary
+- Search box in quant_ui, served by the R.2 hybrid retriever
+- Status: [ ] Pending — retrieval moved to R.1/R.2/R.3; this is the UI layer on top (1 day, after R.2)
 
 ### F.3 Model interpretability report (SHAP)
 - Run SHAP analysis on LightGBM model
@@ -1656,6 +1660,292 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 **Work**: configuration only — no new code. That is the point worth making: one stdio server, three unrelated clients, and adding the third cost nothing because the tool surface is the contract.
 
 - Status: [ ] Pending (0.5 day, mostly verification)
+
+---
+
+## R. AI at Scale — RAG depth and MCP depth
+
+**Why this section exists, and why it outranks most of what is below it.**
+
+Interview feedback, 2026-07-28 (eBay, "AI/ML Agent Engineer, backend focus"). The
+recruiter's summary: positive attitude, but the interviewers "expected more knowledge of
+relevant concepts and technical depth", and specifically "more experience with AI at
+scale, particularly using tools like RAG and MCP". The language chosen for the technical
+round was Java.
+
+Checked against what is actually built, that feedback is precise and largely fair. It
+splits into two very different problems:
+
+**MCP has breadth without depth.** `quant_ai/mcp_server.py` is 318 lines: ten read-only
+tools, three independent clients (Claude Desktop, Codex, quant_ai's own agent). The
+breadth claim is real and the "one server, three clients, adding the third cost nothing"
+point is a good one. What is missing is everything past the tool list:
+
+- `stdio` is the only transport — no streamable HTTP, so no remote or multi-tenant story
+- no **resources**, no **prompts**, no **sampling**, no **elicitation**, no progress
+  reporting or cancellation. `@mcp.tool()` is the only part of the protocol touched
+- no authentication, despite Keycloak already running in this compose stack
+- every tool is read-only, so nothing exercises confirmation or idempotency
+- it is entirely Python, and the role was a Java backend role
+
+**RAG is not at scale — and the platform is exactly what makes that conspicuous.** The
+whole retrieval layer is `SimpleVectorStore` in `quant_ai/main.py`: numpy cosine
+similarity over the four markdown files in `quant_ai/knowledge/`, **382 lines of text
+total**, re-embedded into process memory on every startup. No persistence, no chunking
+strategy, no reranking, no hybrid retrieval, and no retrieval metric of any kind has ever
+been computed. `retrieve_context()` falls back to keyword token overlap when the embedding
+endpoint is unreachable, which in practice it often is.
+
+Meanwhile **845K company-matched news articles sit in MongoDB with zero embeddings**, and
+F.2's claim that "Qdrant already deployed" is stale — there is no `qdrant` service in
+`docker-compose.yml` and never has been.
+
+So the gap is not ignorance of RAG. It is that the single rarest asset in a RAG
+interview — a large, real, domain-specific corpus with timestamps and entity labels — has
+been sitting here unindexed while the demo ran on four README-sized files. "I built RAG"
+survives one follow-up question and then collapses.
+
+**One existing asset makes this cheaper than it looks.** The MongoDB text indexes with
+field weights, built for I.6 `search_news`, are already a working sparse retriever. Adding
+a dense leg turns them into genuine hybrid retrieval with reciprocal-rank fusion — which
+is both the better architecture and the more interesting answer, since most candidates can
+only describe pure vector search.
+
+---
+
+### R.1 Qdrant + embedding pipeline over the 845K news corpus
+
+**Goal**: a persisted vector index over `news_articles_company_matched_v2`, replacing the
+in-memory numpy store as the platform's retrieval substrate.
+
+**Work**:
+1. Add a `qdrant` service to `docker-compose.yml`, volume on the external drive alongside
+   the other stateful services, **with an explicit disk cap and json-file log rotation** —
+   two disk-full incidents (584G and 103G) came out of unbounded container growth, and a
+   vector index is exactly the kind of thing that grows quietly.
+2. Measure before committing to a full pass: embed 1,000 documents, record wall-clock
+   throughput against the local LM Studio `nomic-embed-text` endpoint, then decide whether
+   the full corpus is a one-night job or whether the initial index covers a date-bounded
+   subset.
+3. Decide chunking from measured length distribution, not by assumption.
+
+**Measured 2026-07-30 (see "R.1 measurements" below).** Both of the assumptions this plan
+originally carried were wrong, which is the argument for having measured at all:
+
+- it guessed financial news "skews short, many rows headline-plus-lede" — **only 30.2% of
+  articles fit in a single 512-token window**, median body is 2,956 characters
+- it estimated 2.6 GB of vectors from one vector per article — full 512-token chunking is
+  **2.96M vectors and 9.1 GB**, over the 2 GB memory cap set on the qdrant service
+
+Two further facts neither the plan nor the README knew: **17.90% of the corpus (152,332
+articles) has no body at all**, so title-only is one document in six rather than an edge
+case; and **121,970 documents (14.3%) are duplicates** on `(symbol, title, date)`, which
+would otherwise consume top-k slots and inflate every recall number R.4 produces.
+4. Payload carries `symbol`, `date`, `event_type`, `sentiment` so retrieval can be filtered
+   by entity and time window, not just similarity — a dated corpus retrieved without a
+   date filter is the same look-ahead mistake as M.7, in a different costume.
+5. Incremental indexing: the daily news job embeds only new documents. A pipeline that
+   requires a full reindex to stay current is not a production pipeline.
+6. Deduplicate on `(symbol, title, date)` at index time. 14.3% of the corpus is duplicate
+   copies; a retriever that returns the same article three times has spent three of its ten
+   slots saying one thing.
+
+#### R.1 measurements (2026-07-30)
+
+Corpus: `news_articles_company_matched_v2`, 851,071 documents.
+
+**Length distribution** (20,000-doc sample, exact count for the no-body case):
+
+| | value |
+|---|---|
+| no usable body (title only) | **152,332 = 17.90%** |
+| body chars p50 | 2,956 (≈739 tokens) |
+| body chars p90 / p99 | 11,492 / 60,414 |
+| body chars max | 2,312,632 — whole-page scrape pollution, needs a cap |
+| fits one 512-token window | **30.2%** |
+| chunks/article at 512 tokens | 3.62 mean |
+| duplicates on (symbol,title,date) | 40,506 groups, **121,970 extra copies = 14.3%** |
+
+**Embedding throughput**, `text-embedding-nomic-embed-text-v1.5` (768-dim) on the local Mac
+LM Studio — the Windows host in the notes was unreachable, and the model is 84 MB, so
+running it locally removed a network dependency for free:
+
+| strategy | vec/article | best rate | full corpus | wall clock | raw float32 |
+|---|---|---|---|---|---|
+| title + first 1000 chars | 1.00 | 74.2 vec/s | 0.85M vectors | **3.19 h** | 2.6 GB |
+| 512-token chunks | 3.48 | 41.1 vec/s | 2.96M vectors | **20.00 h** | 9.1 GB |
+
+**The finding worth keeping: throughput is character-bound, not request-bound.** Every
+configuration measured 66–74 Kchar/s — batch 8 → 64 moved vector rate by 7% (69.5 → 74.2),
+not 8×, and the two strategies differ 1.8× in vec/s purely because their vectors carry 1.8×
+the text (946 vs 1,799 chars each). The model is saturated on tokens per second. **Batch
+size is not the lever; how much text you choose to embed is.**
+
+**Decision**: index `title + lede` first — 3.19 h is one evening against 20 h, and after
+dedupe it is ~2.7 h for ~0.73M vectors. News is written inverted-pyramid, so the event
+should already be in the headline and first paragraph. That is a hypothesis, not a fact,
+and **R.4 is what tests it**: chunked indexing becomes a second configuration in the
+ablation, and if `recall@10` justifies 9.1 GB and 20 h, the numbers will say so. Committing
+20 h up front to avoid asking the question would be the more expensive mistake.
+
+**Detail that would have silently degraded everything**: `nomic-embed-text` is asymmetric —
+documents need a `search_document: ` prefix and queries a `search_query: ` one. Omit them
+and vectors still come back, dimensions still match, nothing errors, and retrieval is just
+quietly worse. Both benchmark strategies apply the prefix.
+
+- Status: 🟡 In progress — qdrant deployed (`v1.18.3`, host port 26333, storage bind-mounted
+  to Data4T, 2 GB cap, log rotation); corpus measured; embedding pipeline not yet written
+
+---
+
+### R.2 Hybrid retrieval — sparse + dense with RRF fusion
+
+**Goal**: fuse the existing MongoDB weighted text index (sparse, exact-term, good on
+tickers and proper nouns) with Qdrant dense retrieval (semantic, good on paraphrase), via
+reciprocal-rank fusion.
+
+**Why it matters here specifically**: `$text` search has OR semantics and scores by term
+frequency, so it finds "Micron DRAM oversupply" and misses "memory glut pressures chip
+makers"; dense retrieval does the reverse and is weak on exact tickers. The two failure
+modes are complementary, which is the entire argument for hybrid, and this codebase can
+demonstrate both halves on real queries rather than describe them.
+
+- Status: [ ] Pending (1.5 days, after R.1)
+
+---
+
+### R.3 Reranking
+
+**Goal**: retrieve top-100 by fusion, rerank to top-10 with a cross-encoder, serve the
+reranked set to the LLM.
+
+The point to be able to defend: bi-encoder similarity is a cheap approximation computed
+without the query and document ever meeting; a cross-encoder scores the pair jointly and
+is far better at relevance but too slow to run over 845K rows. Retrieve-then-rerank is how
+that tradeoff is resolved, and the latency budget is the design constraint worth quoting.
+
+- Status: [ ] Pending (1.5 days, after R.2)
+
+---
+
+### R.4 Retrieval evaluation harness — the item that actually answers the feedback
+
+**Goal**: numbers. `recall@k`, `MRR`, `nDCG@10` on a held-out labelled query set, reported
+per retrieval configuration: sparse only, dense only, hybrid, hybrid + rerank.
+
+**Work**: build 50–100 labelled queries (question → known-relevant article ids), drawn from
+real events already in the corpus — earnings reactions, export controls, the CXMT listing
+from the N-series. Then an ablation table.
+
+**Why this is ranked above R.5–R.8 in value**: "expected more technical depth" is answered
+by a table showing hybrid+rerank at `recall@10 = 0.87` versus dense-only at `0.61`, and by
+being able to say which queries the reranker fixed and which it broke. It is not answered
+by a longer list of implemented components. F.22's evaluation harness already establishes
+the pattern in this codebase — the same discipline, pointed at retrieval.
+
+- Status: [ ] Pending (2 days, after R.3)
+
+---
+
+### R.5 MCP server in Java — `quant_api` as an MCP endpoint
+
+**Goal**: a second MCP server inside `quant_api` (Spring Boot 3 / Java 21) using the MCP
+Java SDK / Spring AI's MCP support, exposing the same tool surface over **streamable HTTP**
+rather than stdio.
+
+**Why this is the highest-value single item in the section for the roles being targeted**:
+it is the only item that makes "Java backend engineer" and "AI at scale" the same sentence
+instead of two separate claims about two separate services. The interview was a Java
+interview; the MCP work was all Python. That mismatch is most of the "depth" objection.
+
+**What it adds beyond a port**:
+- **streamable HTTP transport**, so the server is reachable by remote clients — the thing
+  stdio structurally cannot do, and the reason transport is a protocol concern at all
+- **OAuth via the existing Keycloak realm**, so tool calls are authenticated and scoped.
+  Personal holdings are already exposed over MCP with no auth whatsoever, which is fine
+  for a local stdio process and indefensible over HTTP
+- a defensible answer to "two servers, same tools — why?": the Python server is the local
+  research surface, the Java server is the deployed authenticated one, and the tool
+  contract is what makes them interchangeable to a client
+
+- Status: [ ] Pending (1 week)
+
+---
+
+### R.6 MCP protocol depth — beyond tools
+
+**Goal**: exercise the parts of MCP that `@mcp.tool()` never touches.
+
+- **Resources**: expose the research corpus and signal history as resources with URIs and
+  subscriptions, so a client reads state rather than calling a function to fetch it. The
+  tool/resource distinction is a real design question, and having made the call on real
+  data is worth more than knowing the definition
+- **Prompts**: ship the portfolio-review and signal-explanation prompts as server-side MCP
+  prompts, versioned with the server instead of pasted into each client
+- **Sampling**: let the server ask the client's model to summarise retrieved news, so the
+  server needs no model credentials of its own — the inversion that most people have not
+  used
+- **Elicitation + progress + cancellation**: required the moment a tool writes (I.3 order
+  execution) or runs long (a backtest). Confirmation belongs in the protocol, not the prompt
+- Structured tool output and `strict` schemas, so results are typed rather than JSON strings
+
+- Status: [ ] Pending (3 days)
+
+---
+
+### R.7 RAG as a feature source, not a chat feature
+
+**Goal**: retrieval-grounded event extraction that writes into the feature store — the
+retrieval layer feeding the quant layer rather than only answering questions in a UI.
+
+This is where the N-series propagation work and the RAG work meet: semantic retrieval over
+845K articles is precisely the mechanism that finds "ChangXin Memory IPO" as relevant to
+MU/WDC/STX when no article names them. Every grounded claim must carry the article ids it
+came from, so a factor built this way stays auditable — and dated retrieval only, since
+this is the code path where a retrieval bug becomes a look-ahead bug.
+
+- Status: [ ] Pending (3 days, after R.2 and N.1)
+
+---
+
+### R.8 Production concerns at scale
+
+The questions that separate "I built a RAG demo" from "I ran RAG in production", each
+answerable with a measured number from this platform rather than a general principle:
+
+- **Embedding cache and idempotency** — re-embedding an unchanged article is pure cost;
+  content-hash keying makes the pipeline safely re-runnable
+- **Index versioning and reindex strategy** — changing the embedding model invalidates
+  every vector; how is that rolled out without downtime
+- **Latency budget** — measured p50/p99 broken down across embed / retrieve / rerank /
+  generate, so the answer to "where does the time go" is a breakdown, not a guess
+- **Cost per query** at local-model throughput versus a hosted embedding API
+- **Failure modes** — what is served when Qdrant is unreachable. The current fallback is
+  keyword token overlap, which is honest but should be labelled to the caller, the same
+  way `QuoteService` labels a daily close it is serving in place of a live quote
+
+- Status: [ ] Pending (2 days)
+
+---
+
+### R.9 What to be able to answer
+
+Not a build item — the checklist R.1–R.8 exists to make answerable. If any line here still
+needs hedging after the work is done, the work is not done.
+
+**RAG**: chunking strategy and why for this corpus · bi-encoder versus cross-encoder and
+where each sits · why hybrid beats either leg alone, with the queries that prove it ·
+`recall@k` / `MRR` / `nDCG` for every configuration tried · HNSW parameters and the
+recall/latency curve · how the index stays current · what look-ahead means in retrieval
+over a dated corpus.
+
+**MCP**: every transport and when each applies · tools versus resources versus prompts as
+a design decision · what sampling inverts and why that matters · how a write tool gets
+confirmed · authorization on a remote server · why one tool contract served three clients
+with no client code.
+
+**At scale**: 845K documents, measured throughput, measured latency, measured cost — the
+word "scale" carries nothing without those four numbers attached.
 
 ---
 
@@ -2583,8 +2873,22 @@ Until this is modelled the long-short figure is optimistic by an unmeasured amou
 
 ## Consolidated Priority Table (all pending items)
 
+**Top of the queue, as of 2026-07-30.** The R-series is ranked above everything else pending
+because it is the only block addressing named, sourced interview feedback (eBay, 2026-07-28:
+"more experience with AI at scale, particularly RAG and MCP"), and because the corpus that
+makes it credible — 845K articles — is already collected and sitting unindexed. R.4 and R.5
+are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MCP in Java.
+
 | Priority | Item | Interview Value | Practical Value | Effort | Status |
 |---|---|---|---|---|---|
+| 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | 🟡 In progress (2026-07-30) — qdrant v1.18.3 deployed; corpus measured (30.2% fit 512 tok, 17.9% title-only, 14.3% dupes, 74.2 vec/s → 3.19h); pipeline not yet written |
+| 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | [ ] Pending (after R.1) |
+| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | [ ] Pending (after R.3) |
+| 🔥 | **R.5 MCP server in Java (Spring AI, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | [ ] Pending |
+| ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
+| ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
+| ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | AI production credibility | Medium | 2 days | [ ] Pending |
+| ⭐⭐ | **R.7 RAG as a feature source (grounded event extraction → features)** | AI+Quant crossover | High | 3 days | [ ] Pending (after R.2, N.1) |
 | ⭐⭐⭐ | **H.1 Backtest with transaction costs + liquidity filter** | Quant essential | 🔴 Real returns | 2 days | ✅ Done — COMMISSION_BPS=5, SLIPPAGE 10/30bps tiered, MIN_DOLLAR_VOL=$5M filter in backtest_portfolio.py |
 | ⭐⭐⭐ | H.2 Market Regime detection (VIX filter) | Quant essential | 🔴 IC stability | 4 days | ✅ Done (2026-07-15) — 4-regime weight switching (RISK_ON/NEUTRAL/STRESSED/RISK_OFF) |
 | ⭐⭐⭐ | H.3 Paper Trading engine + stop-loss | Quant essential | 🔴 OOS validation | 4 days | ✅ Done (2026-07-15) — vol-adaptive stop-loss (2×vol_20d) + OOS IC rolling monitor |
@@ -2601,15 +2905,15 @@ Until this is modelled the long-short figure is optimistic by an unmeasured amou
 | ⭐⭐ | C.3 Signal UI page | Medium | Extremely high | 3 days | ✅ Done |
 | ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → 情绪特征) | DE关键 | 🔴 填补数据缺口 | 1.5 days | [ ] Pending |
 | ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on任意任务失败) | DE essential | 🔴 运维必需 | 0.5 days | [ ] Pending |
-| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | [ ] Pending |
-| ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → Claude对话查信号) | AI差异化 | 高 | 0.5 days | [ ] Pending (after I.1) |
-| ⭐⭐ | F.2 RAG news search (Qdrant) | AI essential | High | 3 days | [ ] Pending |
+| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.5/R.6 |
+| ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → Claude对话查信号) | AI差异化 | 高 | 0.5 days | ✅ Done — verified over the real MCP protocol |
+| ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | AI essential | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
 | ⭐⭐ | F.3 SHAP interpretability | MLE strong | Medium | 1 day | ✅ Done (factor_analysis.py) |
 | ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (每日Gemma+Qwen对新文章打分，保持情绪特征最新) | MLE+DE | 高 | 1.5 days | [ ] Pending (after J.2) |
 | ⭐⭐ | **J.1 Airflow DAG migration** (依赖链调度；任务失败自动停止下游；可视化DAG视图) | DE强 | 高 | 3.5 days | [ ] Pending (Stage 7.2.2) |
 | ⭐⭐ | F.10 Strategy Studio → Backtest execution pipeline | AI+Quant full-loop | High | 3-4 days | [ ] Pending — UI exists, need backtest adapter + quant_api endpoint |
 | ⭐⭐ | F.4 LangGraph multi-agent research assistant | AI Engineer must-have | High | 2 weeks | [ ] Pending |
-| ⭐⭐ | F.17 Portfolio Manager Agent (signals+positions→rebalance recommendation) | AI+Quant | 高 | 3 days | [ ] Pending |
+| ⭐⭐ | F.17 Portfolio Manager Agent (signals+positions→rebalance recommendation) | AI+Quant | 高 | 3 days | ✅ Done (2026-07-27) — review layer over the rule engine; 3 validation gates; 25 unit tests |
 | ⭐⭐ | F.16 Real-time news monitoring agent (30min轮询→即时告警) | 实用价值高 | 高 | 3 days | [ ] Pending |
 | ⭐⭐ | F.14 Earnings surprise prediction (pre-earnings beat/miss概率因子) | Quant+AI | 高 | 3 days | [ ] Pending |
 | ⭐⭐ | F.12 Signal explanation SLM (为高评分股票生成原因解释→UI展示) | AI+UX | 中 | 2 days | [ ] Pending |
@@ -2647,7 +2951,7 @@ Until this is modelled the long-short figure is optimistic by an unmeasured amou
 | ⭐ | M.5 Overfitting defenses (holdout, trial registry, deflated Sharpe) | QR essential | Medium | 2 days | [ ] Pending |
 | ⭐ | M.6 Research report writeup (paper-style, honest conclusions) | QR essential | Medium | 3 days | [ ] Pending |
 | — | D.4 Analyst rating changes | Quant bonus | Medium | 3 days | ✅ Done |
-| — | D.7 Institutional 13F holdings change | Quant bonus | High | 3 days | ✅ Done (strongest single factor, 60d IC=+0.20) |
+| — | D.7 Institutional 13F holdings change | Quant bonus | High | 3 days | ⚠️ **Withdrawn (M.7)** — the "strongest single factor, 60d IC=+0.20" was look-ahead: one undated row per symbol broadcast across all trade dates. Factor removed; net Sharpe 0.78→0.69 |
 | — | D.8 Pre-market / after-hours price signals | Quant bonus | High | 1 day | ✅ Done (strongest short-term factor, 5d IC=+0.23) |
 
 ---
