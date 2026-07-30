@@ -2884,6 +2884,79 @@ Until this is modelled the long-short figure is optimistic by an unmeasured amou
 
 ---
 
+### M.12 News syndication inflates the volume features
+
+**Found 2026-07-30, while deduplicating the corpus for R.1** — the 121,970 rows dropped at
+index time turned out not to be noise.
+
+**The mechanism.** GDELT ingests each site of a syndication network as a separate article.
+One McDonald's story on 2025-11-03 appears **402 times**: byte-identical body (767 chars),
+identical sentiment, 402 distinct `*.iheart.com` subdomains. That symbol-day holds **412
+rows and 11 distinct titles** — the news-volume features read 412 where the real number of
+stories is 11.
+
+`unique_url_count` exists to catch exactly this and cannot: 402 subdomains are 402 distinct
+URLs. `unique_source_count` cannot either — `source.name` is absent on GDELT rows so it
+falls back to the platform, and its mean is 1.0139. Both dedupe guards were structurally
+blind to the dominant duplication mode.
+
+**Measured** (`research/features/measure_syndication_impact.py` — loads the real frames and
+runs the production aggregators twice, once on raw input and once deduplicated on
+`(symbol, date, title)`; reusing the pipeline's own functions rather than reimplementing
+them is the point):
+
+| collection | rows | unique | duplicate |
+|---|---|---|---|
+| `news_articles` (volume features) | 1,750,295 | 1,494,636 | **14.6%** |
+| `news_articles_company_matched_v2` (sentiment) | 851,071 | 729,101 | **14.3%** |
+
+| feature | mean raw | mean deduped | % symbol-days differing | max abs diff |
+|---|---|---|---|---|
+| `article_count` | 9.104 | 7.650 | 26.4% | 664 |
+| `unique_url_count` | 9.104 | 7.650 | 26.4% | 664 |
+| `news_count_20d` | 181.65 | 152.65 | **93.2%** | 4019 |
+| `news_burst_20d` | 1.101 | 1.059 | **93.6%** | 599 |
+| `sent_wavg` | 0.3221 | 0.3224 | 15.1% | 1.253 |
+| `sent_std` | 0.3019 | 0.3063 | 15.0% | 1.414 |
+| `negative_n` | 1.521 | 1.228 | 5.8% | 363 |
+
+**The damage is in the volume features, not sentiment.** `sent_wavg` barely moves in
+aggregate (0.3221 → 0.3224) because a syndicated copy usually carries a sentiment close to
+the day's mean anyway. `news_burst_20d` differs on **93.6% of symbol-days** — it is a
+rolling ratio, so one contaminated day propagates through the following twenty.
+
+**Why it is a cross-sectional problem rather than a level shift.** Per-symbol duplicate
+share runs **2.3% to 52.4%** — a 23× spread, concentrated in consumer brands that local
+radio and lifestyle networks syndicate:
+
+    MCD 52.4  SBUX 38.3  MRNA 37.3  TGT 36.6  SPOT 36.4  BA 36.1
+    UNH 33.5  PFE 32.8  LLY 32.2  DIS 31.4  NFLX 29.9   (corpus 16.0)
+
+A uniform inflation would cancel in a cross-sectional rank. This does not: it lifts some
+names by half and others by nothing, and the lift correlates with sector.
+
+**It reaches the signal.** `news_burst_20d` carries regime weights **0.9 / 0.8 / 0.5 / 0.2**
+(RISK_ON / NEUTRAL / STRESSED / RISK_OFF) in `score_daily_signals.py`, and appears in
+`train_baseline_models.py` alongside `article_count` and `news_burst_20d_sector_rel`. The
+sector-relative variant does not neutralise this — the bias is itself sector-correlated, so
+normalising against a contaminated sector mean penalises the cleanest names in a dirty
+sector. **This is the M.7 shape again**: a hand-weighted factor in the regime scorer given
+high weight on top of an input nobody had validated.
+
+**Not yet measured, and not to be asserted**: the effect on IC, Sharpe, or ranking. That
+needs a deduplicated feature rebuild and a re-run of the walk-forward, which is the next
+step, not a conclusion available now.
+
+**Fix, once the impact is known**: deduplicate on `(symbol, date, title)` inside
+`load_news_frame()` and `load_llm_sentiment_frame()` rather than at aggregation time, so
+every downstream feature inherits it. The collectors should also stop ingesting syndicated
+copies, but the feature layer must not depend on that being true.
+
+- Effort: 0.5 day to fix, 1 day to rebuild and re-run the walk-forward — Status: 🟡
+  Measured, not yet fixed
+
+---
+
 ## K. Architecture & Language Decisions (决策记录)
 
 记录已评估但主动排除的技术选型，避免未来重复讨论。
