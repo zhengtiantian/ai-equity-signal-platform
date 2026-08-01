@@ -40,7 +40,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │                                                                           │
 │   Ridge ──┐                                                              │
 │           ├──▶ Ensemble ──▶ Walk-forward (retraining, see M.7)          │
-│   LightGBM┘               Portfolio 20d net Sharpe 0.69 vs SPY 0.54     │
+│   LightGBM┘               Portfolio 20d net Sharpe 0.58 vs SPY 0.54     │
 │                                                                           │
 │   MLflow: experiment tracking │ SHAP: feature importance                │
 └────────────────────────────────┬────────────────────────────────────────┘
