@@ -1852,7 +1852,51 @@ makers"; dense retrieval does the reverse and is weak on exact tickers. The two 
 modes are complementary, which is the entire argument for hybrid, and this codebase can
 demonstrate both halves on real queries rather than describe them.
 
-- Status: [ ] Pending (1.5 days, after R.1)
+#### R.2 delivered (2026-08-01)
+
+`tools/hybrid_search.py`. Fuses on rank rather than score deliberately: Mongo's
+`textScore` is an unbounded tf-idf-ish sum and cosine is bounded [-1,1], so weighted-sum
+fusion needs a normalisation that is itself a tuned parameter. RRF needs none.
+
+**Three defects found by running it rather than reading about it.**
+
+1. **The sparse leg had to be deduplicated to match the dense one.** Qdrant holds
+   deduplicated points (M.12); Mongo still holds every syndicated copy. Fusing a clean
+   list against one where a single story occupies 402 candidate slots does not compare
+   two retrievers, it compares one retriever against a broken one — and the sparse leg
+   would have looked far worse than it is.
+2. **RRF was double-counting.** `index_news.py` keyed dedupe on the raw `date`, so points
+   distinct at index time collapse under the normalised key used at fusion, and summing
+   every occurrence let one story bank `1/(K+r)` several times. Each leg now contributes
+   its best rank per document once. **Third defect from the dual date format** — after the
+   null `date_int` and the feature-layer key — which is the argument for normalising at
+   every boundary rather than remembering to.
+3. **13,027 redundant points (1.79%)** existed for the same reason. Repaired in place by
+   `tools/repair_index_dupes.py`, not re-indexed: point ids are UUID5 of the mongo `_id`,
+   so re-running the indexer removes nothing that merely stops being generated, and
+   `--reset` means 2.65 h of re-embedding to fix 1.79% of a collection whose surviving
+   vectors were never wrong — only the *set* was. Deletion took seconds. 729,101 →
+   716,074, matching the independent mongo aggregate exactly.
+
+**The finding worth keeping: naive RRF at the published default underperforms both single
+legs here.** At `K=60`, depth 100, equal weights:
+
+| query | what happened |
+|---|---|
+| "memory glut pressures chip makers" | the three sparse hits actually about a memory glut are pushed out by articles ranked 30–65 in *both* legs, including one about chip factories and Trump |
+| "LRCX" (bare ticker) | both legs rank content-free stub pages (`Lam Research (Nasdaq:LRCX)`) consistently, so consensus floats four of them above the real articles; **dense alone beats hybrid** |
+
+The arithmetic is the explanation, not a bug: `1/(60+60) + 1/(60+36) = 0.0187` against
+`1/(60+1) = 0.0164`. **RRF scores consensus, and consensus is not relevance.**
+
+`RRF_K=5` with depth 30 looks markedly better on both — it interleaves each leg's best
+instead of rewarding tail agreement. **It is not being adopted as the default.** "Looks
+better to me on two queries" is the same error as trusting the published default with the
+source swapped. `RRF_K`, candidate depth and per-leg weights are parameters for R.4 to
+sweep against a labelled set.
+
+- Status: [x] Done — fusion works and its failure mode is characterised; the parameter
+  choice is deferred to R.4 rather than guessed
 
 ---
 
