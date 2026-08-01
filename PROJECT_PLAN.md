@@ -2035,6 +2035,111 @@ word "scale" carries nothing without those four numbers attached.
 
 ---
 
+### R.10 Wire the retriever into generation
+
+**The gap this closes.** R.1–R.4 build the *retrieval* half of RAG. Nothing consumes it.
+`/api/ask` still calls `retrieve_context()` against `SimpleVectorStore` over the four
+markdown files in `knowledge/` — 382 lines — so the platform has 716,074 indexed news
+articles and an answer endpoint that cannot see any of them. "I built RAG over 845K
+articles" is not true until something generates an answer from them.
+
+**Not a replacement.** The knowledge folder answers *"how does the regime scorer weight
+factors"*; the news corpus answers *"what happened to NVDA on export controls"*. Those are
+different corpora for different questions, and collapsing them would lose the first. A new
+`/api/ask/news` endpoint, with `/api/ask` left alone.
+
+**What it has to do beyond calling the retriever:**
+
+- **Cite.** Every claim carries the article ids it came from, so the answer is checkable and
+  R.11 has something to check.
+- **Refuse.** When retrieval returns nothing relevant the endpoint says so instead of
+  letting the model answer from parametric memory. A RAG system that silently falls back to
+  what the model already knows is worse than no RAG, because the failure is invisible —
+  the answer still looks sourced.
+- **Filter.** Pass `symbol` and a date window through to both legs. Asking "what did the
+  market think in 2022" and retrieving 2026 articles is the same look-ahead error as M.7,
+  now with a natural-language interface on top.
+- **Return the sources**, not just the prose, so the caller can verify and the UI can link.
+
+#### R.10 delivered (2026-08-01)
+
+`news_rag.py` + `POST /api/ask/news`. Answers cite by id, refuse when retrieval is empty,
+and pass `symbol` / date window into **both** retrieval legs. `/api/ask` is untouched.
+
+**Two defects found while wiring it, both invisible from the retrieval side.**
+
+1. **The two legs filtered asymmetrically.** Qdrant applied the date window inside the
+   search; the sparse leg fetched the top matches across all history and filtered in
+   Python afterwards. One NVDA query returned 37 hits instead of 100, and they were the
+   wrong 37 — the best across all time that happened to fall in the window, not the best
+   within it. **This would have corrupted R.4's ablation silently**, making the sparse leg
+   look worse than it is and hybrid inherit the damage. The window is now a Mongo range
+   query: `date` is a string in two formats, but lexicographic order matches chronological
+   order for both, so a plain string range is correct for the mixed field and still uses
+   the `(symbol, date)` index.
+2. **Body fetch was 5.9 s.** `find_one({"symbol":…, "title":…})` per hit has no index to
+   use — the collection is indexed on `(symbol, date)` and full-text, not title — so eight
+   hits cost eight partial scans. Both legs now carry the mongo `_id`, and one `$in` by
+   primary key takes **1.5 ms**. Titles were never a key here anyway: syndicated copies
+   share one.
+
+**Measured latency, split rather than totalled:**
+
+| stage | time |
+|---|---|
+| dense leg (incl. query embedding) | 16–23 ms |
+| sparse leg (`$text`) | 1.1–3.6 s |
+| body fetch | 1.5 ms |
+| **generation (local qwen3.5-9b)** | **66–111 s** |
+
+**Generation is 99% of it, and the reason is worth stating precisely.** The model is not
+slow: 47 tok/s is normal for a 9B on Apple Silicon. It emitted **3,124 completion tokens to
+produce a ~100-token answer** — it is a thinking model spending ~3,000 tokens of hidden
+reasoning on a summarisation task that does not need it. "Generation took 111 s" is not
+actionable; "3,124 reasoning tokens at a normal 47 tok/s" points straight at the fix.
+Attempts to disable thinking (`/no_think`, `chat_template_kwargs.enable_thinking`) both
+timed out at 280 s rather than helping, so **this is a known open issue**, not solved.
+
+The sparse leg's 1–3.6 s is inherent to `$text` OR semantics over 851K documents: a query
+like "US export controls on AI chips" matches a large share of a tech-news corpus and Mongo
+must score every match. A compound text index prefixed on `symbol` would fix the filtered
+case, but **MongoDB allows only one text index per collection**, and making it compound
+would end corpus-wide search — which is exactly what R.7 and the N-series need. Not a
+trade worth making.
+
+**Quality note.** On "How did investors react to Micron's guidance?" the model reported that
+the excerpts *disagree* — 2019-09-25 said investors were positively surprised, 2019-09-27
+said the stock tumbled — and cited both sides rather than picking one. That is rule 3 of the
+system prompt working, and it is the behaviour that distinguishes a grounded answer from a
+fluent one.
+
+- Status: [x] Done — endpoint live, citations checkable, refusal path verified.
+  Open: generation latency (thinking tokens)
+
+---
+
+### R.11 Generation-side evaluation
+
+**Retrieval metrics do not measure whether the answer is true.** `recall@10` says the right
+document was in the context window. It says nothing about whether the model used it,
+misread it, or wrote a fluent paragraph that cites it and contradicts it.
+
+| metric | question |
+|---|---|
+| **faithfulness / groundedness** | is every claim supported by a retrieved document, or invented? |
+| **citation accuracy** | does the cited article actually contain the claim? A citation to a real document that does not say the thing is a hallucination wearing a source |
+| **answer relevance** | does it answer the question asked? An answer can be perfectly grounded and beside the point |
+
+**This pattern already exists in the codebase.** F.17's portfolio agent runs three gates on
+every verdict, and its grounding gate checks that each cited `(tool, field, value)` appears
+in a real observation from that run, with numeric tolerance so a model quoting 0.28 for
+0.2803 counts as quoting rather than fabricating. R.11 is the same mechanism pointed at
+documents instead of tool outputs — and reusing it is the point, since it is already tested.
+
+- Status: [ ] Pending (2 days, after R.10)
+
+---
+
 ## P. Portfolio Holdings
 
 ### P.1 Manual holdings tracker
