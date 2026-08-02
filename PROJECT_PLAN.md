@@ -945,7 +945,7 @@ All completed items are wired through the full pipeline:
 - Write a complete README: project background, architecture diagram, quick start, key metrics
 - Architecture diagram: data flow → feature engineering → model → signals → UI
 - Required before any interview; first impression on GitHub
-- Status: [ ] Pending development (1 day)
+- Status: [x] Done (2026-07-15) — `quant_docker/README.md` with the layered architecture diagram
 
 ### E.9 UI Intraday Price Chart
 
@@ -1021,7 +1021,7 @@ resolve_slm_endpoint():
 - Run SHAP analysis on LightGBM model
 - Output: factor contribution ranking, per-stock prediction explanation (why AAPL gets a high score)
 - Interview demo killer: not just "IC=0.059" but also "driven primarily by avg_sentiment_5d and earnings_recency_weight"
-- Status: [ ] Pending development (1 day)
+- Status: [x] Done — `research/backtest/factor_analysis.py`
 
 ### F.4 Multi-Agent research assistant (LangGraph)
 Extend the existing `quant_langchain` container from LLMChain to a LangGraph stateful agent graph.
@@ -1400,7 +1400,7 @@ Evaluated by F.22.
 `agent.py`, `mcp_server.py`, or `mcp_client.py`. LangGraph is not needed — the existing
 hand-written loop plus a validator is smaller and easier to test.
 
-- Status: [ ] Pending (1.5–2 days; do after P.1)
+- Status: [x] Done (2026-07-27) — `portfolio_agent.py`, 448 lines; review layer over the rule engine with schema/grounding/business gates and 25 unit tests
 
 ---
 
@@ -1433,7 +1433,7 @@ agent adds nothing, too low and it cannot be trusted.
 **Implementation**: `quant_ai/eval/cases.yaml` (golden cases: prompt, required tools,
 forbidden tools, schema, assertions) and `quant_ai/eval/run_eval.py` producing a report.
 
-- Status: [ ] Pending (0.5–1 day; build alongside F.17)
+- Status: 🟡 Written, not fully run — `eval/run_eval.py` + `eval/cases.yaml` exist; the full 15-run pass on the local 9B was deferred (~1h)
 
 ---
 
@@ -1613,7 +1613,7 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Why it matters**: this is the difference between a server that reports conclusions and one that can be interrogated. It is also what lets F.17 explain a stop-loss — a mechanical rule sees −8%, only an article says whether that was a sector selloff or a company-specific failure.
 
-- Status: [ ] Pending (0.5 day; highest-value tool remaining)
+- Status: [x] Done — `search_news` in `mcp_server.py`; full-text over the labeled corpus, weighted title:10 content:1
 
 ---
 
@@ -1623,7 +1623,7 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Tool**: `get_feature_history(symbol, fields, days=90)` → the selected feature columns from `daily_symbol_features` as a date-ordered series. Field whitelist, and a row cap so a client cannot pull the whole store into a context window.
 
-- Status: [ ] Pending (0.5 day)
+- Status: [x] Done — `get_feature_history` in `mcp_server.py`; rejects `future_ret_*` by name with an explanation rather than silently dropping the training labels
 
 ---
 
@@ -3228,9 +3228,11 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 
 | Priority | Item | Interview Value | Practical Value | Effort | Status |
 |---|---|---|---|---|---|
-| 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | 🟡 In progress (2026-07-30) — qdrant v1.18.3 deployed; corpus measured (30.2% fit 512 tok, 17.9% title-only, 14.3% dupes, 74.2 vec/s → 3.19h); pipeline not yet written |
-| 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | [ ] Pending (after R.1) |
-| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | [ ] Pending (after R.3) |
+| 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
+| 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
+| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 In progress — 60 queries across 5 challenge types, 3,435 pooled docs from 4 systems; judging next |
+| 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
+| ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
 | 🔥 | **R.5 MCP server in Java (Spring AI, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | [ ] Pending |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
@@ -3761,7 +3763,7 @@ Backtest results (long-short annualized +21.7%, Sharpe 0.85) look promising, but
   net_return = gross_return - commission * 2 - slippage * 2
   ```
 - Goal: determine how much of the long-short annualized return remains after costs
-- Status: [ ] Pending development (1 day)
+- Status: [x] Done — `backtest_portfolio.py`: COMMISSION_BPS=5, liquidity-tiered slippage 10/30bps, $5M min dollar-volume filter; measured 30.4 bps round trip
 
 **H.1.2 Add liquidity filter**
 - Exclude stocks with average daily volume < $5M (avoid execution failure)
@@ -3795,7 +3797,7 @@ Implementation:
   - **Choppy / panic**: VIX > 25 → reduce position to 50%, switch to mean-reversion factors
 - New field: `market_regime` (trend / volatile / crisis)
 - Adjust composite_score weights by regime in `score_daily_signals.py`
-- Status: [ ] Pending development (2 days)
+- Status: [x] Done (2026-07-15) — `_WEIGHTS_BY_REGIME` in `score_daily_signals.py`, four regimes (RISK_ON / NEUTRAL / STRESSED / RISK_OFF) switched on VIX percentile and SPY vs 200MA
 
 **H.2.2 Dynamic factor weights**
 - Different factor weights for different regimes:
@@ -3817,7 +3819,7 @@ Implementation:
   3. Simulate order entry; record entry price (use next day's open price)
   4. Write to `paper_positions` collection
 - Fields: `symbol`, `entry_date`, `entry_price`, `size`, `score_at_entry`, `regime_at_entry`
-- Status: [ ] Pending development (2 days)
+- Status: [x] Done (2026-07-15) — `track_positions.py`: vol-adaptive stop-loss at 2x vol_20d plus a rolling OOS IC monitor
 
 **H.3.2 Paper Trading performance tracking**
 - Update unrealized P&L daily
