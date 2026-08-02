@@ -1954,6 +1954,64 @@ interview; the MCP work was all Python. That mismatch is most of the "depth" obj
   research surface, the Java server is the deployed authenticated one, and the tool
   contract is what makes them interchangeable to a client
 
+#### R.5a Agent authentication — the framing, and the two problems that are actually hard
+
+**First, a framing correction that decides what to build.** "Add authentication to the MCP
+server" is close to a non-question while the transport is stdio. A stdio server is a child
+process the client spawned; **the security boundary is the OS process**, and anyone who can
+start it is already the machine's user. A bearer token there adds a secret to store and no
+security. The real statement is: **move to streamable HTTP, and HTTP forces the question**.
+Worth being able to say, because it shows authentication is a function of transport and
+deployment model rather than a feature that can be bolted anywhere.
+
+It became less theoretical when `submit_judgment` shipped: until then all 10 MCP tools were
+read-only and the worst case was disclosure. **A write tool makes the worst case unauthorised
+mutation.**
+
+**Four problems people conflate under "agent auth".**
+
+| | question | difficulty |
+|---|---|---|
+| 1 | **Authentication** — who is calling the server | routine; OAuth 2.1, mTLS |
+| 2 | **Authorization** — what may this caller do | moderate; scope design |
+| 3 | **Delegation (on-behalf-of)** — whose permissions apply when an agent acts for a user | **hard, and real** |
+| 4 | **Permission-aware retrieval** — filtering results to what the caller may see | **hard, RAG-specific** |
+
+1 and 2 are engineering. 3 and 4 are where the interesting answers live.
+
+**Problem 3 — the confused deputy.** An agent usually needs broader permissions than any
+single user in order to function. So: user A asks a question, the agent fetches data using
+*its own* elevated credentials, and returns an answer containing things A was never allowed
+to see. Nothing was compromised; the agent did exactly what it was told. The fix is
+**downscoped delegation** — the agent carries a token minted *for this caller* and reduced to
+their rights, not its own standing credential. In OAuth terms, token exchange /
+on-behalf-of. This is the failure mode to be able to describe, because it is invisible in
+testing: every component behaved correctly.
+
+**Problem 4 — vector stores do not understand ACLs.** The two naive orderings both fail:
+
+- *retrieve then filter* — take top-10, drop what the caller may not see, and possibly serve
+  2 results. It also leaks **existence**: the caller can infer that something was withheld.
+- *filter then retrieve* — correct, but only if the store can evaluate the permission
+  predicate inside the search. Otherwise it degenerates into a scan.
+
+**This platform is already half-way there.** Qdrant filtering inside the query is exactly the
+mechanism, and R.1/R.2 already depend on it for `symbol` and `date_int` — the R.10 work
+showed what happens when one leg filters inside the search and the other filters afterwards
+(37 results instead of 100, and the wrong 37). Swap the predicate for an ACL term and the
+same machinery answers the enterprise version of the question. That equivalence — *a date
+window and a permission boundary are the same filtering problem* — is the point worth making.
+
+**Materials already in place**: Keycloak deployed and quant_api already validating JWTs;
+Qdrant payload filtering in production use; holdings as genuinely sensitive data that should
+not be world-readable; and now a write tool that gives authorization a real motive rather
+than a hypothetical one.
+
+**Sequencing note.** Start from problems 3 and 4, not from wiring an OAuth flow. "I added
+OAuth to my MCP server" is configuration; "I handled permission downscoping when an agent
+retrieves on a user's behalf" is design — and the second is what the eBay feedback called
+missing depth.
+
 - Status: [ ] Pending (1 week)
 
 ---
