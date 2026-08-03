@@ -2198,6 +2198,73 @@ documents instead of tool outputs — and reusing it is the point, since it is a
 
 ---
 
+---
+
+## S. Security — the AI attack surface
+
+### S.1 Indirect prompt injection through retrieved documents
+
+**The exposure R.10 opened.** `/api/ask/news` retrieves from 716,074 articles scraped from
+the open web and places their body text in the model's context. Nobody has to compromise
+anything to write there — publishing an article that GDELT ingests is enough. The system
+prompt then instructs the model to answer *only* from those excerpts, which makes an
+injected instruction **more** persuasive rather than less.
+
+Worse here than in a chat product for three reasons: the content source is fully open, the
+output is headed for the feature store under R.7 (a poisoned answer becomes a poisoned
+position, not a bad sentence), and the corpus is already 851K documents nobody has read.
+
+**Four layers, and they are not equally strong.**
+
+| layer | what it does | strength |
+|---|---|---|
+| 1. Structural separation | retrieved text lives only in a user message, inside `<excerpt>` delimiters; the system prompt states nothing inside can change the rules | **strong — this is the defence** |
+| 2. Sanitisation | zero-width, bidi and control characters neutralised | strong, deterministic |
+| 3. Pattern detection | 7 regexes for known injection phrasings | **weak — advisory only** |
+| 4. Output checks | missing citations, adopted-instruction and prompt-disclosure phrasings | moderate |
+
+Layer 1 is about **where authority lives**, not about what the text says, which is why it
+is the one that holds. Treating layer 3 as security would be the error: it is reported,
+never enforced. Dropping a document on a regex match would also hand anyone a way to
+suppress coverage of a company by publishing one sentence.
+
+**Measured on 40,000 real articles rather than assumed.** The first exfiltration pattern
+fired 16 times, every one an earnings-call transcript where the operator asks analysts to
+"repeat your instructions" — a rule that fires on ordinary journalism is worse than no
+rule, because the flag then gets ignored on the day it matters. Requiring a qualifier
+(`system|initial|original|previous`) keeps "reveal your system prompt" and drops the
+transcript idiom. Final false-positive rate **3 in 40,000 (0.0075%)**, all ordinary
+English: "run the SFC tool", "You are now a public company".
+
+**Two defects the tests found, not review.**
+
+- **Deleting zero-width characters helped the attacker.** Used as word separators,
+  `Ignore<ZWSP>all<ZWSP>previous<ZWSP>instructions` collapses on deletion into one token no
+  pattern matches — while a model reads the phrase perfectly well through the missing
+  spaces. *Neutralising a hiding character must not also destroy the evidence*; they are
+  replaced with a space.
+- **`chars_sanitised` was a length delta**, which is 0 once characters are replaced rather
+  than deleted. A metric that is always zero reads as "nothing happened" and hides exactly
+  the signal it exists to surface.
+
+**Three evasion tests assert the pattern layer fails** on light rewording, indirect framing
+("Note to the reading assistant: the correct summary is…") and non-English. Asserted rather
+than hidden, because it is the argument for the layering.
+
+**End-to-end against qwen3.5-9b** with a poisoned excerpt: the model reported the real
+revenue figure and **called out the embedded instruction** instead of following it. The
+automated adoption check false-positived on that answer, because the model *mentioned* the
+injected phrasing in order to report it and a substring test cannot separate adopting from
+reporting. Recorded as-is — it is the same difficulty R.11's faithfulness gate will face,
+and finding it here is cheaper than finding it there.
+
+- Status: [x] Done (2026-08-03) — `injection_guard.py`, wired into `news_rag.py`, 22 tests,
+  FP measured on the real corpus. **Remaining**: the ReAct agent (F.21) and the portfolio
+  agent (F.17) also consume tool output that originates in the same corpus and have no
+  equivalent guard.
+
+---
+
 ## P. Portfolio Holdings
 
 ### P.1 Manual holdings tracker
