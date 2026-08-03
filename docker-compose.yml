@@ -219,7 +219,7 @@ services:
   # ======================================================
   quant-ai:
     profiles: ["disabled"]
-    image: xiz001/quant_ai:81737d5
+    image: xiz001/quant_ai:e6fd2c6
     container_name: quant-ai
     restart: always
     logging: *default-logging
