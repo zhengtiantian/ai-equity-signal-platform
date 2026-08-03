@@ -1613,7 +1613,14 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 **Why it matters**: this is the difference between a server that reports conclusions and one that can be interrogated. It is also what lets F.17 explain a stop-loss — a mechanical rule sees −8%, only an article says whether that was a sector selloff or a company-specific failure.
 
-- Status: [x] Done — `search_news` in `mcp_server.py`; full-text over the labeled corpus, weighted title:10 content:1
+- Status: [x] Done — `search_news` in `mcp_server.py`; full-text over the labeled corpus,
+  weighted title:10 content:1. **Verified against the deployed API on 2026-08-03, not
+  against the repository.** It had been marked done a day earlier on the evidence that the
+  function existed in `mcp_server.py`, while `/api/news/search` returned 404 in the running
+  container: the endpoint was in the Java source but the container was running
+  `quant_api:9307bbe` against a compose file declaring `e70b3cb`, so the tool was broken for
+  all three MCP clients. **A file in the repository is not a working feature** — which is
+  the same class of drift that status pass was meant to fix, committed in the same pass.
 
 ---
 
@@ -3311,6 +3318,29 @@ owns the DAGs.
   growing 16% faster than the information in them. Fixing it upstream is a separate item —
   the feature layer must keep its own guard regardless, since it cannot depend on the
   collectors being correct.
+
+---
+
+### Deployment drift — verify against the running system, not the repository
+
+Twice now a container has been running an image older than the one `docker-compose.yml`
+declares, because CI updates the tag in the compose file and nothing restarts the
+container:
+
+| service | was running | declared | consequence |
+|---|---|---|---|
+| `quant_data` | `e165324` | `e650994` | **none** — the Airflow DAGs run host code (`_host_common.py`: `cd $ROOT && $ROOT/.venv311/bin/python $ROOT/$script`), so M.7 and M.12 reached production without an image build |
+| `quant_api` | `9307bbe` | `e70b3cb` | **real** — `/api/news/search` existed in the Java source but not in the running image, so the `search_news` MCP tool returned 404 for all three clients |
+
+The second one went unnoticed because I.6 was marked done on the evidence that the function
+existed in `mcp_server.py`. **A file in the repository is not a working feature.** Both were
+fixed on 2026-08-03 by `docker compose pull` and recreating the two containers; all ten
+platform MCP tools were then called against the deployed API and confirmed to return real
+data, rather than confirmed to exist.
+
+The rule this leaves: a status of "done" for anything with a deployed surface needs evidence
+from the deployed surface. `quant_airflow:local` will always fail `docker compose pull` —
+it is built locally and lives in no registry — which is expected, not a fault.
 
 ---
 
