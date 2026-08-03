@@ -2265,10 +2265,42 @@ injected phrasing in order to report it and a substring test cannot separate ado
 reporting. Recorded as-is — it is the same difficulty R.11's faithfulness gate will face,
 and finding it here is cheaper than finding it there.
 
-- Status: [x] Done (2026-08-03) — `injection_guard.py`, wired into `news_rag.py`, 22 tests,
-  FP measured on the real corpus. **Remaining**: the ReAct agent (F.21) and the portfolio
-  agent (F.17) also consume tool output that originates in the same corpus and have no
-  equivalent guard.
+- Status: [x] Done (2026-08-03) — `injection_guard.py`, wired into `news_rag.py`, FP
+  measured on the real corpus. Extended to the MCP boundary by S.2.
+
+---
+
+### S.2 Guard the MCP boundary, not each consumer
+
+S.1 protected one endpoint. `search_news` was still handing raw article text, unguarded,
+to **four** consumers: Claude Desktop, Codex, the F.21 research agent and the F.17
+portfolio agent. It is the only tool on that server returning free text written by someone
+outside the platform — every other one returns numbers the platform computed — which makes
+it the injection surface.
+
+**The design decision worth keeping**: the guard goes at the *tool boundary*, not in each
+consumer. Four implementations would be four chances to drift, and a client registered
+later would arrive unprotected. The boundary where untrusted text crosses into a model
+context is exactly the boundary the tool contract already defines, so one place covers all
+four and everything added after them — the same argument that made one stdio server serve
+three clients.
+
+- `title`, `excerpt`, `company` sanitised; pattern hits attached per article as
+  `untrusted_content_flags`; a `_security` block states the text is data to report on,
+  never instructions to follow.
+- **Reports, never withholds.** Dropping an article on a regex match would let anyone erase
+  a company from the platform's coverage by publishing one sentence.
+- **Fails open, asserted in a test.** A payload that will not parse — an error body, a 404 —
+  passes through untouched. Dropping every article because parsing failed would be a
+  self-inflicted denial of service while the structural defence still holds.
+
+Verified against the redeployed API and over the real MCP protocol. 26 tests in the file,
+54 across the suite.
+
+- Status: [x] Done (2026-08-03). **Remaining**: `get_news_sentiment` and the other
+  aggregate tools return platform-computed numbers and are not an injection surface, but
+  any future tool that returns third-party text must route through `_guard_articles` — the
+  boundary only holds if new tools use it.
 
 ---
 
