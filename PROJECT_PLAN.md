@@ -3376,6 +3376,64 @@ it is built locally and lives in no registry — which is expected, not a fault.
 
 ---
 
+### R.5 Authentication and authorization, phases 1 and 2 (2026-08-03)
+
+**The finding.** `SecurityConfig` ended with `.anyRequest().permitAll()`. Three path
+patterns required a token; everything else was open, including
+`/api/portfolio/holdings`, which served personal financial data unauthenticated. The JWT
+infrastructure was configured and enforcing almost nothing — the worst of the two states,
+because it reads as protected. Measured before: `GET /api/portfolio/holdings` with no
+token returned **200**. After: **401**.
+
+**The order of work is the design.** quant_ai sent no credential at all and six of eight
+UI modules sent none either, so tightening the server first would have broken every page
+and every MCP tool simultaneously. Phase 1 made both carry a token while the server still
+permitted everything; phase 2 flipped the default. Adding the credential before requiring
+it is the only sequence with no broken window in the middle.
+
+| principal | read | write |
+|---|---|---|
+| no token | 401 | 401 |
+| `quant-ai` service account | 200 | **403** |
+| `user` / `admin` | 200 | 200 |
+
+**Why read and write are split.** quant_ai holds a service-account credential broader than
+any single user's — the confused deputy. It cannot be removed until on-behalf-of exchange
+lands (R.5c), but its blast radius can be: the service account has `quant-read` and not
+`quant-write`, so an injected agent can read the platform and **cannot record a trade**.
+
+**`KeycloakRealmRoleConverter` is not boilerplate.** Spring's default converter reads
+`scope`; Keycloak puts realm roles under `realm_access.roles`. Without the converter the
+roles are in the token, invisible to the rules, and every `hasRole` fails closed — which
+looks exactly like a permissions bug.
+
+#### Three mistakes worth keeping, because each was caught by a different kind of evidence
+
+1. **Granting write to the service account.** The first role assignment put `quant-write`
+   into `default-roles-quant`, which service accounts also hold — handing the agent the
+   exact capability the split exists to deny. The admin API returned `204` three times.
+   Caught by **decoding the issued token**. *Role assignment is not confirmed by the API
+   accepting it; it is confirmed by the claim appearing in a token.*
+
+2. **Shipping a UI that could not authenticate.** The phase 1 UI change was committed and
+   never built into an image, so the browser ran a bundle with no `Authorization` header
+   against an API that had just started requiring one. Every page failed. This is the
+   drift documented one section below, repeated on the next service within the hour.
+   Caught by **the error text**: `Failed to fetch signals` is the pre-migration string, so
+   the message itself proved the old bundle was running.
+
+3. **Read granted to no human.** `quant-read` lived only in `default-roles-quant`, and the
+   `admin` user was never assigned that composite — only the `admin` role. Service
+   accounts get the default composite automatically, so quant_ai worked and every human
+   got 403. API-level testing missed it entirely because the one principal it exercised
+   was the only unaffected one. Caught by **the user opening the browser**. The listing
+   `admin -> ['quant-write']` had already been printed and read past.
+
+The through-line: each layer needs evidence from that layer. A 204 is not a token, a
+commit is not a deployment, and a passing API test is not a working UI.
+
+---
+
 ## K. Architecture & Language Decisions (决策记录)
 
 记录已评估但主动排除的技术选型，避免未来重复讨论。
