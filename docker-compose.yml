@@ -102,7 +102,10 @@ services:
   # 3. Quant platform
   # ======================================================
   quant_api:
-    image: xiz001/quant_api:8bd91ee
+    # Locally built, not in the registry: CI tags by commit sha and this fix
+    # (e9938cc) had not been built when it was deployed. Replace with the CI tag
+    # once it exists -- see the note in PROJECT_PLAN.
+    image: xiz001/quant_api:r5c-1729
     container_name: quant_api
     restart: always
     logging: *default-logging
