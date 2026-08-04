@@ -105,7 +105,7 @@ services:
     # Locally built, not in the registry: CI tags by commit sha and this fix
     # (e9938cc) had not been built when it was deployed. Replace with the CI tag
     # once it exists -- see the note in PROJECT_PLAN.
-    image: xiz001/quant_api:r5c-1729
+    image: xiz001/quant_api:e9938cc
     container_name: quant_api
     restart: always
     logging: *default-logging
