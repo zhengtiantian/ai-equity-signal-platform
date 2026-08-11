@@ -3376,6 +3376,52 @@ it is built locally and lives in no registry — which is expected, not a fault.
 
 ---
 
+### S.3 Identity that is a principal, not a parameter (found 2026-08-07)
+
+**The observation.** `get_eval_batch(judge_id)` and `submit_judgment(judge_id, judgments)`
+take the judge's identity as an argument the caller supplies. Nothing derives it.
+
+**What this is not.** It is not a privilege boundary today and should not be written up as
+one. `judge_id` is a label namespace — `claude-desktop`, `codex` — whose purpose is keeping
+each judge's labels separable so inter-judge agreement can be measured. There is no user
+data behind it, and the platform has one operator.
+
+**Where the cost actually lands: the measurement.** Re-submitting the same
+`(judge_id, query_id, doc_key)` overwrites rather than duplicating — deliberately, so a
+retry after a dropped connection cannot inflate one judge's contribution. The same property
+means a judge that drifts, mistypes, or is talked into a different name either fragments its
+own label set or **overwrites another judge's**. The number R.4 exists to produce degrades
+and nothing in the logs looks wrong. Same shape as the confused deputy one layer down:
+every component behaved correctly.
+
+**Why fix it before it is a security problem.** The day a second annotator is a person
+rather than a model, identity-as-parameter is a real boundary, and the fix is the one R.5c
+needs anyway: derive the principal from the token, treat any identity the model can type as
+untrusted. Doing it now is cheap; doing it after a human annotator exists means migrating
+labels whose ownership is already ambiguous.
+
+**The agent case is worse than the ordinary API case.** With a normal endpoint an attacker
+crafts the request. Here the field is filled by a model that can be argued with, so prompt
+injection reduces the cost of impersonation to one persuasive sentence — and S.1/S.2 exist
+precisely because the corpus is a channel an attacker can write to.
+
+**A second instance, found at the same time and since fixed.** `/api/ask` and `/api/ask/news`
+accept `userId` as a request-body field **defaulting to `"local-user"`**, and it was written
+through to `spec["owner"]` on the generated strategy spec — so the ownership of a created
+artifact was self-declared by the caller, with a default that succeeded silently when nobody
+set it. **`quant_api` now takes the owner from the token instead** (R.5c). The field still
+exists on the quant_ai request model, but the API no longer trusts it, so what remains is
+removing a parameter that no longer does anything.
+
+**`judge_id` is the case that is still open**, and the rule covers both — **business arguments
+narrow *what*, the token decides *who*.** A signature or request body carrying `user_id`,
+`tenant_id`, `judge_id` or `owner` has moved authorization into the payload.
+
+**Interim mitigation, without waiting for OBO.** Reject a `judge_id` that does not match the
+authenticated principal once one exists. Until then, make the write **reject rather than
+overwrite** when `(query_id, doc_key)` already carries a different judge — that preserves the
+retry-safety the overwrite was built for while removing the cross-judge destruction case.
+
 ### R.5 Authentication and authorization, phases 1 and 2 (2026-08-03)
 
 **The finding.** `SecurityConfig` ended with `.anyRequest().permitAll()`. Three path
