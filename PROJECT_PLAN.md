@@ -1936,7 +1936,45 @@ being able to say which queries the reranker fixed and which it broke. It is not
 by a longer list of implemented components. F.22's evaluation harness already establishes
 the pattern in this codebase — the same discipline, pointed at retrieval.
 
-- Status: [ ] Pending (2 days, after R.3)
+- Status: 🟡 Judging and scoring shipped (2026-09-22); the table is not yet reportable —
+  see "R.4 first table" below
+
+#### R.4 first table (2026-09-22) — and why it cannot be reported yet
+
+`eval/judge_pool.py` (LLM judging, human sampling, Cohen's kappa) and `eval/score_runs.py`
+(recall@k / MRR / nDCG@k, loose and strict relevance bars, split by challenge type) close
+the two gaps that were left after the pool was built on 2026-08-02. All 1,810 pairs are
+judged, 0 errors. The first table:
+
+| system | recall@10 | MRR@10 | recall@10 (g=2) | MRR@10 (g=2) | nDCG@10 |
+|---|---|---|---|---|---|
+| sparse | 0.320 | 0.963 | 0.333 | 0.650 | 0.652 |
+| dense | 0.353 | 1.000 | 0.410 | 0.701 | 0.755 |
+| hybrid_k60 | 0.348 | 1.000 | 0.403 | 0.723 | 0.756 |
+| hybrid_k5 | 0.345 | 1.000 | 0.397 | 0.672 | 0.729 |
+
+**Two of those five columns are measuring the harness, not the retriever.** The judge
+graded 1,678 of 1,798 pairs as relevant (93%); only 120 scored 0. With a pool of ~30
+documents per query and nearly all of them called relevant, `recall@10` cannot exceed
+10/30 ≈ 0.33 for any system — and all four sit on that ceiling. `MRR@10 = 1.000` is the
+same defect seen from the other end: every query's rank-1 document clears a bar that
+almost nothing fails. **Grade inflation in the judge turned two metrics into constants.**
+
+Only `nDCG@10` still discriminates, because graded gains and position discount survive a
+lenient judge: dense 0.755 ≈ hybrid_k60 0.756 > hybrid_k5 0.729 > sparse 0.652. Split by
+challenge, dense leads on event / temporal / thematic and hybrid_k60 leads on paraphrase
+(0.773).
+
+**This contradicts R.2's recorded impression** that naive `RRF_K=60` loses to both single
+legs. Under measurement it ties dense and clearly beats sparse. The earlier claim came
+from reading result lists by eye, which is exactly the failure mode R.4 exists to correct
+— recorded rather than quietly overwritten.
+
+**Before the table is reported anywhere**: (1) tighten the judging rubric so grade 1 means
+"same company or theme but does not answer" and everything else is 0, then re-judge;
+(2) hand-label ~100 stratified pairs and report Cohen's kappa against the model judge. An
+unvalidated judge cannot certify a retrieval result, and the inflation above is the
+evidence for why that sentence is not boilerplate.
 
 ---
 
@@ -3521,7 +3559,7 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 |---|---|---|---|---|---|
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
-| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 In progress — 60 queries across 5 challenge types, 3,435 pooled docs from 4 systems; judging next |
+| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judging + scoring shipped (2026-09-22) — 60 queries, **1,810** pooled docs (not 3,435), all judged, 0 errors. Table not reportable: the gemma judge graded 93% relevant, pinning recall@10 at the 10/30 pool ceiling and MRR at 1.000. nDCG still separates (dense 0.755 ≈ hybrid_k60 0.756 > k5 0.729 > sparse 0.652), **contradicting R.2's "naive RRF loses to both legs"**. Next: stricter rubric + re-judge, then ~100 hand labels for kappa |
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
 | 🔥 | **R.5 MCP server in Java (Spring AI, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | [ ] Pending |
