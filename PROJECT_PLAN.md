@@ -3840,7 +3840,7 @@ Recommended build order, each item ~1-2 weeks:
 
 ---
 
-## Stage 6 — GDELT GKG Full Index Import into MongoDB (Pending development)
+## Stage 6 — GDELT GKG Full Index Import into MongoDB (Implemented; `$text` index dropped 2026-10-07 — see 6.7 and Stage 6B)
 
 ### 6.1 Background and Goal
 
@@ -3938,6 +3938,115 @@ Once import is validated, the original CSVs can be deleted, saving **6TB+** of d
 - [ ] MongoDB server confirmed to have 600 GB+ free space
 - [ ] Data24T and Data6T are mounted and readable
 - [ ] After import, run regression tests on 10 sample stocks; delete original CSVs only after passing
+
+### 6.7 Outcome (reviewed 2026-10-07)
+
+What was actually built differs from 6.2–6.3:
+
+| | Planned | Built |
+|---|---|---|
+| Fields | 7 columns (themes, persons, orgs, tone, all_names, …) | `{ts, url, raw}` — `raw` is "date + title", ~80 chars |
+| `$text` index | on themes / persons / orgs / all_names | `gkg_raw_text` on `raw` |
+| `url` index | unique | non-unique (`gkg_url`) |
+| Size | 300–600 GB | 681M docs; data 301 GB on disk + indexes 370 GB (`$text` alone 325–328 GB) |
+
+Findings on 2026-10-07, during a 2.5-month GDELT backfill (~7,480 GKG files):
+
+1. **No code ever queried the `$text` index.** The only reader of `gkg_index` is
+   `historical_collector.py`, and it uses `url` / `ts` point lookups. (`quant_ai/tools/hybrid_search.py`
+   uses `$text` on a different collection.) The new-stock matching pipeline of 6.3.3 was never wired up.
+2. **It made ingestion slow.** Every GKG file (~600 docs) took 8–17 s to import: the 325 GB index could not
+   fit in MongoDB's 4 GB WiredTiger cache, half the cache sat dirty and application threads stalled on
+   eviction. Downloading the same file takes under a second.
+3. **It was corrupt.** WiredTiger checksum error in `index-0-3570980046893492215.wt` (the `$text` index) at
+   offset 291 GB → fatal assertion 50853, mongod aborting and restarting 4 times in an hour (the same
+   assertion first appeared 2026-09-24). Disk checks were clean (SMART verified, the block re-reads
+   identically, no kernel I/O errors in 14 days) → most likely a torn write from the 2026-07-21 Docker-VM
+   disk-full crash, not failing hardware. Collection data was not affected.
+
+Actions taken: Docker VM memory 16 → 32 GB, `--wiredTigerCacheSizeGB` 4 → 20 (backfill went from ~6 to
+~10 files/min); then **dropped `gkg_raw_text`** (backfill went to ~137 files/min, ~20x the original rate,
+no more crashes). Full-history keyword search moves to Stage 6B.
+
+---
+
+## Stage 6B — GKG Columnar Store: Parquet + DuckDB (In progress, started 2026-10-07)
+
+### 6B.1 Goal
+
+Keep MongoDB for what it is good at (point lookups for de-duplication) and move full-history search and
+statistics over `gkg_index` to a columnar copy, so neither workload slows the other down:
+
+| Store | Holds | Serves | Indexes |
+|---|---|---|---|
+| MongoDB `quant_data.gkg_index` | source of truth: `ts`, `url`, `raw` | ingestion de-duplication (`url` upsert, "is this 15-min file already imported?" by `ts`), re-reading a file's rows by `ts` | `_id`, `url`, `ts` only (~42 GB) |
+| Parquet `/Volumes/Data4T/gkg_parquet/month=YYYY-MM/part-0.parquet` | derived copy: `ts`, `url`, `raw` (zstd) | keyword search across all history (new-stock matching), counts / time-series statistics | none (month partitions + Parquet min/max stats) |
+
+DuckDB is an embedded library, not a service: nothing to add to docker-compose or to project start-up.
+Only the host Python environment needs `duckdb` (installed in `quant_data/.venv311`, version 1.5.6).
+
+### 6B.2 Why not keep the `$text` index / why not ClickHouse
+
+- New-stock matching happens a few times a year and is a batch job; a 1–3 minute scan is acceptable,
+  while an always-maintained 325 GB index taxes every daily write (see 6.7).
+- Writing to Parquet is an append of a new file; there is no index maintenance at all.
+- ClickHouse would cover both workloads in one system but adds a server to run and maintain; for a
+  single-maintainer project, files + an embedded engine are simpler. Revisit if interactive (sub-second)
+  full-history search becomes a product requirement.
+- Columnar storage is poor at single-row lookups by `url`, which is exactly what ingestion needs — hence
+  the hybrid rather than replacing MongoDB.
+
+### 6B.3 Tool: `quant_data/tools/gkg_parquet.py`
+
+- `export --all | --months YYYY-MM … | --since-last` — rebuilds whole month files from MongoDB via the
+  `gkg_ts` index; idempotent (a month is rewritten, never appended twice). Progress in `_export_state.json`.
+- `search TERM [TERM …] [--from YYYY-MM] [--to YYYY-MM] [--limit N | --count]` — case-insensitive match on
+  `raw`, newest first.
+- `stats` — rows per month and size on disk.
+
+### 6B.4 Validation so far (2026-10-07, one month)
+
+| Check | Result |
+|---|---|
+| Export 2024-05 | 4,385,181 rows in 32 s |
+| Row count vs MongoDB | 4,385,181 = 4,385,181 |
+| Size on disk | 896 MB (~204 bytes/row) |
+| `search Nvidia --count` (one month) | 4,798 rows in 1.0 s |
+| `search Palantir --limit 3` (one month) | 1.0 s |
+
+Extrapolated to all 681M rows: ~1.5 h one-off export, ~140 GB on disk, full-history keyword search
+estimated at 1–3 min (to be measured after the full export).
+
+### 6B.5 Tasks
+
+- [x] Drop the corrupt `gkg_raw_text` index; resume `backfill_1_collect_and_match`
+- [x] Write `tools/gkg_parquet.py` (export / search / stats); install `duckdb` in `.venv311`
+- [x] Validate one month (6B.4)
+- [x] Add `duckdb` (and `pyarrow`, previously only a transitive dependency) to `quant_data/requirements.txt`
+- [ ] Finish the 2026-07-21 → 2026-10-07 backfill, then `export --all` into `/Volumes/Data4T/gkg_parquet/`
+      and delete the test directory `/Volumes/Data4T/gkg_parquet_test/`
+- [ ] Verify: per-month row counts Parquet vs MongoDB; benchmark full-history `search` / `--count`
+- [ ] Add a `gkg_export` task to `backfill_1_collect_and_match` after `gdelt_collect`
+      (`tools/gkg_parquet.py export --since-last`) so every backfill refreshes the touched months
+- [ ] Wire new-stock matching (the never-built 6.3.3 pipeline) to `gkg_parquet.search()` instead of `$text`
+- [ ] If a container ever needs to query Parquet (e.g. a UI history search), mount
+      `/Volumes/Data4T/gkg_parquet` read-only into that service in docker-compose
+
+### 6B.6 Phase 2 (optional, decide after 6B.5 is stable)
+
+Slim `gkg_index` to `{ts, url}` by unsetting `raw` (data 301 GB → a few tens of GB). Prerequisite:
+`historical_collector._gkg_query_rows()` reads `raw` by `ts` from MongoDB to re-process an already-imported
+file; switch it to read the month's Parquet first, otherwise dropping `raw` breaks that path.
+
+### 6B.7 Operational notes
+
+- Docker Desktop VM memory is 32 GB and mongod runs with `--wiredTigerCacheSizeGB 20`
+  (20 GB cache + ~2 GB mongod overhead + ~7 GB for the other containers). Re-apply both after a Docker
+  reinstall.
+- MongoDB data, the GKG cache and the Parquet files all live on the external SSD `Data4T`. Back up
+  MongoDB to a different disk — single node, no replica, and it has already crashed on corrupt pages.
+- After dropping an index WiredTiger removes the file lazily; the 328 GB is reclaimed after a later
+  checkpoint, not immediately.
 
 ---
 
