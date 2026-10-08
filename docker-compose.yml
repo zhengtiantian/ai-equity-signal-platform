@@ -33,12 +33,12 @@ services:
     container_name: mongo6
     restart: always
     logging: *default-logging
-    # 20GB (was 4GB, before that 1GB). The news full-text index alone is 2.1GB, and
-    # gkg_index carries a 325GB $text index: with a 4GB cache every GKG file imported by
-    # the GDELT backfill (~850 docs) took 8-17s, app threads stalled on eviction with half
-    # the cache dirty (measured 2026-10-07). The Docker VM is 32GB (M5 Max, 64GB total):
-    # 20GB cache + ~2GB mongod overhead + ~7GB for the other containers.
-    command: --wiredTigerCacheSizeGB 20
+    # 12GB. History: 1GB -> 4GB (news full-text index alone is 2.1GB) -> 20GB on 2026-10-07
+    # to carry gkg_index's 325GB $text index during the GDELT backfill (8-17s per GKG file
+    # at 4GB). That index was dropped the same night (corrupt, never queried), leaving
+    # ~42GB of url/ts/_id indexes, and 20GB + LM Studio models pushed the 64GB Mac into
+    # 12GB of swap. Docker VM is 24GB: 12GB cache + ~2GB mongod + ~7GB other containers.
+    command: --wiredTigerCacheSizeGB 12
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}

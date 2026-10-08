@@ -2241,6 +2241,51 @@ documents instead of tool outputs — and reusing it is the point, since it is a
 
 - Status: [ ] Pending (2 days, after R.10)
 
+### R.12 One retriever for every news consumer — hybrid search behind `search_news`
+
+**Two consumers of the news corpus use two different retrievers.** Found 2026-10-08 while
+tracing which tools use RAG:
+
+| Consumer | Path | Retrieval |
+|---|---|---|
+| `/api/ask/news` (R.10, `news_rag.py`) | `hybrid_search.search()` directly | Qdrant dense (716,074 vectors) + Mongo weighted `$text`, RRF k=60, symbol/date filters on both legs |
+| `search_news` MCP tool → F.21 research agent (`/api/agent/research`), Claude Desktop, Codex, F.17 | `mcp_server.py` → `quant_api` `/api/news/search` | Mongo `$text` only (headline 10x body) |
+
+So the multi-step research agent — the consumer that combines signals, features and news —
+gets the weaker, lexical-only retriever, while the single-shot news Q&A gets the hybrid one.
+None of the other six MCP tools needs retrieval: they return numbers the platform computed,
+looked up exactly by symbol and date.
+
+**Plan**
+
+- `search_news(..., mode="keyword" | "hybrid")` in `mcp_server.py`, calling
+  `tools/hybrid_search.search()` for `hybrid` (same process, same package). Default stays
+  `keyword` until the comparison below says otherwise.
+- Apply `symbol` / `from_date` / `to_date` to both legs, exactly as `news_rag.py` does — a
+  filter applied after fusion would let a dense hit from the wrong window take a top-k slot
+  (the M.7 look-ahead error again).
+- Fall back to `keyword` when the embedding model (LM Studio) or Qdrant is unreachable, and
+  say so in the response, so a down model degrades recall instead of breaking the tool.
+- Keep `_guard_articles()` on the output: hybrid adds documents, not a new trust level.
+- Return articles, never a generated answer. Do **not** expose `/api/ask/news` as a tool:
+  its callers (Claude, Codex, the agents) are stronger models than the local 9B, and a
+  9B summary in between adds a weaker paraphrase and drops the source text.
+- ~~Keep Qdrant current~~ — done 2026-10-08: `index_news_qdrant` is the last task of
+  `backfill_2_enrich_and_features` (see Stage 6B.6a), so the daily run embeds each day's
+  newly matched articles; the first run picks up the 2026-07-21 → 2026-10-08 catch-up.
+- R.5 interaction: if the MCP server moves to Java, either port the fusion into `quant_api`
+  or have `/api/news/search` call quant_ai's retriever — decide once, so the two consumers
+  cannot drift apart again.
+
+**Acceptance** — run R.4's queries through `search_news` in both modes once R.4 has the
+stricter rubric and ~100 hand labels; make `hybrid` the default only if it wins on nDCG /
+recall@10 at acceptable latency (expected ~tens of ms → a few hundred ms, embedding call +
+Qdrant). Until then the honest claim is "both paths exist and can be compared", not "hybrid
+is better" — R.2's first measurement had naive RRF losing to both legs, and R.4's nDCG later
+contradicted it.
+
+- Status: [ ] Pending (1 day for the mode switch + fallback; acceptance waits on R.4)
+
 ---
 
 ---
@@ -3562,6 +3607,7 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 | 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judging + scoring shipped (2026-09-22) — 60 queries, **1,810** pooled docs (not 3,435), all judged, 0 errors. Table not reportable: the gemma judge graded 93% relevant, pinning recall@10 at the 10/30 pool ceiling and MRR at 1.000. nDCG still separates (dense 0.755 ≈ hybrid_k60 0.756 > k5 0.729 > sparse 0.652), **contradicting R.2's "naive RRF loses to both legs"**. Next: stricter rubric + re-judge, then ~100 hand labels for kappa |
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
+| ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | [ ] Pending — `mode` switch with keyword fallback; index new articles into Qdrant after each enrichment backfill; default flips to hybrid only if R.4 says so |
 | 🔥 | **R.5 MCP server in Java (Spring AI, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | [ ] Pending |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
@@ -4015,7 +4061,18 @@ Only the host Python environment needs `duckdb` (installed in `quant_data/.venv3
 | `search Palantir --limit 3` (one month) | 1.0 s |
 
 Extrapolated to all 681M rows: ~1.5 h one-off export, ~140 GB on disk, full-history keyword search
-estimated at 1–3 min (to be measured after the full export).
+estimated at 1–3 min.
+
+**Full export, 2026-10-08:** 683,950,529 rows in 4,064 s (~168K rows/s), 130 months
+(2016-01 → 2026-10), 142.7 GB on disk. Per-month row counts checked against MongoDB (`ts` index,
+117 s): all 130 months equal.
+
+| Query (full history unless noted) | Rows | Time |
+|---|---|---|
+| `search Palantir --count` | 30,968 | 87 s |
+| `search Palantir --limit 3` (newest first) | 3 | 88 s — `ORDER BY ts DESC` still scans everything; scanning newest months first and stopping at the limit would fix it |
+| `search Nvidia --from 2025-01 --to 2025-12 --count` | 54,727 | 5 s |
+| `search "Snowflake Inc" Snowflake --count` | 28,855 | 148 s |
 
 ### 6B.5 Tasks
 
@@ -4023,11 +4080,13 @@ estimated at 1–3 min (to be measured after the full export).
 - [x] Write `tools/gkg_parquet.py` (export / search / stats); install `duckdb` in `.venv311`
 - [x] Validate one month (6B.4)
 - [x] Add `duckdb` (and `pyarrow`, previously only a transitive dependency) to `quant_data/requirements.txt`
-- [ ] Finish the 2026-07-21 → 2026-10-07 backfill, then `export --all` into `/Volumes/Data4T/gkg_parquet/`
-      and delete the test directory `/Volumes/Data4T/gkg_parquet_test/`
-- [ ] Verify: per-month row counts Parquet vs MongoDB; benchmark full-history `search` / `--count`
-- [ ] Add a `gkg_export` task to `backfill_1_collect_and_match` after `gdelt_collect`
-      (`tools/gkg_parquet.py export --since-last`) so every backfill refreshes the touched months
+- [x] Finish the 2026-07-21 → 2026-10-07 backfill (all 7,567 15-min slots to 2026-10-08 13:00 present;
+      90 older files are 404 on GDELT's server — 2022-11-10/11 outage plus single days — and cannot be
+      recovered), then `export --all` into `/Volumes/Data4T/gkg_parquet/`; test directory deleted
+- [x] Verify: per-month row counts Parquet vs MongoDB (130/130 equal); benchmark (6B.4)
+- [x] Add a `gkg_export` task to `backfill_1_collect_and_match` after `gdelt_collect`
+      (`tools/gkg_parquet.py export --since-last`); first used 2026-10-08, after which Parquet
+      and MongoDB both held 430,647 rows for 2026-10
 - [ ] Wire new-stock matching (the never-built 6.3.3 pipeline) to `gkg_parquet.search()` instead of `$text`
 - [ ] If a container ever needs to query Parquet (e.g. a UI history search), mount
       `/Volumes/Data4T/gkg_parquet` read-only into that service in docker-compose
@@ -4038,11 +4097,58 @@ Slim `gkg_index` to `{ts, url}` by unsetting `raw` (data 301 GB → a few tens o
 `historical_collector._gkg_query_rows()` reads `raw` by `ts` from MongoDB to re-process an already-imported
 file; switch it to read the month's Parquet first, otherwise dropping `raw` breaks that path.
 
+### 6B.6a GDELT pipeline now runs daily (2026-10-08)
+
+The 2.5-month gap happened because `backfill_1_collect_and_match` had `schedule=None` — manual only —
+and nothing ran it after 2026-07-21. Now:
+
+- `backfill_1_collect_and_match`: `schedule="0 2 * * *"` (02:00 UTC); `gdelt_collect >> [company_match >>
+  trigger_enrich, gkg_export]`. `trigger_enrich` starts `backfill_2_enrich_and_features`.
+- `backfill_2_enrich_and_features`: `… >> feature_rebuild >> index_news_qdrant` (quant_ai
+  `tools/index_news.py`, checkpointed by `_id`, so a day embeds only that day's articles — R.12).
+- Requires LM Studio serving `qwen3.5-4b-mlx`, `gemma-4-e4b-it-mlx`, `qwen3.5-9b-mlx` and the nomic
+  embedder at that hour (JIT loading is on). On the M5 Max the old aliases `qwen3.5-4b`,
+  `qwen3.5-4b:2` and `google/gemma-4-e4b:2` do not exist (HTTP 400); the DAGs pin the `-mlx` ids and
+  blank the second-instance variables.
+
+**Bug fixed with it — the partial last batch.** Files are cut into 100-file batches in time order, so the
+last batch is usually partial. Files GDELT publishes after a run land in that already-`done` batch.
+`seed_tasks()` only filled `batch_sig` when it was NULL and never compared it, so those files reached
+`gkg_index` (startup predownload) but never went through rules / SLM / article fetch — no articles. A
+run every few weeks hid it (and Sunday's `gdelt_batch_verify` sometimes reopened the batch by luck); a
+daily schedule would have dropped most of each day's news. `seed_tasks()` now reopens any batch whose
+signature changed. First run with the fix reopened exactly the two stale batches, 2939 (last batch in
+July) and 3014 (today's).
+
+Increment from the 2026-07-21 → 2026-10-08 catch-up: 4,574,898 `gkg_index` rows, 37,623 new
+`news_articles`, 14,933 `news_articles_company_matched_v2` (NVDA 1,737, GOOGL 1,707, TSLA 1,215,
+MSFT 1,101, AMZN 1,016 …).
+
+**First daily runs: LM Studio 500s, then a system freeze.** Pass B of the first two enrichment runs lost
+240/241 and 282/283 articles to HTTP 500. Each time pass B fanned out 8 workers while `qwen3.5-9b-mlx`
+was being (re)loaded, and LM Studio answers every request that arrives mid-load with `Model does not
+exist` → 500. The third attempt (15:02) also froze the Mac hard — cursor included, manual reboot — with
+Docker (24 GB) plus three models pinned in memory (gemma, 4b and 9b, loaded outside JIT so never evicted)
+plus the 9b reload: 55 GB of process footprint on a 64 GB machine, and MLX weights are wired, so they
+cannot be paged out. Fixes:
+
+- `llm_enrich_articles.py` warms each model up with one request (up to 3 min) before fanning out,
+  retries 5xx / connection errors with 2/5/15 s backoff, and sends `ttl=600` so a JIT-loaded model
+  unloads after 10 idle minutes. With LM Studio's "unload previous JIT model on load", only one large
+  model is resident at a time. Next run: 282/282 in 99 s, 0 errors.
+- No models are pinned with `lms load` any more; everything loads on demand.
+- `index_news.py` crashed with `UnboundLocalError` when there was nothing new to index; fixed.
+- 4,033 Qdrant points had been embedded before their labels existed (empty `sentiment`); their payloads
+  were back-filled from Mongo.
+
 ### 6B.7 Operational notes
 
-- Docker Desktop VM memory is 32 GB and mongod runs with `--wiredTigerCacheSizeGB 20`
-  (20 GB cache + ~2 GB mongod overhead + ~7 GB for the other containers). Re-apply both after a Docker
-  reinstall.
+- Docker Desktop VM memory is 20 GB and mongod runs with `--wiredTigerCacheSizeGB 12`
+  (12 GB cache + ~2 GB mongod overhead + ~6 GB for the other containers). 24 GB left too little for
+  LM Studio — see the freeze above. It was 32 GB / 20 GB for the
+  backfill while the 325 GB `$text` index still existed; with that index gone, 20 GB plus the LM Studio
+  models pushed the 64 GB Mac into 27 GB compressed + 12.6 GB swap. After the change: 44 GB used,
+  1.3 GB compressed, 3.2 GB swap. Re-apply both after a Docker reinstall.
 - MongoDB data, the GKG cache and the Parquet files all live on the external SSD `Data4T`. Back up
   MongoDB to a different disk — single node, no replica, and it has already crashed on corrupt pages.
 - After dropping an index WiredTiger removes the file lazily; the 328 GB is reclaimed after a later
