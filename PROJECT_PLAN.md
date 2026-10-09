@@ -2412,7 +2412,53 @@ Qdrant). Until then the honest claim is "both paths exist and can be compared", 
 is better" — R.2's first measurement had naive RRF losing to both legs, and R.4's nDCG later
 contradicted it.
 
-- Status: [ ] Pending (1 day for the mode switch + fallback; acceptance waits on R.4)
+- Status: ✅ Shipped 2026-10-09, hybrid is the default — see "R.12 result" below
+
+#### R.12 result (2026-10-09)
+
+**Acceptance came from R.4, not from a new run.** R.4's `sparse` system is
+`hybrid_search.sparse_leg` — the same weighted `$text` index (title 10x, body 1x) as
+quant_api's `/api/news/search`, plus syndication dedupe, so it is an upper bound on the old
+`search_news` path. Under the validated judge, hybrid_k60 beats it by +0.114 nDCG@10
+(bootstrap CI [+0.074, +0.158]) and +0.115 P@10. So `mode="hybrid"` is the default, and
+`mode="keyword"` stays for exact phrases.
+
+**One retriever, decided once.** The fusion lives only in quant_ai:
+
+| consumer | path |
+|---|---|
+| quant_ai MCP `search_news` | `news_rag.search_articles` in-process |
+| quant_api MCP `search_news` (R.5) | `HybridNewsClient` → quant_ai `GET /api/retrieve/news` → same function |
+| `/api/ask/news` (R.10) | `hybrid_search.search` (unchanged) |
+
+`search_articles` returns the same payload shape as `/api/news/search`, so S.2's
+`_guard_articles` and every client read it unchanged; each article adds `foundBy`
+(dense / sparse) and both ranks. The symbol and date window go into both legs, never after
+fusion. No generated answer is exposed as a tool (the callers are stronger models than the
+local 9B).
+
+**Fallback is reported, not silent.** If the embedding model, Qdrant or (for Java) quant_ai
+is unreachable, the tool answers from keyword search with
+`retrieval: {mode: keyword, requested: hybrid, note: …}`. The Java note names the kind of
+failure only; internal hostnames stay in the server log. As of today the Java path *is*
+falling back: the quant_ai container is not running, so `quant-ai:8083` does not resolve.
+
+**Latency, measured (warm, median of 3):** embedding 12–18 ms, dense leg incl. embedding
+18–22 ms, **keyword leg 430–950 ms** — Mongo `$text` matches any of the words across 851K
+documents and must score every match before sorting. Hybrid therefore costs ~0.9 s, almost
+all of it the keyword leg. R.4 found dense alone statistically tied with hybrid overall
+(hybrid ahead only on paraphrase, nDCG 0.729 vs 0.629), so **dense-only is a measured,
+~45x faster alternative** if latency ever matters more than paraphrase recall. Kept hybrid
+as the default for the paraphrase gain and as a safety net for exact names.
+
+**Bug found on the way:** quant_api's news search read `llm_event_type` /
+`llm_signal_strength`, which exist on 50 legacy documents; the labelled fields are the
+`_a` ones (867K). `eventType` and `signalStrength` had been null on essentially every
+result. Fixed, with the old names as a fallback.
+
+Known limitation, not fixed here: near-duplicate syndicated copies whose titles differ only
+in case or a word ("US plans…" / "US is planning…") survive the exact-title dedupe and can
+take several of the top slots.
 
 ---
 
@@ -3735,7 +3781,7 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 | 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
-| ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | [ ] Pending — `mode` switch with keyword fallback; index new articles into Qdrant after each enrichment backfill; default flips to hybrid only if R.4 says so |
+| ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
 | 🔥 | **R.5 MCP server in Java (MCP Java SDK, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | 🟡 Shipped 2026-10-09 (`af5e214`): `/mcp` in quant_api, 10 tools, stateless streamable HTTP, JWT at the endpoint + per-tool authorization, personal data refused to service accounts (verified with the real token), RFC 9728 discovery. Open: OBO (R.5c), permission-aware retrieval, write tool |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
