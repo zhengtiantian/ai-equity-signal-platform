@@ -1936,8 +1936,8 @@ being able to say which queries the reranker fixed and which it broke. It is not
 by a longer list of implemented components. F.22's evaluation harness already establishes
 the pattern in this codebase — the same discipline, pointed at retrieval.
 
-- Status: 🟡 Judging and scoring shipped (2026-09-22); the table is not yet reportable —
-  see "R.4 first table" below
+- Status: 🟡 Judge validated against 150 reference labels and the pool re-judged (2026-10-09) —
+  see "R.4 rubric v2" below. Open: a human spot-check of the reference labels
 
 #### R.4 first table (2026-09-22) — and why it cannot be reported yet
 
@@ -1975,6 +1975,79 @@ from reading result lists by eye, which is exactly the failure mode R.4 exists t
 (2) hand-label ~100 stratified pairs and report Cohen's kappa against the model judge. An
 unvalidated judge cannot certify a retrieval result, and the inflation above is the
 evidence for why that sentence is not boilerplate.
+
+#### R.4 rubric v2 (2026-10-09) — the judge was not inflating; the 1/2 boundary was wrong
+
+**The "93% relevant = grade inflation" reading above was wrong, and the way it was found is the
+point.** 150 pairs were labelled by hand as a reference (30 per challenge, stratified on the v1
+grade so v1's rare 0s were not undersampled; labels by Claude, read blind to the v1 grade, stored
+as `source=reference_claude` and in `quant_ai/eval/labels/`). Against them:
+
+- v1 (gemma, original rubric): exact agreement 0.62, **Cohen's kappa 0.41**. Its errors were
+  not leniency: of 80 pairs that answer the query it graded 29 as merely related, and of 43
+  related ones it graded 15 as irrelevant.
+- Re-weighting the stratified sample back to the pool, **about 91% of pooled pairs really are
+  at least related** (reference estimate 9% / 25% / 66% for grades 0/1/2). That is what a pool of
+  each retriever's top 15 should look like. The flat recall@10 was a property of the loose bar,
+  not of the judge: with ~27 related documents per query, recall@10 at grade >= 1 cannot exceed
+  ~0.37 for any system.
+
+Four replacement judges were tried on the same 150 pairs:
+
+| judge | kappa vs reference | estimated pool 0/1/2 |
+|---|---|---|
+| gemma, v1 rubric | 0.41 | 7 / 46 / 47% |
+| **gemma, v2 rubric** | **0.74** | **10 / 26 / 64%** |
+| gemma, extract facts + grade in code | 0.76 | 13 / 11 / 76% |
+| qwen3.5-4b, v2 rubric | 0.64 | 13 / 20 / 66% |
+| qwen3.5-4b, extract facts + grade in code | 0.65 | 6 / 27 / 67% |
+
+v2 spells out the 1/2 boundary: the opposite outcome (strong guidance for a "weak guidance"
+query) is 1; word overlap, market-research reports and stock promotion are 0; a bare name query
+is answered by a document mainly about it. It was chosen over fact extraction because its
+distribution matches the reference while extraction over-awards grade 2. The same day,
+extraction *won* for the job-matching judge (job_agent) — which judge works is a measurement
+per task, not a rule. The production re-judge (`judge_pool.py --llm`, 4 workers, no response
+prefill) reached **kappa 0.67**; its errors are one grade low, never a 0 graded relevant.
+
+The table under v2 (`score_runs.py`, which now also reports P@10 at the strict bar —
+precision does not depend on pool size):
+
+| system | MRR@10 (g=2) | P@10 (g=2) | nDCG@10 |
+|---|---|---|---|
+| sparse | 0.756 | 0.543 | 0.683 |
+| dense | 0.791 | **0.677** | **0.803** |
+| hybrid_k60 | **0.811** | 0.658 | 0.797 |
+| hybrid_k5 | 0.787 | 0.635 | 0.773 |
+
+Paired bootstrap over the 60 queries (5,000 resamples, 95% CI):
+
+- **dense and hybrid_k60 tie**: nDCG −0.006 to the other's favour, CI [−0.035, +0.045].
+- **Both beat sparse**: nDCG +0.120 [+0.064, +0.178] and +0.114 [+0.074, +0.158];
+  P@10 +0.13 and +0.12, also significant.
+- RRF k=60 vs k=5: +0.024 [−0.002, +0.053], not significant.
+- **No MRR difference is significant** at 60 queries.
+
+By challenge type, P@10:
+
+| system | event | literal | paraphrase | temporal | thematic |
+|---|---|---|---|---|---|
+| sparse | 0.60 | 0.85 | 0.38 | 0.53 | 0.40 |
+| dense | **0.77** | **0.95** | 0.46 | 0.67 | **0.55** |
+| hybrid_k60 | 0.73 | 0.92 | **0.50** | 0.67 | 0.51 |
+
+nDCG on paraphrase: hybrid_k60 0.729 vs dense 0.629.
+
+**What this does to R.2's story.** The expected split, "sparse wins literal, dense wins
+paraphrase", did not appear: dense leads even on tickers and product names. Hybrid's one clear
+gain is paraphrase nDCG. The defensible claim is therefore narrower than the one R.2 hoped for:
+*dense alone is as good as RRF hybrid on this corpus, and both beat BM25-style text search by
+~0.12 nDCG@10*. Reranking (R.3) is the next lever, not further RRF tuning.
+
+Caveats, stated rather than hidden: the reference labels come from one annotator (an LLM),
+pending a human spot-check of 30 pairs (`judge_pool.py --human --sample 30 --among reference_claude`, then `--kappa human reference_claude`); unjudged documents count as
+non-relevant, so all recall figures are upper bounds; 60 queries is enough for the nDCG/P@10
+gaps above, not for MRR.
 
 ---
 
@@ -2057,7 +2130,62 @@ OAuth to my MCP server" is configuration; "I handled permission downscoping when
 retrieves on a user's behalf" is design — and the second is what the eBay feedback called
 missing depth.
 
-- Status: [ ] Pending (1 week)
+- Status: 🟡 Server shipped (2026-10-09, quant_api `af5e214`) — see "R.5 first cut" below.
+  Open: on-behalf-of exchange (R.5c), permission-aware retrieval, a write tool, a desktop client
+  completing the OAuth flow
+
+#### R.5 first cut (2026-10-09) — `/mcp` in quant_api
+
+**What runs.** `quant_api` serves ten tools at `/mcp` — the same names and arguments as
+quant_ai's Python stdio server — using the MCP Java SDK 1.1.4 with its **stateless**
+streamable-HTTP transport (`org.example.quantapi.mcp`). Verified end to end with the official
+Python MCP client (`mcp` 1.28) and a real Keycloak token: initialize (protocol 2025-11-25),
+`tools/list`, and calls returning live signals, features, news and sentiment.
+
+**Design decisions, each with the reason:**
+
+- **SDK directly, not Spring AI's starter.** The starter needs Spring Boot 3.4+; quant_api is
+  on 3.3. Upgrading the whole API to expose one endpoint was the wrong trade. The SDK's
+  `mcp` bundle pulls Jackson 3, so `mcp-core` + `mcp-json-jackson2` are used explicitly, and
+  Reactor is aligned to 3.7 (the SDK's build version; nothing else in the API uses Reactor).
+- **Stateless transport.** Every tool is a request/response read and every request carries its
+  own token, so a session would add state to lose on restart and pin clients to one instance —
+  and stateless re-checks authentication on every call instead of once at session start.
+- **Authentication at `/mcp`, authorization per tool.** The transport is a servlet behind the
+  existing JWT chain, so no token or a forged one is a 401 before MCP sees the request. But the
+  tools call controllers *in-process*, which bypasses `SecurityConfig`'s path matchers
+  entirely: `/api/portfolio/holdings` being protected says nothing about a tool that calls
+  `HoldingController.holdings()`. So each tool declares an access level and checks it.
+- **Personal data needs a person.** quant_ai's service account holds `quant-read`, so by role
+  alone it could read holdings — the confused deputy. Until on-behalf-of exchange exists, the
+  holdings and transactions tools refuse service accounts outright. Verified with the real
+  `service-account-quant-ai` token: platform reads succeed, `get_my_holdings` is refused with
+  the reason, and the refusal happens before any personal data is read.
+- **The caller is captured on the request thread.** The SDK runs tool handlers on Reactor's
+  `boundedElastic` threads (seen in the logs), where Spring's thread-local SecurityContext is
+  empty. A handler that read it there would see no caller. The transport's context extractor
+  copies the principal into the MCP transport context while still on the servlet thread.
+- **OAuth discovery.** A 401 from `/mcp` carries `WWW-Authenticate: Bearer
+  resource_metadata="…"`, and `/.well-known/oauth-protected-resource/mcp` (RFC 9728) names the
+  Keycloak issuer, so a client that has never seen this platform can find where to log in.
+- News results are wrapped with an untrusted-content notice (cf. S.1); a failing tool returns
+  an MCP error result the model can read instead of a protocol error that ends the session;
+  arguments are validated (a symbol must look like a ticker) and clamped.
+
+**Found on the way, both fixed the same day:**
+
+- **quant_ai had been calling quant_api without a token.** Its `QUANT_AI_CLIENT_SECRET` no
+  longer matched Keycloak (`invalid_client_credentials` in the Keycloak log), and
+  `service_auth.py` deliberately degrades to "no token" — so every RAG and MCP call into the API
+  had been a 401 since the secret changed, silently. The current secret was read back from
+  Keycloak's admin API (not regenerated, so nothing else broke) into `quant_ai/.env`. The quiet
+  degradation is the lesson: a credential failure should be loud.
+- **docker-compose pinned `quant_api:e9938cc`, an image that did not exist locally.** The
+  running container was from `r5c-1729`; any recreate would have failed. Compose now points at
+  the image built from the commit it names.
+
+Tests: 7 protocol-level tests drive the real SDK transport with mocked controllers (person vs
+service account vs no role, argument validation, untrusted labelling, error results).
 
 ---
 
@@ -3604,11 +3732,11 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 |---|---|---|---|---|---|
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
-| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judging + scoring shipped (2026-09-22) — 60 queries, **1,810** pooled docs (not 3,435), all judged, 0 errors. Table not reportable: the gemma judge graded 93% relevant, pinning recall@10 at the 10/30 pool ceiling and MRR at 1.000. nDCG still separates (dense 0.755 ≈ hybrid_k60 0.756 > k5 0.729 > sparse 0.652), **contradicting R.2's "naive RRF loses to both legs"**. Next: stricter rubric + re-judge, then ~100 hand labels for kappa |
+| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
 | ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | [ ] Pending — `mode` switch with keyword fallback; index new articles into Qdrant after each enrichment backfill; default flips to hybrid only if R.4 says so |
-| 🔥 | **R.5 MCP server in Java (Spring AI, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | [ ] Pending |
+| 🔥 | **R.5 MCP server in Java (MCP Java SDK, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | 🟡 Shipped 2026-10-09 (`af5e214`): `/mcp` in quant_api, 10 tools, stateless streamable HTTP, JWT at the endpoint + per-tool authorization, personal data refused to service accounts (verified with the real token), RFC 9728 discovery. Open: OBO (R.5c), permission-aware retrieval, write tool |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
 | ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | AI production credibility | Medium | 2 days | [ ] Pending |
