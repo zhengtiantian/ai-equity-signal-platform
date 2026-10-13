@@ -1917,7 +1917,55 @@ without the query and document ever meeting; a cross-encoder scores the pair joi
 is far better at relevance but too slow to run over 845K rows. Retrieve-then-rerank is how
 that tradeoff is resolved, and the latency budget is the design constraint worth quoting.
 
-- Status: [ ] Pending (1.5 days, after R.2)
+- Status: [x] Done (2026-10-13) — `tools/rerank.py` (BAAI/bge-reranker-v2-m3), measured in
+  R.4's harness and wired into `/api/ask/news` behind `NEWS_RERANK`; see "R.3 delivered" below
+
+#### R.3 delivered (2026-10-13)
+
+**The gain, under two independently validated judges.** Pool extended with everything the
+reranker variants surfaced (677 pairs) and judged blind by both R.4 judges — gemma rubric v2
+(`llm_v2`, the headline) and qwen3.8-27b rubric v3 (`llm_v3_qwen27`) — so the reranker is not
+penalised by pool bias and the result does not rest on one judge. 60 queries, nDCG@10, paired
+bootstrap 95% CI (`score_runs.py --ci`):
+
+| comparison | gemma v2 | qwen27 v3 |
+|---|---|---|
+| rerank top-30/256 − hybrid_k60 (shipped) | **+0.076** [+0.043, +0.113] | **+0.078** [+0.048, +0.111] |
+| rerank top-100/256 − hybrid_k60 | **+0.117** [+0.078, +0.159] | **+0.097** [+0.060, +0.135] |
+| 256 vs 512 tokens (top-100) | +0.018 [−0.002, +0.040] | +0.002 [−0.017, +0.022] |
+
+Significant under both judges; P@10 at the g=2 bar moves the same way (+0.080 / +0.073 for the
+shipped config). Under gemma v2 the shipped config helps 33 queries and hurts 12. The largest
+wins are thematic and paraphrase queries — "AI data centre capex guidance raised" goes from
+generic data-centre pieces to Meta/Amazon capex raises — exactly where bi-encoders blur
+near-misses together; the losses are bare literals and date windows.
+
+**The cost, and the depth that was shipped.** Top-100 at 512 tokens is ~5 s per query on MPS,
+too slow for an answer endpoint. `eval/rerank_sweep.sh` holds the first stage fixed (both legs
+still retrieve 100) and varies only the reranked depth and the token window:
+
+| config | nDCG@10 gemma v2 | nDCG@10 qwen27 v3 | rerank latency (median) |
+|---|---|---|---|
+| hybrid_k60, no rerank | 0.777 | 0.781 | 0 |
+| top-20, 512 tokens | 0.836 | 0.843 | 1.05 s |
+| **top-30, 256 tokens (shipped)** | **0.854** | **0.859** | **0.98 s** |
+| top-30, 512 tokens | 0.847 | 0.859 | 1.60 s |
+| top-50, 512 tokens | 0.851 | 0.862 | 2.63 s |
+| top-100, 256 tokens | 0.895 | 0.878 | 3.05 s |
+| top-100, 512 tokens | 0.877 | 0.875 | 5.02 s |
+
+Truncating to 256 tokens costs nothing measurable (not significant either way) and saves ~40%
+— news puts its subject in the lede, the same reason R.1 indexed title+lede. Top-30 keeps
+about two-thirds to four-fifths of the full gain at ~20% of the cost; generation already takes
+several seconds, so ~1 s is affordable. Top-100/256 at 3 s is the option if quality matters
+more than latency.
+
+**In the request path.** `news_rag.answer_from_news` reranks the fused top-30 when
+`NEWS_RERANK=1` (or per request with `"rerank": true`) and reports
+enabled/candidates/max_len/ms. A reranker that cannot load falls back to the fused order with
+`rerank.error` set — the answer never fails because of it. The model is preloaded at startup
+(otherwise the first request pays ~6.7 s). Off by default: the service image carries no torch
+(`requirements-eval.txt`); `run_host.sh` turns it on.
 
 ---
 
@@ -1930,7 +1978,7 @@ per retrieval configuration: sparse only, dense only, hybrid, hybrid + rerank.
 real events already in the corpus — earnings reactions, export controls, the CXMT listing
 from the N-series. Then an ablation table.
 
-**Why this is ranked above R.5–R.8 in value**: "expected more technical depth" is answered
+**Why this is ranked above R.6–R.8 in value**: "expected more technical depth" is answered
 by a table showing hybrid+rerank at `recall@10 = 0.87` versus dense-only at `0.61`, and by
 being able to say which queries the reranker fixed and which it broke. It is not answered
 by a longer list of implemented components. F.22's evaluation harness already establishes
@@ -2051,141 +2099,30 @@ gaps above, not for MRR.
 
 ---
 
-### R.5 MCP server in Java — `quant_api` as an MCP endpoint
+#### R.4 a second judge (2026-10-13) — rubric v3 on qwen3.8-27b, as a robustness check
 
-**Goal**: a second MCP server inside `quant_api` (Spring Boot 3 / Java 21) using the MCP
-Java SDK / Spring AI's MCP support, exposing the same tool surface over **streamable HTTP**
-rather than stdio.
+A second line of work built rubric v3 (stricter at grade 1, and explicit about title-only
+articles and bare ticker queries) on qwen3.8-27b with reasoning off (~4 s/pair). Both lines
+were merged; `judge_pool.py --rubric v3 --model … --source …` runs it. On the same 150
+reference pairs:
 
-**Why this is the highest-value single item in the section for the roles being targeted**:
-it is the only item that makes "Java backend engineer" and "AI at scale" the same sentence
-instead of two separate claims about two separate services. The interview was a Java
-interview; the MCP work was all Python. That mismatch is most of the "depth" objection.
+| judge | exact | kappa | linear-weighted | kappa at the g=2 bar |
+|---|---|---|---|---|
+| gemma v1 (`llm`) | 0.620 | 0.414 | — | — |
+| **gemma v2 (`llm_v2`, headline)** | **0.793** | **0.670** | **0.758** | 0.761 |
+| qwen27 v3 (`llm_v3_qwen27`) | 0.733 | 0.575 | 0.698 | **0.853** |
 
-**What it adds beyond a port**:
-- **streamable HTTP transport**, so the server is reachable by remote clients — the thing
-  stdio structurally cannot do, and the reason transport is a protocol concern at all
-- **OAuth via the existing Keycloak realm**, so tool calls are authenticated and scoped.
-  Personal holdings are already exposed over MCP with no auth whatsoever, which is fine
-  for a local stdio process and indefensible over HTTP
-- a defensible answer to "two servers, same tools — why?": the Python server is the local
-  research surface, the Java server is the deployed authenticated one, and the tool
-  contract is what makes them interchangeable to a client
+v2 places grade 1 better, which the graded measures (nDCG) depend on, so it stays the headline
+judge; v3 is the stricter judge of "answers the query" and never promotes a reference-0 pair.
+(The 0.74 recorded above for v2 was measured on the trial run; the full `llm_v2` set gives 0.67.)
 
-#### R.5a Agent authentication — the framing, and the two problems that are actually hard
+**What the second judge settles.** Every conclusion above was re-scored under v3 on the same
+2,487 pairs: the system ranking is unchanged and **dense vs hybrid_k60 stays a tie** (nDCG
+−0.005 [−0.043, +0.033] under v2, +0.026 [−0.014, +0.067] under v3). Reranking (R.3) is
+significant under both. A result that survives two judges with different rubrics, models and
+failure modes is not an artefact of either.
 
-**First, a framing correction that decides what to build.** "Add authentication to the MCP
-server" is close to a non-question while the transport is stdio. A stdio server is a child
-process the client spawned; **the security boundary is the OS process**, and anyone who can
-start it is already the machine's user. A bearer token there adds a secret to store and no
-security. The real statement is: **move to streamable HTTP, and HTTP forces the question**.
-Worth being able to say, because it shows authentication is a function of transport and
-deployment model rather than a feature that can be bolted anywhere.
-
-It became less theoretical when `submit_judgment` shipped: until then all 10 MCP tools were
-read-only and the worst case was disclosure. **A write tool makes the worst case unauthorised
-mutation.**
-
-**Four problems people conflate under "agent auth".**
-
-| | question | difficulty |
-|---|---|---|
-| 1 | **Authentication** — who is calling the server | routine; OAuth 2.1, mTLS |
-| 2 | **Authorization** — what may this caller do | moderate; scope design |
-| 3 | **Delegation (on-behalf-of)** — whose permissions apply when an agent acts for a user | **hard, and real** |
-| 4 | **Permission-aware retrieval** — filtering results to what the caller may see | **hard, RAG-specific** |
-
-1 and 2 are engineering. 3 and 4 are where the interesting answers live.
-
-**Problem 3 — the confused deputy.** An agent usually needs broader permissions than any
-single user in order to function. So: user A asks a question, the agent fetches data using
-*its own* elevated credentials, and returns an answer containing things A was never allowed
-to see. Nothing was compromised; the agent did exactly what it was told. The fix is
-**downscoped delegation** — the agent carries a token minted *for this caller* and reduced to
-their rights, not its own standing credential. In OAuth terms, token exchange /
-on-behalf-of. This is the failure mode to be able to describe, because it is invisible in
-testing: every component behaved correctly.
-
-**Problem 4 — vector stores do not understand ACLs.** The two naive orderings both fail:
-
-- *retrieve then filter* — take top-10, drop what the caller may not see, and possibly serve
-  2 results. It also leaks **existence**: the caller can infer that something was withheld.
-- *filter then retrieve* — correct, but only if the store can evaluate the permission
-  predicate inside the search. Otherwise it degenerates into a scan.
-
-**This platform is already half-way there.** Qdrant filtering inside the query is exactly the
-mechanism, and R.1/R.2 already depend on it for `symbol` and `date_int` — the R.10 work
-showed what happens when one leg filters inside the search and the other filters afterwards
-(37 results instead of 100, and the wrong 37). Swap the predicate for an ACL term and the
-same machinery answers the enterprise version of the question. That equivalence — *a date
-window and a permission boundary are the same filtering problem* — is the point worth making.
-
-**Materials already in place**: Keycloak deployed and quant_api already validating JWTs;
-Qdrant payload filtering in production use; holdings as genuinely sensitive data that should
-not be world-readable; and now a write tool that gives authorization a real motive rather
-than a hypothetical one.
-
-**Sequencing note.** Start from problems 3 and 4, not from wiring an OAuth flow. "I added
-OAuth to my MCP server" is configuration; "I handled permission downscoping when an agent
-retrieves on a user's behalf" is design — and the second is what the eBay feedback called
-missing depth.
-
-- Status: 🟡 Server shipped (2026-10-09, quant_api `af5e214`) — see "R.5 first cut" below.
-  Open: on-behalf-of exchange (R.5c), permission-aware retrieval, a write tool, a desktop client
-  completing the OAuth flow
-
-#### R.5 first cut (2026-10-09) — `/mcp` in quant_api
-
-**What runs.** `quant_api` serves ten tools at `/mcp` — the same names and arguments as
-quant_ai's Python stdio server — using the MCP Java SDK 1.1.4 with its **stateless**
-streamable-HTTP transport (`org.example.quantapi.mcp`). Verified end to end with the official
-Python MCP client (`mcp` 1.28) and a real Keycloak token: initialize (protocol 2025-11-25),
-`tools/list`, and calls returning live signals, features, news and sentiment.
-
-**Design decisions, each with the reason:**
-
-- **SDK directly, not Spring AI's starter.** The starter needs Spring Boot 3.4+; quant_api is
-  on 3.3. Upgrading the whole API to expose one endpoint was the wrong trade. The SDK's
-  `mcp` bundle pulls Jackson 3, so `mcp-core` + `mcp-json-jackson2` are used explicitly, and
-  Reactor is aligned to 3.7 (the SDK's build version; nothing else in the API uses Reactor).
-- **Stateless transport.** Every tool is a request/response read and every request carries its
-  own token, so a session would add state to lose on restart and pin clients to one instance —
-  and stateless re-checks authentication on every call instead of once at session start.
-- **Authentication at `/mcp`, authorization per tool.** The transport is a servlet behind the
-  existing JWT chain, so no token or a forged one is a 401 before MCP sees the request. But the
-  tools call controllers *in-process*, which bypasses `SecurityConfig`'s path matchers
-  entirely: `/api/portfolio/holdings` being protected says nothing about a tool that calls
-  `HoldingController.holdings()`. So each tool declares an access level and checks it.
-- **Personal data needs a person.** quant_ai's service account holds `quant-read`, so by role
-  alone it could read holdings — the confused deputy. Until on-behalf-of exchange exists, the
-  holdings and transactions tools refuse service accounts outright. Verified with the real
-  `service-account-quant-ai` token: platform reads succeed, `get_my_holdings` is refused with
-  the reason, and the refusal happens before any personal data is read.
-- **The caller is captured on the request thread.** The SDK runs tool handlers on Reactor's
-  `boundedElastic` threads (seen in the logs), where Spring's thread-local SecurityContext is
-  empty. A handler that read it there would see no caller. The transport's context extractor
-  copies the principal into the MCP transport context while still on the servlet thread.
-- **OAuth discovery.** A 401 from `/mcp` carries `WWW-Authenticate: Bearer
-  resource_metadata="…"`, and `/.well-known/oauth-protected-resource/mcp` (RFC 9728) names the
-  Keycloak issuer, so a client that has never seen this platform can find where to log in.
-- News results are wrapped with an untrusted-content notice (cf. S.1); a failing tool returns
-  an MCP error result the model can read instead of a protocol error that ends the session;
-  arguments are validated (a symbol must look like a ticker) and clamped.
-
-**Found on the way, both fixed the same day:**
-
-- **quant_ai had been calling quant_api without a token.** Its `QUANT_AI_CLIENT_SECRET` no
-  longer matched Keycloak (`invalid_client_credentials` in the Keycloak log), and
-  `service_auth.py` deliberately degrades to "no token" — so every RAG and MCP call into the API
-  had been a 401 since the secret changed, silently. The current secret was read back from
-  Keycloak's admin API (not regenerated, so nothing else broke) into `quant_ai/.env`. The quiet
-  degradation is the lesson: a credential failure should be loud.
-- **docker-compose pinned `quant_api:e9938cc`, an image that did not exist locally.** The
-  running container was from `r5c-1729`; any recreate would have failed. Compose now points at
-  the image built from the commit it names.
-
-Tests: 7 protocol-level tests drive the real SDK transport with mocked controllers (person vs
-service account vs no role, argument validation, untrusted labelling, error results).
+Still owed: human labels for judge-vs-human kappa (`judge_pool.py --human --sample 100`).
 
 ---
 
@@ -2401,9 +2338,6 @@ looked up exactly by symbol and date.
 - ~~Keep Qdrant current~~ — done 2026-10-08: `index_news_qdrant` is the last task of
   `backfill_2_enrich_and_features` (see Stage 6B.6a), so the daily run embeds each day's
   newly matched articles; the first run picks up the 2026-07-21 → 2026-10-08 catch-up.
-- R.5 interaction: if the MCP server moves to Java, either port the fusion into `quant_api`
-  or have `/api/news/search` call quant_ai's retriever — decide once, so the two consumers
-  cannot drift apart again.
 
 **Acceptance** — run R.4's queries through `search_news` in both modes once R.4 has the
 stricter rubric and ~100 hand labels; make `hybrid` the default only if it wins on nDCG /
@@ -2428,7 +2362,6 @@ quant_api's `/api/news/search`, plus syndication dedupe, so it is an upper bound
 | consumer | path |
 |---|---|
 | quant_ai MCP `search_news` | `news_rag.search_articles` in-process |
-| quant_api MCP `search_news` (R.5) | `HybridNewsClient` → quant_ai `GET /api/retrieve/news` → same function |
 | `/api/ask/news` (R.10) | `hybrid_search.search` (unchanged) |
 
 `search_articles` returns the same payload shape as `/api/news/search`, so S.2's
@@ -3771,8 +3704,8 @@ commit is not a deployment, and a passing API test is not a working UI.
 **Top of the queue, as of 2026-07-30.** The R-series is ranked above everything else pending
 because it is the only block addressing named, sourced interview feedback (eBay, 2026-07-28:
 "more experience with AI at scale, particularly RAG and MCP"), and because the corpus that
-makes it credible — 845K articles — is already collected and sitting unindexed. R.4 and R.5
-are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MCP in Java.
+makes it credible — 845K articles — is already collected and sitting unindexed. R.4 carries
+the weight: it turns retrieval into numbers.
 
 | Priority | Item | Interview Value | Practical Value | Effort | Status |
 |---|---|---|---|---|---|
@@ -3782,8 +3715,7 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
 | ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
-| 🔥 | **R.5 MCP server in Java (MCP Java SDK, streamable HTTP, Keycloak OAuth)** | 🔴 Makes "Java backend" and "AI at scale" one sentence | Medium | 1 week | 🟡 Shipped 2026-10-09 (`af5e214`): `/mcp` in quant_api, 10 tools, stateless streamable HTTP, JWT at the endpoint + per-tool authorization, personal data refused to service accounts (verified with the real token), RFC 9728 discovery. Open: OBO (R.5c), permission-aware retrieval, write tool |
-| ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | [ ] Pending (after R.2) |
+| ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | ✅ Done (2026-10-13) — nDCG +0.076 [+0.043, +0.113] for the shipped top-30/256 config (~1 s), +0.117 at top-100; significant under both validated judges; behind NEWS_RERANK in /api/ask/news |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
 | ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | AI production credibility | Medium | 2 days | [ ] Pending |
 | ⭐⭐ | **R.7 RAG as a feature source (grounded event extraction → features)** | AI+Quant crossover | High | 3 days | [ ] Pending (after R.2, N.1) |
@@ -3803,7 +3735,7 @@ are the two that carry the weight: R.4 turns retrieval into numbers, R.5 puts MC
 | ⭐⭐ | C.3 Signal UI page | Medium | Extremely high | 3 days | ✅ Done |
 | ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → 情绪特征) | DE关键 | 🔴 填补数据缺口 | 1.5 days | [ ] Pending |
 | ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on任意任务失败) | DE essential | 🔴 运维必需 | 0.5 days | [ ] Pending |
-| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.5/R.6 |
+| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.6 |
 | ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → Claude对话查信号) | AI差异化 | 高 | 0.5 days | ✅ Done — verified over the real MCP protocol |
 | ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | AI essential | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
 | ⭐⭐ | F.3 SHAP interpretability | MLE strong | Medium | 1 day | ✅ Done (factor_analysis.py) |
