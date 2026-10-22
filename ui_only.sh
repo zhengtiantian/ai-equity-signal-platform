@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Start only what quant_ui needs to log in and show its pages, and stop everything else.
 #
-#   quant_ui -> quant_api -> mysql, mongodb, keycloak     (5 containers)
+#   quant_ui -> quant_api -> mysql, mongodb, keycloak, kafka     (6 containers)
+#   (quant_api does not start without kafka: "No resolvable bootstrap urls")
 #
 # The portfolio, global markets and daily briefs are served by quant_ai on the host, which
-# runs without Docker. The other services (kafka, airflow, mlflow, qdrant, quant_data,
+# runs without Docker. The other services (kafka-ui, airflow, mlflow, qdrant, quant_data,
 # quant-ai) are "restart: unless-stopped", so once stopped here they stay stopped even when
 # Docker Desktop restarts. Start the full platform with: docker compose up -d
 set -euo pipefail
@@ -16,7 +17,7 @@ if [ ! -d /Volumes/Data4T/docker-volumes ]; then
   exit 1
 fi
 
-UI=(mysql mongodb keycloak quant_api quant_ui)
+UI=(mysql mongodb keycloak kafka quant_api quant_ui)
 others=$(docker compose config --services | grep -vxF -f <(printf '%s\n' "${UI[@]}") || true)
 if [ -n "$others" ]; then
   # Containers created before the compose change still carry "always", which Docker Desktop

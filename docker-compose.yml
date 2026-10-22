@@ -257,7 +257,7 @@ services:
   kafka:
     image: apache/kafka:3.7.0
     container_name: kafka
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: always   # quant_api does not start without kafka (2026-10-22)
     logging: *default-logging
     environment:
       - KAFKA_NODE_ID=0
