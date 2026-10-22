@@ -2496,6 +2496,11 @@ Verified against the redeployed API and over the real MCP protocol. 26 tests in 
 
 ## P. Portfolio Holdings
 
+> **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
+> (`quant_ai/markets/`, SQLite), moved there from job_agent's dashboard together with global
+> markets and the daily briefs — see **Q.0**. The `quant_api` / MySQL holdings below are
+> deprecated; `get_my_holdings` / `get_my_transactions` read quant_ai first and fall back to them.
+
 ### P.1 Manual holdings tracker
 
 **Goal**: Record what is actually held. Everything the platform currently calls a "position" is synthetic — `track_positions.py` mechanically opens the day's top-5 signals and closes on rule triggers. That is a strategy simulation, not a portfolio, and there is nowhere to say "I own 10 NVDA from 2026-05-12".
@@ -3696,6 +3701,94 @@ commit is not a deployment, and a passing API test is not a working UI.
 - Python: data/ML pipeline 生态无可替代（pandas/LightGBM/LM Studio SDK）
 - Java Spring Boot: REST API 生产级可用，团队已有代码资产
 - React/TypeScript: 前端无替代方案
+
+---
+
+## Q. Market Briefs and Event-Driven Decisions (2026-10-22)
+
+**Why this series.** On 2026-10-21 Lam Research guided below hopes after the US close; the next
+day Tokyo Electron fell 7%, SK hynix 5%, ASML 3% and the user's semiconductor holdings 3-5% in
+pre-market, alongside Brent at $112 on Middle East escalation. The question asked: *does the
+platform capture events like this — an earnings miss, a war, an oil shock — and do they drive
+decisions?* The audit below says: per-company news sentiment, yes; propagation, macro and
+geopolitics, no; and right now nothing at all, because the pipeline is down.
+
+### Q.0 Done on 2026-10-22 (quant_ai, quant_ui, quant_docker)
+
+- **Portfolio moved into quant_ai** (`markets/portfolio.py`, from job_agent's dashboard): trades,
+  average cost and FIFO, Nasdaq quotes incl. pre-market / after hours, watchlist, charts. Host
+  process, SQLite under `~/Library/Application Support/quant_ai`, Drive backup; launchd keeps
+  it alive. Sale profits are pushed to job_agent's budget through an idempotent endpoint.
+- **Global markets**: 16 Asian / European exchanges by region -> country -> exchange (CNBC,
+  Korean stocks via Naver) and a macro board (Brent/WTI, gold, US indices and futures, VIX,
+  yields, FX).
+- **Briefs** written by `claude -p` on the user's subscription, Chinese + English, from a
+  snapshot of the numbers plus cited web search:
+  - summaries: Asia & Europe 14:00 Dublin; US after 20:05 New York;
+  - **week ahead** 13:30 Dublin: earnings of holdings / watchlist / 17 sector bellwethers over
+    5 trading days (Nasdaq calendar, consensus EPS, implied move from the ATM straddle), main
+    economic releases, beat / miss scenarios per holding;
+  - **flash**: a bellwether moving >=5% pre-market / after hours triggers a transmission
+    analysis (Asia, Europe, the holdings at the next open). Once per company per day, cap 4.
+- **Scored predictions**: every brief ends with checkable calls ("8035.T closes <= -3% on
+  10/23", stated confidence). Only symbols the brief was shown, only sessions not yet open when
+  it was written (a flash at 14:43 Dublin predicting that day's US close was half known — fixed
+  the same day). Scored from CNBC daily bars after the close; scorecard = hit rate, Brier score,
+  calibration by confidence bucket, per brief kind.
+- quant_ui: My Holdings rebuilt on these routes; Market Briefs tab with the scorecard.
+  quant_docker: `ui_only.sh` starts just the login chain (mysql, mongodb, keycloak, kafka,
+  quant_api, quant_ui); everything else `unless-stopped`.
+
+### Q.1 Audit: what the signal pipeline does with events today
+
+| Capability | State |
+|---|---|
+| Per-company news: sentiment, 7 event types, signal strength (Gemma + Qwen labels, ~868K matched articles) | ✅ features `avg_sentiment_5d`, `sentiment_shift_5d`, `news_burst_20d`, `earnings_beat/miss_signal`, `ah_gap` |
+| Market regime | ✅ VIX, 10y, DXY, SPY -> RISK_ON / NEUTRAL / STRESSED / RISK_OFF reweighting |
+| **Propagation** (Lam's guidance -> Tokyo Electron, ASML, SK hynix) | ❌ news only moves the symbol it names; `sector` is used only for sector-relative ranks in training. Planned as the **N series** (N.1-N.5 pending) |
+| **Macro / geopolitical news** (war, OPEC, oil) | ❌ `event_type = macro` is labelled but feeds no feature; no oil series anywhere in quant_data; GDELT is a news source only, its tone / conflict fields unused. Only indirect, via VIX, and only as down-weighting, never direction |
+| **Earnings vs expectations** | ⚠️ "beat" is inferred from news sentiment, not actual vs consensus; no forward calendar (F.14 pending) |
+| **Coverage** | ❌ US universe only; no Asian / European listings |
+| **Latency** | ❌ one batch at 07:30: an after-hours report enters features the next morning, after Asia has traded it |
+| **Pipeline running** | ❌ signals stop at 2026-07-17, features 2026-10-09, macro 2026-10-14. The host Airflow scheduler (`com.quant.airflow-scheduler`) crash-loops on `connection refused 127.0.0.1:25432`: its metadata DB is the `airflow-postgres` container, so whenever Docker is off nothing is collected |
+
+### Q.2 Revive the pipeline — prerequisite for everything below (🔴, 1 day)
+
+- [ ] Move the Airflow metadata DB off Docker (SQLite or a host Postgres), or document that the
+      data containers must run; either way the scheduler must not depend on Docker Desktop.
+- [ ] Run each DAG end to end (Stage 7.2.2), backfill 2026-10-09 -> today, confirm one
+      automatic trigger.
+- [ ] Alert when a DAG has not succeeded for 2 days (the outage above went unnoticed for weeks).
+
+### Q.3 Events as structured features (🟡, ~6 days; feeds N.4)
+
+- [ ] **Peer / supply-chain graph** (= N.1 + N.3, extended): curated edges for the semiconductor
+      chain first (equipment -> foundry / memory -> chip designers -> hyperscalers), including
+      non-US names (Tokyo Electron, ASML, Samsung, SK hynix). A company event propagates one hop
+      with a signed weight. Cross-check curated edges against return co-movement.
+- [ ] **Oil and geopolitical risk index** from the GDELT GKG columnar store (Stage 6B): daily
+      tone and conflict-theme intensity for the Middle East / Russia-Ukraine / Taiwan Strait, plus
+      Brent and WTI added to `macro_indicators`. Features: level, 5-day change, shock flag.
+- [ ] **Earnings surprise, measured**: actual EPS / revenue vs consensus and the post-report gap
+      (Nasdaq calendar gives the consensus; F.14 covers the pre-report probability).
+- [ ] **Intraday path for after-hours events**: a small evening job (or the flash trigger) that
+      writes the event and the propagated scores the same night, so Asia-session decisions can use it.
+- [ ] Optional: Asian / European symbols in the feature universe (prices are already collected
+      for the briefs).
+
+### Q.4 Promote LLM event calls to a factor only after they earn it (🟡, gate, then 2 days)
+
+The briefs' predictions are a running out-of-sample test of "can an LLM read an event's impact".
+Wire them into `score_daily_signals` only when the scorecard says so:
+- [ ] at least 60 scored calls, spread over at least 4 weeks and several event types;
+- [ ] hit rate above the base rate of the same claims (e.g. how often `|move| >= 2%` happens anyway);
+- [ ] Brier score below 0.22 and calibration within +-10 points per confidence bucket;
+- [ ] then a walk-forward backtest with the call as one factor (H.1 realism rules), compared
+      with the same model without it. If any step fails, the calls stay a reading aid.
+
+**Interview angle.** Same discipline as R.4 (judge validated before used): an LLM that explains
+every move after the fact is easy; one whose stated confidence matches how often it is right,
+measured on calls made before the fact, is the claim worth making.
 
 ---
 
