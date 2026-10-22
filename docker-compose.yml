@@ -58,7 +58,7 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.18.3
     container_name: qdrant
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: always   # part of core.sh: the daily pipeline needs it (2026-10-22)
     logging: *default-logging
     mem_limit: 2g
     environment:
@@ -151,7 +151,7 @@ services:
   quant_data:
     image: xiz001/quant_data:916d5ee
     container_name: quant_data
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
     environment:
       - OLLAMA_MODEL=qwen3:4b-q4_K_M
@@ -200,7 +200,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.19.0
     container_name: mlflow
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: always   # part of core.sh: the daily pipeline needs it (2026-10-22)
     logging: *default-logging
     ports:
       - "15050:5000"
@@ -226,7 +226,7 @@ services:
     profiles: ["disabled"]
     image: xiz001/quant_ai:73f05d6
     container_name: quant-ai
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
     ports:
       - "18000:8083"
@@ -281,7 +281,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
     ports:
       - "15070:8080"
@@ -299,7 +299,7 @@ services:
   airflow-postgres:
     image: postgres:15-alpine
     container_name: airflow-postgres
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: always   # part of core.sh: the daily pipeline needs it (2026-10-22)
     logging: *default-logging
     environment:
       POSTGRES_USER: airflow
@@ -345,7 +345,7 @@ services:
       dockerfile: Dockerfile.airflow
     image: quant_airflow:local
     container_name: airflow-webserver
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
     environment: *airflow-env
     command: webserver
@@ -371,7 +371,7 @@ services:
       dockerfile: Dockerfile.airflow
     image: quant_airflow:local
     container_name: airflow-scheduler
-    restart: unless-stopped   # stays stopped after ui_only.sh stops it (2026-10-22)
+    restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
     environment: *airflow-env
     command: scheduler
