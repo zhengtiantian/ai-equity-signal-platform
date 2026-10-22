@@ -29,4 +29,11 @@ if [ -n "$others" ]; then
   docker compose stop $others
 fi
 docker compose up -d "${UI[@]}"
+# nginx in quant_ui resolves quant_api once, at its own start: if quant_api was still
+# restarting then, every /api call answers 502. Wait for quant_api, then restart quant_ui.
+for _ in $(seq 1 60); do
+  [ "$(docker inspect -f '{{.State.Health.Status}}' quant_api 2>/dev/null)" = healthy ] && break
+  sleep 3
+done
+docker compose restart quant_ui >/dev/null
 echo "quant_ui: http://localhost:18080 (My Holdings, Market Briefs)"
