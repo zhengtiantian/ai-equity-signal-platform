@@ -2304,7 +2304,45 @@ in a real observation from that run, with numeric tolerance so a model quoting 0
 0.2803 counts as quoting rather than fabricating. R.11 is the same mechanism pointed at
 documents instead of tool outputs — and reusing it is the point, since it is already tested.
 
-- Status: [ ] Pending (2 days, after R.10)
+- Status: 🟡 In progress (2026-10-22) — harness built and smoke-tested; judge not yet trusted.
+
+**Built** (`quant_ai/eval/gen_eval.py`, 13 unit tests, commit 62c4994): generate answers with the
+production `answer_from_news` for the 60 R.4 queries + 8 unanswerable probes; split into sentences
+with their citations (bracketed and prose, "Excerpt 6"); numeric grounding without a model (F.17's
+idea, tolerance from the answer's own rounding); a local judge labels each sentence (claim/meta,
+supported/partial/unsupported, supporting excerpt ids) and each answer's relevance; Claude via
+`claude -p` labels a reference sample; `--kappa` measures a judge before `--score` reports. Excerpts
+given to the judge carry symbol and date exactly as the generator saw them (without them every dated
+sentence looked invented).
+
+**Judges against Claude, 28 sentences, rubric v2** (v2 says "the excerpts report X" is a claim about X
+and lists the typical partials: over-generalisation, stronger wording, dates/figures not in the
+excerpts, merged facts):
+
+    judge              kappa 4-class   kappa supported-vs-not
+    gemma-4-e4b        0.19            0.10      too lenient: misses over-generalisation
+    qwen3.5-9b         0.43            0.44      now errs strict
+    Claude v1 vs v2    0.79            0.83      the reference is stable across rubric versions
+
+Not good enough to report a table (R.4's judge was 0.67).
+
+**Found on the way.** LM Studio now ignores `reasoning_effort: "none"`, `chat_template_kwargs` and
+`/no_think` for qwen3.5: all tokens go to reasoning. Consequences: `/api/ask/news` takes ~60-200 s an
+answer (R.10 measured ~9 s), and R.4's qwen3.8-27b judge (which relied on `reasoning_effort`) would be
+as slow. An empty pre-filled think block (`<think>\n\n</think>\n\n` as the assistant turn) works:
+9-14 s. Whether to ship that to production is one of R.11's questions.
+
+**Next (decided 2026-10-22):**
+- [ ] Generation, once LM Studio is idle (not during the nightly news chain): three runs of 68 questions
+      — `prod_reason` (reasoning on, rerank off = production today, ~2 h), `noreason` (prefill, rerank off,
+      ~15 min), `noreason_rerank` (prefill, rerank on, ~15 min). Answers: does turning reasoning off cost
+      faithfulness; what does rerank do to the answers.
+- [ ] **A — Claude as the primary judge** (`claude -p`, subscription, ~1,000 sentences, ~35 min); the
+      user spot-checks ~50 sentences by hand to validate it. Local qwen3.5-9b reported alongside.
+- [ ] **B — in parallel, as an experiment:** grow the Claude reference to ~100 sentences and try two or
+      three ways to make a local judge reach ~0.6 (few-shot examples, extract-evidence-then-grade,
+      qwen3.8-27b with the prefill). If one works, R.11 can run fully local with no quota; if not, A stands.
+- [ ] Then `--score --compare`, and decide on the production prefill.
 
 ### R.12 One retriever for every news consumer — hybrid search behind `search_news`
 
