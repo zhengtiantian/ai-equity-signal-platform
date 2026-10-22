@@ -3754,11 +3754,29 @@ geopolitics, no; and right now nothing at all, because the pipeline is down.
 
 ### Q.2 Revive the pipeline — prerequisite for everything below (🔴, 1 day)
 
-- [ ] Move the Airflow metadata DB off Docker (SQLite or a host Postgres), or document that the
-      data containers must run; either way the scheduler must not depend on Docker Desktop.
-- [ ] Run each DAG end to end (Stage 7.2.2), backfill 2026-10-09 -> today, confirm one
-      automatic trigger.
-- [ ] Alert when a DAG has not succeeded for 2 days (the outage above went unnoticed for weeks).
+- [x] ~~Move the Airflow metadata DB off Docker~~ — not enough on its own: the data itself
+      (MongoDB, MySQL batch queue, Qdrant) lives in Docker too. Decision (2026-10-22): Docker stays
+      up with `quant_docker/core.sh` (login chain + airflow-postgres, qdrant, mlflow; restart always).
+- [x] **Root cause of the stale signals found**: not only Docker. Since the 2026-07-21 reorganisation
+      the price and analyst collectors loaded a non-existent `.env` path, failed every run, and blocked
+      `score_signals`. Fixed (f97dc75); `daily_signal_pipeline` ran green end to end on 2026-10-22 and
+      signals moved from 2026-07-17 to 2026-10-22.
+- [x] Catch-up started 2026-10-22: GDELT backfill of 2026-10-08 → today, then match / enrich / features.
+- [x] Alerts: per-task failure notification (`notify_failure`) + freshness watchdog in quant_ai
+      (`/api/markets/pipeline/health`, widget line, one notification a day while stale).
+- [x] LM Studio kept (verified that mlx-lm reproduces gemma but not qwen3.5, and that llama.cpp
+      embeddings drift enough to need a reindex — see below); its server is kept up headless by
+      launchd `com.quant.lmstudio-server` so the 03:00 news chain does not depend on the app being open.
+- [ ] Confirm one fully automatic night (02:00 UTC backfill chain + 07:30 signals) with no alert.
+
+**LM Studio replacement, evaluated 2026-10-22 (not done, kept as an option).** Python MLX can load
+every model without LM Studio (mlx-lm 0.32 supports qwen3_5 and gemma4). Against LM Studio on the
+same files and the pipeline's own `call_llm`: gemma pass A matches (event type 99%, sentiment
+corr 0.988 vs stored labels); qwen3.5-9b pass B does **not** (corr 0.78-0.80 vs LM Studio, whose
+own repeat is 0.999; four prompt renderings and mlx-vlm tried) — LM Studio's MLX engine is its own
+native build. nomic embeddings via llama.cpp on the same GGUF: cosine 0.9965, top-10 overlap 8.9/10.
+Switching would need a reindex, R.4 re-run, pass-B re-labelling with an IC check, and the qwen27
+judge's kappa re-measured.
 
 ### Q.3 Events as structured features (🟡, ~6 days; feeds N.4)
 
@@ -3802,6 +3820,9 @@ the weight: it turns retrieval into numbers.
 
 | Priority | Item | Interview Value | Practical Value | Effort | Status |
 |---|---|---|---|---|---|
+| 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-22: signals current again, catch-up running, alerts live; confirm one automatic night |
+| ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | Quant+AI | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
+| ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
 | 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
@@ -3815,7 +3836,7 @@ the weight: it turns retrieval into numbers.
 | ⭐⭐⭐ | **H.1 Backtest with transaction costs + liquidity filter** | Quant essential | 🔴 Real returns | 2 days | ✅ Done — COMMISSION_BPS=5, SLIPPAGE 10/30bps tiered, MIN_DOLLAR_VOL=$5M filter in backtest_portfolio.py |
 | ⭐⭐⭐ | H.2 Market Regime detection (VIX filter) | Quant essential | 🔴 IC stability | 4 days | ✅ Done (2026-07-15) — 4-regime weight switching (RISK_ON/NEUTRAL/STRESSED/RISK_OFF) |
 | ⭐⭐⭐ | H.3 Paper Trading engine + stop-loss | Quant essential | 🔴 OOS validation | 4 days | ✅ Done (2026-07-15) — vol-adaptive stop-loss (2×vol_20d) + OOS IC rolling monitor |
-| ⭐⭐⭐ | Stage 7 Airflow + Kafka end-to-end | DE critical | High | 1 week | [ ] Pending (daily scheduling runs via launchd, not Airflow) |
+| ⭐⭐⭐ | Stage 7 Airflow + Kafka end-to-end | DE critical | High | 1 week | 🟡 Revived 2026-10-22 — the host Airflow scheduler (launchd) runs all 10 DAGs; its metadata DB and the data are in Docker, so `core.sh` must be up. Kafka runs (quant_api needs it). See Q.2 |
 | ⭐⭐⭐ | G.1 Live trading execution (Alpaca API) | Quant/Prod | 🔴 Real money | 2-3 weeks | [ ] Pending — paper trading done; need broker API + order manager + risk guardrails |
 | ⭐ | G.2 Stock universe expansion (103→150+) | Quant bonus | Medium | 2-7 days | Phase 1 ✅ Done (STX/WDC/HXSCL added 2026-07-15); Phase 2 energy/materials [ ] Pending |
 | ⭐⭐⭐ | C.2 Risk metrics (Sharpe / drawdown) | Quant essential | High | - | ✅ Done |
@@ -3824,16 +3845,16 @@ the weight: it turns retrieval into numbers.
 | ⭐⭐⭐ | E.7 README + architecture diagram | All interviews | Medium | 1 day | ✅ Done (2026-07-15) |
 | ⭐⭐⭐ | Stage 7 MLflow actual runs | DE/MLE | Medium | 1 day | ✅ Done (2026-07-15) — 8 runs logged (Ridge/LightGBM/Ensemble × 20d+60d) |
 | ⭐⭐ | H.4 Signal quality monitoring (rolling IC) | Quant strong | 🟡 Signal health | 2 days | [ ] Pending |
-| ⭐⭐ | C.1 Daily signal automation | Medium | Extremely high | 3 days | ✅ Done (launchd, not Airflow) |
+| ⭐⭐ | C.1 Daily signal automation | Medium | Extremely high | 3 days | ⚠️ Was silently broken 2026-07-21 → 2026-10-22: after the collectors reorganisation (d14f30c) the price and analyst collectors read a stale `news_collectors/finnhub/.env` path, failed every morning, and `score_signals` (downstream) never ran — signals stuck at 2026-07-17. Fixed 2026-10-22 (f97dc75); runs under Airflow |
 | ⭐⭐ | C.3 Signal UI page | Medium | Extremely high | 3 days | ✅ Done |
-| ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → 情绪特征) | DE关键 | 🔴 填补数据缺口 | 1.5 days | [ ] Pending |
-| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on任意任务失败) | DE essential | 🔴 运维必需 | 0.5 days | [ ] Pending |
+| ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → 情绪特征) | DE关键 | 🔴 填补数据缺口 | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_1_collect_and_match` (02:00 UTC) matches every new `news_articles` doc, intraday sources included (N.0 gave them candidate symbols) |
+| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on任意任务失败) | DE essential | 🔴 运维必需 | 0.5 days | ✅ Done 2026-10-22 — `notify_failure` on every task (macOS notification + `airflow_task_failures.log`) and quant_ai's freshness watchdog (`markets/pipeline_health.py`, every 30 min, widget warning) for when nothing runs at all |
 | ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.6 |
 | ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → Claude对话查信号) | AI差异化 | 高 | 0.5 days | ✅ Done — verified over the real MCP protocol |
 | ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | AI essential | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
 | ⭐⭐ | F.3 SHAP interpretability | MLE strong | Medium | 1 day | ✅ Done (factor_analysis.py) |
-| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (每日Gemma+Qwen对新文章打分，保持情绪特征最新) | MLE+DE | 高 | 1.5 days | [ ] Pending (after J.2) |
-| ⭐⭐ | **J.1 Airflow DAG migration** (依赖链调度；任务失败自动停止下游；可视化DAG视图) | DE强 | 高 | 3.5 days | [ ] Pending (Stage 7.2.2) |
+| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (每日Gemma+Qwen对新文章打分，保持情绪特征最新) | MLE+DE | 高 | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_2_enrich_and_features` (pass A gemma, pass B qwen3.5-9b, merge, features, Qdrant index) is triggered daily by backfill_1 |
+| ⭐⭐ | **J.1 Airflow DAG migration** (依赖链调度；任务失败自动停止下游；可视化DAG视图) | DE强 | 高 | 3.5 days | ✅ Done 2026-07-17 — Airflow host scheduler replaced task.py; dependency chains per DAG |
 | ⭐⭐ | F.10 Strategy Studio → Backtest execution pipeline | AI+Quant full-loop | High | 3-4 days | [ ] Pending — UI exists, need backtest adapter + quant_api endpoint |
 | ⭐⭐ | F.4 LangGraph multi-agent research assistant | AI Engineer must-have | High | 2 weeks | [ ] Pending |
 | ⭐⭐ | F.17 Portfolio Manager Agent (signals+positions→rebalance recommendation) | AI+Quant | 高 | 3 days | ✅ Done (2026-07-27) — review layer over the rule engine; 3 validation gates; 25 unit tests |
