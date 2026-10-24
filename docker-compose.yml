@@ -224,7 +224,7 @@ services:
   # ======================================================
   quant-ai:
     profiles: ["disabled"]
-    image: xiz001/quant_ai:73f05d6
+    image: xiz001/quant_ai:15793bf
     container_name: quant-ai
     restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
