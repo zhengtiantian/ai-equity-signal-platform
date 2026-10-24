@@ -314,8 +314,7 @@ services:
 
   airflow-init:
     build:
-      context: .
-      dockerfile: Dockerfile.airflow
+      context: docker/airflow
     image: quant_airflow:local
     container_name: airflow-init
     restart: "no"
@@ -341,8 +340,7 @@ services:
 
   airflow-webserver:
     build:
-      context: .
-      dockerfile: Dockerfile.airflow
+      context: docker/airflow
     image: quant_airflow:local
     container_name: airflow-webserver
     restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
@@ -367,8 +365,7 @@ services:
   airflow-scheduler:
     profiles: ["disabled"]
     build:
-      context: .
-      dockerfile: Dockerfile.airflow
+      context: docker/airflow
     image: quant_airflow:local
     container_name: airflow-scheduler
     restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)

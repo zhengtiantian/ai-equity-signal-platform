@@ -12,7 +12,7 @@
 # Not started: kafka-ui, airflow-webserver, quant_data / quant-ai containers (their work runs
 # on the host). Start the full platform with: docker compose up -d
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."          # the repo root, where docker-compose.yml is
 
 # Every data volume (mysql, mongo, kafka, airflow...) is a bind mount on the external disk.
 if [ ! -d /Volumes/Data4T/docker-volumes ]; then

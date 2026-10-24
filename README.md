@@ -216,18 +216,22 @@ An end-to-end quantitative research and signal generation platform that processe
 
 ### Prerequisites
 - Docker Desktop (48GB+ RAM recommended — all LLMs run via LM Studio)
-- [LM Studio](https://lmstudio.ai/) with the following models loaded:
-  - `gemma3:4b` — news labeling Pass A
-  - `qwen3:4b` — news labeling Pass B
-  - `qwen3.5-9b-mlx` — quant_ai chat assistant
-  - `nomic-embed-text` — quant_ai RAG embeddings
+- [LM Studio](https://lmstudio.ai/) with these models downloaded. They need not be loaded:
+  each pipeline task loads the one it needs and unloads it afterwards
+  (`quant_data/tools/lm_session.py`).
+  - `qwen3.5-4b-mlx` — GDELT news filter and company matching
+  - `gemma-4-e4b-it-mlx` — news labelling Pass A
+  - `qwen3.5-9b-mlx` — news labelling Pass B, quant_ai news Q&A
+  - `text-embedding-nomic-embed-text-v1.5` — RAG embeddings
 
-### Start All Services
+### Start the Core Services
 
 ```bash
 git clone https://github.com/zhengtiantian/ai-equity-signal-platform.git
 cd ai-equity-signal-platform
 docker compose pull
+./scripts/core.sh          # login chain + what the daily pipeline needs; stops the rest
+# or every service:
 docker compose up -d
 ```
 
@@ -249,6 +253,19 @@ bash run_host.sh
 | MLflow | http://localhost:15050 | — |
 | Kafka UI | http://localhost:15070 | — |
 | quant_ai API | http://localhost:18000/docs | — |
+
+---
+
+## Repository Layout
+
+| Path | What it is |
+|------|------------|
+| `docker-compose.yml` | Every service of the platform; image tags are pinned by each repo's CI |
+| `.env.example` | Variables the compose file expects (copy to `.env`) |
+| `scripts/core.sh` | Starts the always-on core (login chain, Airflow metadata DB, Qdrant, MLflow) and stops the rest |
+| `scripts/host_proxy.py` | Host-side HTTP(S) proxy so Docker can pull and build behind a VPN |
+| `docker/airflow/` | Airflow image for the web UI and `airflow-init` (Dockerfile + vendored provider wheel) |
+| `PROJECT_PLAN.md` | Roadmap, status and the detailed spec of every item |
 
 ---
 

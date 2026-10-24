@@ -3966,7 +3966,7 @@ geopolitics, no; and right now nothing at all, because the pipeline is down.
   the same day). Scored from CNBC daily bars after the close; scorecard = hit rate, Brier score,
   calibration by confidence bucket, per brief kind.
 - quant_ui: My Holdings rebuilt on these routes; Market Briefs tab with the scorecard.
-  quant_docker: `ui_only.sh` starts just the login chain (mysql, mongodb, keycloak, kafka,
+  quant_docker: `ui_only.sh` (since replaced by `scripts/core.sh`) starts just the login chain (mysql, mongodb, keycloak, kafka,
   quant_api, quant_ui); everything else `unless-stopped`.
 
 ### Q.1 Audit: what the signal pipeline does with events today
@@ -3986,7 +3986,7 @@ geopolitics, no; and right now nothing at all, because the pipeline is down.
 
 - [x] ~~Move the Airflow metadata DB off Docker~~ — not enough on its own: the data itself
       (MongoDB, MySQL batch queue, Qdrant) lives in Docker too. Decision (2026-10-22): Docker stays
-      up with `quant_docker/core.sh` (login chain + airflow-postgres, qdrant, mlflow; restart always).
+      up with `quant_docker/scripts/core.sh` (login chain + airflow-postgres, qdrant, mlflow; restart always).
 - [x] **Root cause of the stale signals found**: not only Docker. Since the 2026-07-21 reorganisation
       the price and analyst collectors loaded a non-existent `.env` path, failed every run, and blocked
       `score_signals`. Fixed (f97dc75); `daily_signal_pipeline` ran green end to end on 2026-10-22 and
