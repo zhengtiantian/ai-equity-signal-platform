@@ -747,7 +747,7 @@ The honest starting position: the retrieval layer is `SimpleVectorStore` in `qua
 - [ ] **R.9** Answerability checklist — not a build item. If any question in it still needs hedging once R.1–R.8 ship, the work is not done. "Scale" carries nothing without document count, throughput, latency, and cost attached
 
 - [x] **R.10** Retriever wired into generation — `POST /api/ask/news` answers from the 716K-article corpus with citations by article id, **refuses** when retrieval is empty rather than answering from parametric memory (a RAG system that silently falls back still reads as sourced, so its failure is invisible), and passes `symbol` + date window into **both** legs. Additive, not a replacement: `knowledge/` answers "how does the regime scorer weight factors", the news corpus answers "what happened to NVDA on export controls". Two defects surfaced only by wiring it: **the legs filtered asymmetrically** — qdrant filtered inside the search while the sparse leg took the best matches across all history and filtered in Python after, so one NVDA query returned 37 hits instead of 100 and they were the wrong 37, which **would have corrupted R.4's ablation silently**; and **body fetch took 5.9s** because `find_one({symbol, title})` has no index to use, now 1.5ms via one `$in` on the mongo `_id` both legs carry. Measured latency split rather than totalled — dense leg 16–23ms, sparse `$text` 1.1–3.6s, body fetch 1.5ms, **generation 66–111s**. Generation is 99% of it and the model is not slow: 47 tok/s is normal for a 9B on Apple Silicon, but it emitted **3,124 completion tokens for a ~100-token answer** — a thinking model spending ~3,000 tokens of hidden reasoning on summarisation. Disabling thinking timed out rather than helping, so it is recorded as **open**. Quality note: asked how investors reacted to Micron's guidance, it reported that the excerpts *disagree* (2019-09-25 "positively surprised" vs 2019-09-27 "stock tumbles") and cited both sides instead of picking one
-- [ ] **R.11** Generation-side evaluation — retrieval metrics say the right document was in the context window, not whether the answer used it. faithfulness/groundedness, citation accuracy (a citation to a real document that does not contain the claim is a hallucination wearing a source), answer relevance. Reuses F.17's grounding gate, pointed at documents instead of tool outputs
+- [x] **R.11** Generation-side evaluation — retrieval metrics say the right document was in the context window, not whether the answer used it. faithfulness/groundedness, citation accuracy (a citation to a real document that does not contain the claim is a hallucination wearing a source), answer relevance. Reuses F.17's grounding gate, pointed at documents instead of tool outputs
 ### Security — the AI attack surface
 - [x] **S.1** Indirect prompt injection defence — R.10 opened the exposure: `/api/ask/news` retrieves from 716,074 articles scraped from the open web and puts their body text in the model's context, so **nobody has to compromise anything to write there** — publishing an article GDELT ingests is enough. The system prompt telling the model to answer *only* from those excerpts makes an injected instruction **more** persuasive, not less, and R.7 intends to feed retrieval into the feature store, where a poisoned answer becomes a poisoned position. Four layers, deliberately unequal: **structural separation** (retrieved text lives only in a user message inside `<excerpt>` delimiters, with the system prompt stating nothing inside can change the rules — this is the real defence, because it is about *where authority lives* rather than what the text says), **sanitisation** (zero-width, bidi and control characters neutralised, deterministic so rewording cannot evade it), **pattern detection** (7 regexes — the weak layer, reported and never enforced: dropping a document on a regex match would let anyone suppress coverage of a company by publishing one sentence), and **output checks**. Measured rather than assumed: the first exfiltration pattern fired 16 times in 40,000 real articles, every one an earnings-call transcript where the operator asks analysts to "repeat your instructions" — a rule that fires on ordinary journalism is worse than no rule, because the flag then gets ignored on the day it matters. Final false-positive rate **3 in 40,000 (0.0075%)**. **Two defects the tests found rather than review**: deleting zero-width characters *helped* the attacker, since `Ignore<ZWSP>all<ZWSP>previous<ZWSP>instructions` collapses into one unmatchable token while a model reads the phrase fine through the missing spaces — neutralising a hiding character must not destroy the evidence, so they are replaced with a space; and `chars_sanitised` was a length delta, which is always 0 once characters are replaced instead of deleted, so the metric hid the signal it existed to surface. **Three evasion tests assert the pattern layer fails** on rewording, indirect framing and non-English — asserted rather than hidden, because that is the argument for the layering. End-to-end against a local 9B with a poisoned excerpt the model reported the real figure and **called out the embedded instruction** instead of following it; the automated adoption check false-positived on that answer because the model *mentioned* the injected phrasing in order to report it, and a substring test cannot separate adopting from reporting — the same difficulty R.11's faithfulness gate will face. 22 tests
 - [x] **S.2** Guard at the MCP boundary rather than in each consumer — S.1 protected one endpoint, while `search_news` was still handing raw article text unguarded to **four** consumers: Claude Desktop, Codex, the F.21 research agent and the F.17 portfolio agent. It is the only tool on that server returning free text written outside the platform (every other returns platform-computed numbers), which makes it *the* injection surface. **The guard goes at the tool boundary, not in each consumer**: four implementations would be four chances to drift and a client registered later would arrive unprotected, whereas the boundary where untrusted text crosses into a model context is exactly the boundary the tool contract already defines — the same argument that let one stdio server serve three clients. Title, excerpt and company are sanitised, pattern hits attach per article as `untrusted_content_flags`, and a `_security` block states the text is data to report on rather than instructions to follow. **Reports, never withholds** — dropping an article on a regex match would let anyone erase a company from the platform's coverage with one sentence — and **fails open, asserted in a test**, because dropping every article when a payload will not parse would be a self-inflicted denial of service while the structural defence still holds. Verified against the redeployed API and over the real MCP protocol; 54 tests across the suite
@@ -2496,7 +2496,7 @@ in a real observation from that run, with numeric tolerance so a model quoting 0
 0.2803 counts as quoting rather than fabricating. R.11 is the same mechanism pointed at
 documents instead of tool outputs — and reusing it is the point, since it is already tested.
 
-- Status: 🟡 In progress (2026-10-22) — harness built and smoke-tested; judge not yet trusted.
+- Status: ✅ Done (2026-10-24) — three runs judged by Claude, the judge checked by verbatim evidence, production switched to no-thinking. Results below.
 
 **Built** (`quant_ai/eval/gen_eval.py`, 13 unit tests, commit 62c4994): generate answers with the
 production `answer_from_news` for the 60 R.4 queries + 8 unanswerable probes; split into sentences
@@ -2524,17 +2524,44 @@ answer (R.10 measured ~9 s), and R.4's qwen3.8-27b judge (which relied on `reaso
 as slow. An empty pre-filled think block (`<think>\n\n</think>\n\n` as the assistant turn) works:
 9-14 s. Whether to ship that to production is one of R.11's questions.
 
-**Next (decided 2026-10-22):**
-- [ ] Generation, once LM Studio is idle (not during the nightly news chain): three runs of 68 questions
-      — `prod_reason` (reasoning on, rerank off = production today, ~2 h), `noreason` (prefill, rerank off,
-      ~15 min), `noreason_rerank` (prefill, rerank on, ~15 min). Answers: does turning reasoning off cost
-      faithfulness; what does rerank do to the answers.
-- [ ] **A — Claude as the primary judge** (`claude -p`, subscription, ~1,000 sentences, ~35 min); the
-      user spot-checks ~50 sentences by hand to validate it. Local qwen3.5-9b reported alongside.
-- [ ] **B — in parallel, as an experiment:** grow the Claude reference to ~100 sentences and try two or
-      three ways to make a local judge reach ~0.6 (few-shot examples, extract-evidence-then-grade,
-      qwen3.8-27b with the prefill). If one works, R.11 can run fully local with no quota; if not, A stands.
-- [ ] Then `--score --compare`, and decide on the production prefill.
+**Results (2026-10-24).** 68 questions (60 from R.4 + 8 unanswerable probes) × 3 configurations,
+generated through production's `answer_from_news`; 1,183 sentences and 204 answers labelled by Claude
+(`--claude-judge`, one call per answer so its excerpts are sent once). Faithfulness counts partial as 0.5;
+95% bootstrap CIs.
+
+    run               faithfulness        cite precision  numbers grounded  declined probes  latency
+    noreason          0.869 [.84, .90]    0.986           223/271 = 0.82    8/8              ~6 s
+    noreason_rerank   0.874 [.85, .90]    0.969           268/321 = 0.84    8/8              ~8 s
+    prod_reason       0.899 [.87, .93]    0.966           117/156 = 0.75    8/8              60-200 s
+
+Paired: thinking on − off = +0.041 [−0.005, +0.085], not significant, and the thinking answers are half
+as long (3.9 sentences vs 6.7), so part of the gain is saying less. Rerank − none = +0.013 [−0.021,
++0.046]: R.3's +0.076 nDCG does not carry through to the answers. No answer invented wholesale (2 of
+1,080 claims unsupported); the errors are partials — over-generalising, merging two names, a causal
+"consequently" the excerpts do not support, a date moved by a day.
+
+**Decision: production answers without thinking.** `/api/ask/news` pre-fills an empty think block for
+qwen (`NEWS_REASONING=1` restores thinking): ~10x faster at no measurable cost in faithfulness.
+
+**The judge, checked without a second opinion.** A hand-labelled sample was planned; the user chose a
+mechanical check instead, since Claude re-reading Claude shares its errors. For each sentence the judge
+called supported or partial, Claude split it into facts and copied, per fact, the exact excerpt text it
+rests on; code then checked each copy is really in that excerpt (`--evidence`, `--evidence-report`).
+- Quotes really in the named excerpt: **2,996 / 2,996** — no invented evidence.
+- "Supported": 812 / 827 (98.2%) have every stated fact quoted verbatim. The 15 others are mostly
+  inference from the excerpt's date line ("late next year" in a 2026-07 article → late 2027) or common
+  knowledge ("Target is a retailer").
+- "Partial": 125 / 251 have a fact found nowhere; in the other 126 every fact is in the text and what is
+  wrong is how they are joined (the six sampled: merged names, invented causality, a date shifted, a
+  denial attached to the wrong claim) — errors a quote check cannot see and the judge did.
+Facts about the excerpts as a whole ("no excerpt mentions", "the only one") cannot be quoted and are
+counted separately (243). What can be said: "Claude-judged, with every piece of cited evidence verified
+verbatim"; not "validated by a human". The unused spot-check page stays available for that.
+
+**Also found.** MLX in LM Studio crashed after ~70 minutes of four-slot thinking generation (`metal::malloc
+Resource limit (499000) exceeded`); a cold embedding model answered HTTP 500 to eight parallel requests
+(generation now embeds once before going parallel). Option B (a local judge reaching ~0.6 kappa) was not
+pursued: the evidence check made the Claude judge usable as it is.
 
 ### R.12 One retriever for every news consumer — hybrid search behind `search_news`
 
@@ -4071,7 +4098,7 @@ the weight: it turns retrieval into numbers.
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
 | 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
-| ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | [ ] Pending (after R.10) |
+| ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | ✅ Done 2026-10-24 — thinking off: ~10x faster, faithfulness 0.869 vs 0.899 (n.s.); judge's evidence 2,996/2,996 verbatim |
 | ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | ✅ Done (2026-10-13) — nDCG +0.076 [+0.043, +0.113] for the shipped top-30/256 config (~1 s), +0.117 at top-100; significant under both validated judges; behind NEWS_RERANK in /api/ask/news |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
