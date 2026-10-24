@@ -3805,7 +3805,21 @@ geopolitics, no; and right now nothing at all, because the pipeline is down.
 - [x] LM Studio kept (verified that mlx-lm reproduces gemma but not qwen3.5, and that llama.cpp
       embeddings drift enough to need a reindex — see below); its server is kept up headless by
       launchd `com.quant.lmstudio-server` so the 03:00 news chain does not depend on the app being open.
-- [ ] Confirm one fully automatic night (02:00 UTC backfill chain + 07:30 signals) with no alert.
+- [x] Caught up 2026-10-24 after the disk-full pause of 10-22 (backfill DAGs paused, a hung orphan
+      collector killed): company match 10-11 → 10-24, enrich passes A/B (3,005 articles, 0 errors),
+      features and the Qdrant index; `/api/markets/pipeline/health` all green.
+- [x] **One LM Studio task at a time, sized to the machine** (`quant_data/tools/lm_session.py`).
+      Two LLM tasks at once made LM Studio swap models on every request (10-23: 69/76 job_agent judge
+      calls failed; 10-24: ~70 Channel Errors when backfill_1 and backfill_2 overlapped), and every
+      model ran with one parallel slot, so 8 client workers queued behind one prediction (0.8 art/s).
+      Each LLM task now goes through a shared flock (job_agent's own `lm_model_guard.py` honours the
+      same lock), unloads the LLMs it does not need, loads its model with the slot count measured on
+      this machine, sets its worker variable to match and unloads afterwards unless a queued task needs
+      the model. Measured on the M5 Pro 48 GB (generated tok/s at 1/2/4/8 slots):
+      gemma-4-e4b 50 / 86 / 137 / 155 → 8 slots; qwen3.5-9b 52 / 80 / 113 / 120 → 4 slots;
+      two qwen3.5-9b instances × 2 slots 82, below one × 4 — one instance with more slots wins on one GPU.
+- [ ] Confirm one fully automatic night (02:00 UTC backfill chain + 07:30 signals) with no alert,
+      the first one through `lm_session` (qwen3.5-4b calibrates itself at the start of gdelt_collect).
 
 **LM Studio replacement, evaluated 2026-10-22 (not done, kept as an option).** Python MLX can load
 every model without LM Studio (mlx-lm 0.32 supports qwen3_5 and gemma4). Against LM Studio on the
@@ -3858,7 +3872,7 @@ the weight: it turns retrieval into numbers.
 
 | Priority | Item | Interview Value | Practical Value | Effort | Status |
 |---|---|---|---|---|---|
-| 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-22: signals current again, catch-up running, alerts live; confirm one automatic night |
+| 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-24: caught up (company match current, health all green); LM Studio tasks serialised and sized by `lm_session`; confirm one automatic night |
 | ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | Quant+AI | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
