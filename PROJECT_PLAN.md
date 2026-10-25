@@ -4113,6 +4113,66 @@ Wire them into `score_daily_signals` only when the scorecard says so:
 every move after the fact is easy; one whose stated confidence matches how often it is right,
 measured on calls made before the fact, is the claim worth making.
 
+### Q.5 Holdings advisor — event-driven advice on the user's own positions (🔴, ~3 days)
+
+**Goal (user, 2026-10-25).** The user's priority is profit: get the losing positions back (INTC is
+-18%) and grow. The system watches the holdings and, when something worth reacting to happens,
+writes a report with concrete actions: what to do, at what limit price, how much, until when, and
+what happens if it is wrong — e.g. trim into strength before INTC's 10-29 earnings and buy back
+lower after, to lower the cost basis. Advice only: nothing is ever traded automatically.
+
+**Data (all already in the platform).** Holdings, cost and weights (quant_ai), live quotes with
+pre/post (Nasdaq, 5 s), daily bars (support / resistance / ATR), earnings calendar with consensus
+EPS and the options-implied move (Nasdaq), news per company with LLM sentiment and event type
+(quant_data, intraday every 30 min, labels overnight), the quant model's ranks and LONG list
+(daily), the macro board. New: **available cash**, entered by hand in My Holdings (starts at 0).
+
+**Monitoring — every 15 minutes, code only, no model.**
+- Price move beyond the stock's own threshold: **2x its median absolute daily move over the last six
+  months**, recomputed daily. A fixed 3% was measured first and rejected: INTC, SK hynix, Seagate and
+  WDC moved more than 3% on 50-57% of days; at 2x median (INTC/SKHY/STX ~6%, TSM ~3%) each name
+  triggers about once a week.
+- Price reaching a limit from an open recommendation.
+- Earnings: a holding reports tomorrow (prepare a plan), or has just reported (read it, adjust).
+- Important news on a holding: earnings / guidance / rating or target change / M&A / buyback /
+  regulation / litigation / export controls / management change (keyword rules first; a local
+  model to rank intraday headlines only if the rules prove too coarse), or a burst of news.
+- A sector bellwether moving 5%+ outside regular hours (the existing flash trigger).
+Cooldown: one trigger per holding and event type per 2 hours; at most ~6 updates a day.
+
+**Flow.** trigger → snapshot built by code (position, break-even, % needed to get back to cost,
+support / resistance, ATR, earnings and implied move, 7 days of news, quant rank, buy candidates
+from the LONG list, cash) with **candidate limit prices computed by code** (implied move when a
+report is near, else 2x ATR), so the model quotes numbers rather than inventing them → Claude
+(`claude -p`, subscription, web search) writes the report in Chinese and English → a structured
+ORDERS block (symbol, side, % of position or shares, limit, valid until, reasons), validated by code
+(held or candidate symbol, limit within range of the price, validity at most 30 days) → stored and
+shown in My Holdings → scored by code: filled or not from daily bars, and at expiry whether acting
+beat not acting.
+
+**Reports.** A full report every weekday at 13:00 Dublin (in the US pre-market, 1.5 h before the
+open); focused updates when a trigger fires. Sections: bottom line (the 2-3 actions today, or why
+nothing); each holding (status, drivers with sources, orders, the failure case); earnings plays
+(pre/post plan from the implied move, partial size, the gap risk of selling before a jump); new
+ideas (1-3 from the LONG list, preferring names that reduce the chip / memory concentration, sized
+to the cash or as a switch when cash is 0); risks and rules (concentration; the Irish CGT four-week
+rule on a loss sale bought back within four weeks).
+
+**Alerts.** Two levels. Urgent — results just out, a recommended limit reached, a move beyond 1.5x
+the threshold, major news (M&A, regulator, profit warning): a macOS notification and a red banner
+in My Holdings. Normal — everything else: a "new advice" mark in My Holdings only. No widget lines
+and no phone push for now.
+
+**Models.** Monitoring, levels, validation and scoring: code. Analysis and writing: Claude, because
+it needs reasoning and fresh news (the local qwen agreed with Claude at kappa 0.43 in R.11 and is
+slow with thinking). Quota: ~1 report on a quiet day, 3-6 on an earnings day, 3-5 min each.
+
+- [ ] Cash in My Holdings (stored with the portfolio, editable, starts at 0)
+- [ ] `markets/advisor.py`: snapshot, thresholds, levels, triggers, orders, scoring
+- [ ] `advisor` brief kind: schedule 13:00 Dublin, focused updates, ORDERS block, urgent alerts
+- [ ] My Holdings: latest report, open orders with fill status, history and scorecard
+- [ ] Tests; one live report end to end before INTC's earnings on 2026-10-29
+
 ---
 
 ## Consolidated Priority Table (all pending items)
@@ -4127,6 +4187,7 @@ the weight: it turns retrieval into numbers.
 |---|---|---|---|---|---|
 | 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-24: caught up (company match current, health all green); LM Studio tasks serialised and sized by `lm_session`; confirm one automatic night |
 | ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | Quant+AI | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
+| 🔥 | **Q.5 Holdings advisor (event-driven advice with limit prices, scored)** | AI agent on real decisions, with a track record | 🔴 The user's own positions | ~3 days | 🟡 In progress (2026-10-25) |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
