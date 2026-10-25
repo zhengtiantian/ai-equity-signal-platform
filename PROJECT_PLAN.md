@@ -4266,6 +4266,32 @@ pre-market / first-hour path as a challenger to LightGBM; earnings spillover (a 
 event for the holdings, more bets per year); an LLM proposing hypotheses for the same event engine,
 with a multiple-testing correction.
 
+**v4: the after-the-close pulse, from 1-minute bars (2026-10-25 night).** The user's actual idea was
+not the next day: right after an after-the-close release the stock spikes for minutes and often
+fades before or during the call; sell a ladder into the spike, buy the shares back lower. INTC
+2026-07-23: +8.6% at 16:00, +11.8% at 16:20-16:25, +4.1% by 17:15 (2026-04-23: +16.7% and kept
+rising). `research/models/earnings_pulse.py`: Alpaca 1-minute bars 15:30 .. next day 10:30 for 2,491
+after-the-close reports since 2016; the release minute found in the bars (the wire beats the SEC
+acceptance by minutes: INTC moved at 16:00-16:01, accepted 16:09), the call time read from the
+release (82%). 224 plans enumerated: when the ladder goes in (before the release; 1/3/5/10/20/30
+minutes after it; 5 minutes before the call) x levels (+1/2/3 .. +5/8/12%) x buy-back (5 or 30
+minutes into the call, end of after-hours, next open, or 1/2/3% under each sale).
+
+| Walk-forward 2019-2026 (each year trained on the earlier ones) | Acted | Mean when acting | Win | P10 |
+|---|---|---|---|---|
+| Per stock, the plan that did best in its earlier years | 96% | +0.05% (se 0.08) | 44% | -2.0% |
+| Conditional LightGBM (move since the close at placement, its range and volume, run-up, the stock's own past on the plan, EPS surprise and the LLM-read outlook after the release), 0.10%/side | 42% | +0.49% (se 0.12) | 66% | -1.9% |
+| Same, 0.25%/side and limits must trade through by 0.05% | 30% | +0.66% (se 0.13) | 59% | -1.15% |
+
+Every year >= 0 in the strict run (2019 -0.02% .. 2024 +0.67%). INTC: 14 of 30 reports, +1.33% per
+share of the ladder, 79% wins; STX negative (7 reports, -1.29%: it keeps running), so mostly
+left alone. Worst single case -15%: a ladder on part of the position, never all of it.
+Pre-release plans get no post-release features (the first run leaked them: +0.54% -> +0.49%).
+- [ ] Live for the holdings: at the release, features from live quotes + EDGAR + the LLM read, the
+      model's plan as whole-share extended-hours limit orders in an urgent advisor update; the
+      broker must accept extended-hours limit orders
+- [ ] Final model on all data, refreshed weekly; scorecard of live calls against the replay
+
 ---
 
 ## Consolidated Priority Table (all pending items)
