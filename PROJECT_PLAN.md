@@ -4248,6 +4248,24 @@ Next levers, in order: minute bars from 2016 (Alpaca, ~3x the reports); the call
 an LLM (guidance, tone) as a feature. Until a version beats holding out of sample the advisor keeps
 holding through reports.
 
+*Second round (2026-10-25 evening): more data and the release read by an LLM.* Alpaca 5-minute bars
+incl. pre/after-hours from 2016: 3,866 reports. The press release behind each (EDGAR 8-K item 2.02 /
+6-K, accepted before the open: 3,747 found, 97%) read by local qwen3.5-9b (`earnings_releases.py`):
+full-year outlook raised / kept / lowered, margin direction, tone, revenue against the last outlook,
+next quarter's outlook against this quarter, capital return, restructuring. Walk-forward over 3,030
+out-of-sample reports: rank IC rose from ~0 to +0.05 with the larger sample and to +0.056/+0.059 with
+the release features (27 of 30 actions positive), still too weak for a policy that makes money
+(mean about 0 per share when it acts). The release is mostly priced in at the open: its fields
+correlate with the gap (0.13-0.25) and hardly with the open-to-close move (-0.08..+0.03).
+One pattern worth following: after a full-year outlook cut the stock gaps down (-2.7% on average)
+and then recovers. Buying at the open and holding three sessions: +0.30% (n=77, not significant) in
+2016-2020, +2.46% (n=67, 4 standard errors) in 2021-2026; selling at the open the same day lost
+-1.39% in 2021-2026. Not stable across periods and one of many looks, so not a rule yet; for a
+holder it argues against selling into the open after a guidance cut. Next: a 1D-CNN on the 5-minute
+pre-market / first-hour path as a challenger to LightGBM; earnings spillover (a peer's report as the
+event for the holdings, more bets per year); an LLM proposing hypotheses for the same event engine,
+with a multiple-testing correction.
+
 ---
 
 ## Consolidated Priority Table (all pending items)
