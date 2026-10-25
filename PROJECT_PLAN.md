@@ -748,6 +748,7 @@ The honest starting position: the retrieval layer is `SimpleVectorStore` in `qua
 
 - [x] **R.10** Retriever wired into generation — `POST /api/ask/news` answers from the 716K-article corpus with citations by article id, **refuses** when retrieval is empty rather than answering from parametric memory (a RAG system that silently falls back still reads as sourced, so its failure is invisible), and passes `symbol` + date window into **both** legs. Additive, not a replacement: `knowledge/` answers "how does the regime scorer weight factors", the news corpus answers "what happened to NVDA on export controls". Two defects surfaced only by wiring it: **the legs filtered asymmetrically** — qdrant filtered inside the search while the sparse leg took the best matches across all history and filtered in Python after, so one NVDA query returned 37 hits instead of 100 and they were the wrong 37, which **would have corrupted R.4's ablation silently**; and **body fetch took 5.9s** because `find_one({symbol, title})` has no index to use, now 1.5ms via one `$in` on the mongo `_id` both legs carry. Measured latency split rather than totalled — dense leg 16–23ms, sparse `$text` 1.1–3.6s, body fetch 1.5ms, **generation 66–111s**. Generation is 99% of it and the model is not slow: 47 tok/s is normal for a 9B on Apple Silicon, but it emitted **3,124 completion tokens for a ~100-token answer** — a thinking model spending ~3,000 tokens of hidden reasoning on summarisation. Disabling thinking timed out rather than helping, so it is recorded as **open**. Quality note: asked how investors reacted to Micron's guidance, it reported that the excerpts *disagree* (2019-09-25 "positively surprised" vs 2019-09-27 "stock tumbles") and cited both sides instead of picking one
 - [x] **R.11** Generation-side evaluation — retrieval metrics say the right document was in the context window, not whether the answer used it. faithfulness/groundedness, citation accuracy (a citation to a real document that does not contain the claim is a hallucination wearing a source), answer relevance. Reuses F.17's grounding gate, pointed at documents instead of tool outputs
+- [ ] **R.13** One agent for every stock question — the F.21 agent decides which tools to call (cited news answers, signals, backtest, holdings and quotes, briefs, or none); fix the signals/performance 401, add the quant_ai tools, no thinking on agent steps, and a tool-selection evaluation set
 ### Security — the AI attack surface
 - [x] **S.1** Indirect prompt injection defence — R.10 opened the exposure: `/api/ask/news` retrieves from 716,074 articles scraped from the open web and puts their body text in the model's context, so **nobody has to compromise anything to write there** — publishing an article GDELT ingests is enough. The system prompt telling the model to answer *only* from those excerpts makes an injected instruction **more** persuasive, not less, and R.7 intends to feed retrieval into the feature store, where a poisoned answer becomes a poisoned position. Four layers, deliberately unequal: **structural separation** (retrieved text lives only in a user message inside `<excerpt>` delimiters, with the system prompt stating nothing inside can change the rules — this is the real defence, because it is about *where authority lives* rather than what the text says), **sanitisation** (zero-width, bidi and control characters neutralised, deterministic so rewording cannot evade it), **pattern detection** (7 regexes — the weak layer, reported and never enforced: dropping a document on a regex match would let anyone suppress coverage of a company by publishing one sentence), and **output checks**. Measured rather than assumed: the first exfiltration pattern fired 16 times in 40,000 real articles, every one an earnings-call transcript where the operator asks analysts to "repeat your instructions" — a rule that fires on ordinary journalism is worse than no rule, because the flag then gets ignored on the day it matters. Final false-positive rate **3 in 40,000 (0.0075%)**. **Two defects the tests found rather than review**: deleting zero-width characters *helped* the attacker, since `Ignore<ZWSP>all<ZWSP>previous<ZWSP>instructions` collapses into one unmatchable token while a model reads the phrase fine through the missing spaces — neutralising a hiding character must not destroy the evidence, so they are replaced with a space; and `chars_sanitised` was a length delta, which is always 0 once characters are replaced instead of deleted, so the metric hid the signal it existed to surface. **Three evasion tests assert the pattern layer fails** on rewording, indirect framing and non-English — asserted rather than hidden, because that is the argument for the layering. End-to-end against a local 9B with a poisoned excerpt the model reported the real figure and **called out the embedded instruction** instead of following it; the automated adoption check false-positived on that answer because the model *mentioned* the injected phrasing in order to report it, and a substring test cannot separate adopting from reporting — the same difficulty R.11's faithfulness gate will face. 22 tests
 - [x] **S.2** Guard at the MCP boundary rather than in each consumer — S.1 protected one endpoint, while `search_news` was still handing raw article text unguarded to **four** consumers: Claude Desktop, Codex, the F.21 research agent and the F.17 portfolio agent. It is the only tool on that server returning free text written outside the platform (every other returns platform-computed numbers), which makes it *the* injection surface. **The guard goes at the tool boundary, not in each consumer**: four implementations would be four chances to drift and a client registered later would arrive unprotected, whereas the boundary where untrusted text crosses into a model context is exactly the boundary the tool contract already defines — the same argument that let one stdio server serve three clients. Title, excerpt and company are sanitised, pattern hits attach per article as `untrusted_content_flags`, and a `_security` block states the text is data to report on rather than instructions to follow. **Reports, never withholds** — dropping an article on a regex match would let anyone erase a company from the platform's coverage with one sentence — and **fails open, asserted in a test**, because dropping every article when a payload will not parse would be a self-inflicted denial of service while the structural defence still holds. Verified against the redeployed API and over the real MCP protocol; 54 tests across the suite
@@ -2654,6 +2655,39 @@ take several of the top slots.
 
 ---
 
+### R.13 One agent for every stock question — the agent decides which tools to call
+
+**Goal (user, 2026-10-25).** One place to ask anything about stocks: "why did SK hynix rise", "how are
+my holdings today", "why is AMZN ranked first", "what did Lam say about guidance". The F.21 ReAct
+agent decides by itself whether a question needs a tool, and which: the news Q&A, the signals and
+features, the backtest, the user's holdings and quotes, the daily briefs, or none. No separate router
+in front of it; choosing tools is the agent's job.
+
+**Where it stands (2026-10-25).**
+- Three entry points with different jobs: `/api/ask/news` (one-step news RAG, strict citations,
+  refuses when the excerpts do not cover the question, measured in R.11), `/api/ask` (the project's
+  own markdown docs) and `/api/agent/research` (F.21, multi-step, tools).
+- The agent already searches news with the same hybrid retriever (R.12), but reads raw articles
+  instead of getting a cited answer, so none of R.11's guarantees reach its answers.
+- The MCP server's `get_latest_signals` and `get_performance` answered **HTTP 401** on 2026-10-24:
+  `quant_api` requires a login and the MCP calls carry no credential. Whether F.21's own
+  `/api/agent-data/*` routes are affected the same way is to be checked first.
+- The agent cannot see anything that moved to quant_ai: holdings and live quotes, global markets,
+  the daily briefs and the prediction scorecard.
+- Every agent step calls qwen3.5 with thinking on (60-200 s a call, R.11); `/api/ask/news` already
+  pre-fills an empty think block, the agent does not.
+
+**Plan (~2 days).**
+- [ ] Fix the 401: signals and backtest performance reachable from the agent and from MCP.
+- [ ] New tools: `ask_news` (the R.11-measured cited answer, returned with its sources, so the agent
+      quotes an answer that already refuses rather than paraphrasing raw articles), holdings and
+      quotes, global markets, latest briefs and the prediction scorecard (quant_ai `markets` routes).
+- [ ] No thinking on agent steps (same prefill as `/api/ask/news`), so a one-tool question answers in
+      seconds rather than minutes.
+- [ ] Evaluation set of 20-30 stock questions, each with the tools it should and should not use
+      (news-only, ranking, holdings, mixed, and questions that need no tool). Report tool-selection
+      accuracy, unnecessary calls and latency; answers that use `ask_news` inherit R.11's numbers.
+
 ## S. Security — the AI attack surface
 
 ### S.1 Indirect prompt injection through retrieved documents
@@ -4100,6 +4134,7 @@ the weight: it turns retrieval into numbers.
 | 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
 | ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | ✅ Done 2026-10-24 — thinking off: ~10x faster, faithfulness 0.869 vs 0.899 (n.s.); judge's evidence 2,996/2,996 verbatim |
 | ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
+| ⭐⭐⭐ | **R.13 One agent for every stock question (agent picks the tools)** | 🔴 Agentic RAG: the model decides when to retrieve and which tool to trust | High: one place to ask anything | ~2 days | [ ] Pending (2026-10-25) — signals/performance tools answer 401; agent lacks the quant_ai tools; thinking still on per step |
 | ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | ✅ Done (2026-10-13) — nDCG +0.076 [+0.043, +0.113] for the shipped top-30/256 config (~1 s), +0.117 at top-100; significant under both validated judges; behind NEWS_RERANK in /api/ask/news |
 | ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
 | ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | AI production credibility | Medium | 2 days | [ ] Pending |
