@@ -4209,6 +4209,45 @@ hold, with the numbers. TSM (no report in the horizon) has small eligible T plan
 - [ ] After the reports: compare the advice with what happened (scorecard) and widen the candidate
       set if a family keeps winning (post-reaction entries, adds after a drop once there is cash)
 
+**v3: an earnings-day trading policy learned from data, not written by hand (user, 2026-10-25).**
+The user's idea: sell into the earnings-day pulse and buy back lower. A hand test on daily bars
+(sell at the open after a gap up, buy back 2% lower or at the close) said +1%/share for INTC
+(7/9) and -1.4% for STX (shares keep running after a gap up), but daily bars cannot tell whether
+the high came before the low, and a rule per stock is exactly what the user does not want: "我想让
+ML或者AI自动学会这个策略".
+- *Data*: hourly bars with pre/after-hours (yfinance, back to 2023-11) around every report of the
+  whole universe (~100 stocks, ~11 reports each), EPS estimate / reported / surprise, daily bars.
+  Minute bars (Alpaca, from 2016) when a key is available.
+- *Actions*, enumerated by code: hold; sell at the open or at +a% and buy back at -b% or at the
+  close of day 1 / day 3; buy at the open or -b% (when there is cash). Label = what each action
+  made per share against holding.
+- *Features*, all known at the open of the reaction day: gap, the pre-market path, EPS surprise,
+  run-up, volatility, gap relative to the stock's typical reaction, the stock's own past fades
+  (earlier reports only), the market's gap, report timing.
+- *Model*: LightGBM over (event, action) rows; policy = the action with the highest predicted gain
+  when it clears a margin, else hold. Walk-forward by quarter; offered only if it beats holding
+  and a static rule out of sample.
+- [x] Data and labels  - [x] Walk-forward model and report  - [ ] Live (only once it beats holding)
+
+*First result (2026-10-25): no learnable edge.* 1,120 reports of 101 stocks (2023-11 .. 2026-10),
+30 actions, walk-forward by quarter over 806 out-of-sample reports
+(`research/models/earnings_policy.py`):
+
+| Decision point and features | rank IC (pred vs outcome, per action) | Policy when it acts |
+|---|---|---|
+| Open: gap, pre-market path, EPS surprise, run-up, volatility, the stock's past fades, market | -0.001 to +0.019 | -0.3% to -0.5% per share, win 59-66%, P10 -7.5% |
+| + the platform's news sentiment published between the report and the open | +0.002 / +0.014 | -0.3% to -0.7% |
+| 10:30, + the first hour's path | +0.007 | -0.1% to +0.2% (noise) |
+
+High win rates with a negative mean: small gains on fades, wiped out by the reports where the stock
+keeps running and the shares are bought back higher. Post-report news sentiment correlates with the
+gap (Spearman 0.34) but not with the open-to-close move (0.008): it is priced in at the open. The
+"INTC fades +1%/share" seen on daily bars (9 reports) does not survive 1,120. Hindsight-best would
+make +4% per report: the money is there, nothing available at the open predicts which way.
+Next levers, in order: minute bars from 2016 (Alpaca, ~3x the reports); the call transcript read by
+an LLM (guidance, tone) as a feature. Until a version beats holding out of sample the advisor keeps
+holding through reports.
+
 ---
 
 ## Consolidated Priority Table (all pending items)
