@@ -4296,7 +4296,34 @@ Pre-release plans get no post-release features (the first run leaked them: +0.54
       bounce, bought back lower), 2026-04-23 stayed out (predicted -0.5%; holding was right: +20%),
       2026-07-23 stayed out (predicted +0.2%, under the margin; the fade would have paid). First
       live evenings: STX 10-27, INTC 10-29. The broker must accept extended-hours limit orders.
-- [ ] Final model on all data, refreshed weekly; scorecard of live calls against the replay
+- [x] Final model on all data, refreshed weekly (`refresh_earnings_pulse.sh` in weekly_model_training,
+      replaced only while its walk-forward stays positive); each evening's orders scored the next
+      morning on 1-minute bars (`pulse.score_due`)
+
+*v4.2 (2026-10-26): the algorithm sets the steps, levels and sizes.* The user: the number of steps
+and their levels must not be fixed either. Labels became single steps: 12 levels (+0.5 .. +12%) x 7
+buy-back rules x 8 placements, 1.65M rows; any ladder is a weighted sum of them. LightGBM predicts
+each step's gain (huber) and its 10th percentile (quantile); the plan at a placement is the steps
+above the margin under the best buy-back rule (at most 4), weighted by gain over downside. The
+walk-forward now replays the live decision strictly in time order (v1's evaluation took the best
+placement of the evening, which a live watch cannot know). Bake-off 2019-2026:
+
+| Policy | Acted | Mean | P10 | Worst | Sum |
+|---|---|---|---|---|---|
+| A greedy (first placement that clears) | 772 | +0.45% | -2.70% | -30% | +346% |
+| B optimal stopping (fitted value iteration over the placements: act only when the plan beats the predicted value of waiting) | 732 | +0.49% | -2.61% | -24% | +360% |
+| C = B, weights by gain over downside | 732 | +0.51% | -2.48% | -24% | +375% |
+
+The gains sat in 2023-2026 (C: +0.09% per acted report in 2019-2022, +0.83% after). Risk controls
+were then chosen on 2019-2022 only (160 variants) and checked on 2023-2026: the 10th-percentile
+model is what matters; dropping steps whose predicted P10 is below -1.5% lifted 2019-2022 from
++29% to +208% and kept 2023-2026 (395 acted, +0.86%, P10 -0.16%). Chosen and live: margin 0.3%, no
+orders before the release, P10 filter -1.5%, risk weights, greedy (stopping adds nothing once the
+filter is on). Whole period: 660 of 1,906 acted, +0.83%, P10 -0.23%, worst -15.3%, every year
+positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far above the price
+(INTC 2026-07: +4/5/6% at 16:20; 2026-01: +8/10/12%): near levels fill more but get run over.
+- [ ] 1D-CNN on the minute path as a challenger to LightGBM
+- [ ] Pre-market reports (release before the open), the same engine: ~1,375 more reports
 
 ---
 
