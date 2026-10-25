@@ -4287,9 +4287,15 @@ Every year >= 0 in the strict run (2019 -0.02% .. 2024 +0.67%). INTC: 14 of 30 r
 share of the ladder, 79% wins; STX negative (7 reports, -1.29%: it keeps running), so mostly
 left alone. Worst single case -15%: a ladder on part of the position, never all of it.
 Pre-release plans get no post-release features (the first run leaked them: +0.54% -> +0.49%).
-- [ ] Live for the holdings: at the release, features from live quotes + EDGAR + the LLM read, the
-      model's plan as whole-share extended-hours limit orders in an urgent advisor update; the
-      broker must accept extended-hours limit orders
+- [x] Live for the holdings (2026-10-26): `quant_ai/markets/pulse.py`. Price-only features (the
+      release and volume features added nothing: +0.64% vs +0.66% per acted report), 5-second quotes,
+      the release minute from a 0.5% move, placements as in training, the first plan that clears the
+      0.3% margin on a stock whose walk-forward record is positive becomes whole-share orders
+      (30% of the position over three steps, PULSE_FRACTION), an urgent macOS notification; no
+      report is written first. Replay of INTC evenings: 2026-01-22 acted at 16:02 (sold into the
+      bounce, bought back lower), 2026-04-23 stayed out (predicted -0.5%; holding was right: +20%),
+      2026-07-23 stayed out (predicted +0.2%, under the margin; the fade would have paid). First
+      live evenings: STX 10-27, INTC 10-29. The broker must accept extended-hours limit orders.
 - [ ] Final model on all data, refreshed weekly; scorecard of live calls against the replay
 
 ---
