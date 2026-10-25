@@ -4167,11 +4167,47 @@ and no phone push for now.
 it needs reasoning and fresh news (the local qwen agreed with Claude at kappa 0.43 in R.11 and is
 slow with thinking). Quota: ~1 report on a quiet day, 3-6 on an earnings day, 3-5 min each.
 
-- [ ] Cash in My Holdings (stored with the portfolio, editable, starts at 0)
-- [ ] `markets/advisor.py`: snapshot, thresholds, levels, triggers, orders, scoring
-- [ ] `advisor` brief kind: schedule 13:00 Dublin, focused updates, ORDERS block, urgent alerts
-- [ ] My Holdings: latest report, open orders with fill status, history and scorecard
-- [ ] Tests; one live report end to end before INTC's earnings on 2026-10-29
+- [x] Cash in My Holdings (stored with the portfolio, editable, starts at 0)
+- [x] `markets/advisor.py`: snapshot, thresholds, levels, triggers, orders, scoring
+- [x] `advisor` brief kind: schedule 13:00 Dublin, focused updates, ORDERS block, urgent alerts
+- [x] My Holdings: latest report, open orders with fill status, history and scorecard
+- [x] Tests; one live report end to end (v1, 2026-10-25)
+
+**v2: plans generated and tested by code, chosen by the model (2026-10-25).** The user's verdict on
+v1: "太不智能了". Its first report proposed trimming INTC 20% at $91.26 before earnings and buying
+back at $78.35, which was the user's own idea read back from the conversation, sized in fractional
+shares a broker cannot fill, below the average cost, with no evidence that it beats holding. In v2:
+
+- *Candidates in code* (`markets/strategy.py`), whole shares: hold; one T (sell part at +a, buy the
+  same shares back at -b, the buy-back active only once the sale filled) at three widths; a two-step
+  ladder; trims; a sale at the average cost when within reach; an add when there is cash. Widths are
+  in units of the move scale: the options-implied move when the stock reports within the horizon,
+  else 2 x ATR(14).
+- *Tested on the stock's own past*: around each of its last 16 reports (daily bars from 5 sessions
+  before to 10 after, `earnings_reactions` in Mongo, refreshed weekly by `weekly_model_training`;
+  SK hynix from its Seoul listing 000660.KS, the ADR having listed on 2026-07-10), entered as many
+  sessions before the reaction as today is, limits scaled to that history's typical move; else
+  rolling 15-session windows of the last year. Result: gain against holding, win rate, P10, fill
+  rate per leg, regret (sold, never bought back, ended higher).
+- *Simulated for this time*: 3,000 paths with the stock's daily volatility and, on the reaction
+  day, a past reaction (centred) scaled to the implied move: how likely each limit fills.
+- *Profit first, enforced in code*: a plan is offered only when it beat holding on that history
+  (n >= 8, mean > +0.05% of the position, wins >= losses) and never sells below the average cost
+  without a buy-back. The model picks a candidate id per holding in a PLANS block (or none) and
+  explains it; code turns the plan into its orders. The ORDERS block is left for new buys only,
+  rounded down to whole shares.
+- *Conditional orders*: `advice_orders.parent_id`; a buy-back is `waiting` until its sale fills,
+  counts only from the next session, and is `void` if the sale never fills.
+
+First result (2026-10-25, last 16 reports each): every pre-earnings sale or T on INTC, SKHY and STX
+trailed holding (-0.3% to -1.3% of the position on average); holding through the report returned
++4.6% to +7.2% on average, up 56-75% of the time, and the 10 sessions after the reaction drifted up
+after both up and down reactions (INTC +8.3% / +1.1%). So the advice for this week's reports is to
+hold, with the numbers. TSM (no report in the horizon) has small eligible T plans (+0.12 to +0.16%).
+
+- [x] `strategy.py`, `earnings_reactions.py`, PLANS block, conditional orders, UI ("after #X fills")
+- [ ] After the reports: compare the advice with what happened (scorecard) and widen the candidate
+      set if a family keeps winning (post-reaction entries, adds after a drop once there is cash)
 
 ---
 
