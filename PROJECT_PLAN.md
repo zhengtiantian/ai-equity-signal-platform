@@ -4369,9 +4369,21 @@ survives the lab's statistics through.
 - **Rollout**: walk-forward (select on 2019-2022, report on 2023-2026), shadow, champion, a
   per-stock hierarchical gate, live drift monitoring.
 
-- [ ] 1. Grammar and simulator: minute, 5-minute and daily bars stitched into one path per decision;
-      limit, trailing, bracket and time exits; multi-day holds; numba kernel; tests
-- [ ] 2. The advisor on the grammar, with the significance gate
+- [x] 1. Grammar and simulator (`quant_data/research/rl/`): 576 report actions, paths stitched from
+      1-minute, 5-minute and daily bars (daily put on the raw minute scale: yfinance is
+      split-adjusted), conservative fills, numba (8.8M outcomes in 20 s), 9 tests. First policies
+      on 15,356 report decision points: a single LightGBM picking the best of 576 (winner's curse)
+      DSR 0.62; an ensemble scoring mean - spread, composed: 26 trades in 2023-2026, +2.52%, none
+      negative, DSR 0.98, but 49 trades in eight years against the pulse champion's 370: a
+      candidate, not live.
+- [x] 2. Daily decision points (`build_daily`, `learn_daily`): 48,645 (every fifth session of 101
+      stocks since 2016) x 256 actions, regular-session cost 0.05% a side, one plan per stock at
+      a time, CVaR limits. Chosen on 2019-2022 (56 trades, +0.71%); 2023-2026: 110 trades, -1.79%,
+      DSR 0. Selling and buying back on daily bars does not beat holding these rising names (a
+      reduce held 20 days averages -2.44%; MRNA +177% on 2026-08-19 shows the uncapped side). The
+      advisor got the significance gate instead (quant_ai `strategy.py`, t >= 2 on the overlap-
+      adjusted sample): TSM's ladder (+0.36%, t 1.0 on ~16 independent windows) is withdrawn and
+      every holding is a hold today; the report-evening pulse is unaffected.
 - [ ] 3. Holding period by fitted Q iteration; CVaR sizing
 - [ ] 4. Stocks not held; peer spillover events
 - [ ] 5. Grammar search and LLM-proposed actions
