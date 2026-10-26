@@ -4339,6 +4339,28 @@ positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far abo
 - [ ] Survival (first-passage) model for the fill and buy-back probabilities; hierarchical shrinkage
       for the per-stock gate; MiniRocket as a cheap sequence challenger
 
+### Q.6 Event strategy lab — many algorithms, many actions, every result kept (🔴, ongoing)
+
+**Goal (user, 2026-10-26).** Try many algorithms and keep every backtest in MLflow; let the system
+find more actions than sell / buy back / hold, including buying stocks not held. Long only (no
+shorting, no options); cash may be used to buy first; the holding period is not fixed but part of
+what is learned; events: earnings and peer-earnings spillover. The user trades by hand, so there is
+no deadline: the bar is evidence.
+
+1. **Lab.** `quant_data/research/lab/`: MLflow experiment `earnings_pulse`, one run per (model,
+   policy); one evaluation for all: walk-forward by year, selection on 2019-2022 and the report on
+   2023-2026, by session and stock, and the deflated Sharpe ratio over all trials so far (the more
+   variants tried, the higher the bar).
+2. **Algorithm zoo** on the same steps: LightGBM seed/feature ensembles, CatBoost, XGBoost,
+   MiniRocket, a first-passage (survival) model for fills, hierarchical shrinkage for the per-stock
+   gate; the LightGBM + CNN average in shadow.
+3. **Action grammar.** Entries: limit sell above, limit buy below (cash), breakout buy, market at a
+   time. Exits: limit back, trailing stop, stop loss, bracket (OCO), time (session end, next open,
+   day k close). Any stock with a report, held or not (buys only for the ones not held). Searched
+   by evolution / Bayesian optimisation over the grammar, then a state-conditional choice.
+4. **Peer spillover.** A bellwether's report as the event for its peers and the holdings.
+
+
 ---
 
 ## Consolidated Priority Table (all pending items)
