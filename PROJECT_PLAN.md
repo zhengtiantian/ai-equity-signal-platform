@@ -4322,8 +4322,22 @@ orders before the release, P10 filter -1.5%, risk weights, greedy (stopping adds
 filter is on). Whole period: 660 of 1,906 acted, +0.83%, P10 -0.23%, worst -15.3%, every year
 positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far above the price
 (INTC 2026-07: +4/5/6% at 16:20; 2026-01: +8/10/12%): near levels fill more but get run over.
-- [ ] 1D-CNN on the minute path as a challenger to LightGBM
-- [ ] Pre-market reports (release before the open), the same engine: ~1,375 more reports
+- [x] Pre-market reports (2026-10-26): the same engine on 1,345 before-the-open reports (53 stocks):
+      the window runs from the previous close to the reaction day's 10:30, the release minute found
+      against the pre-market's own volume around the SEC time (72% from the price), the session's
+      end 09:25, the open the same day; a `bmo` flag in the features. 3,835 reports in all.
+- [x] 1D-CNN challenger (`earnings_pulse_cnn.py`: the last 90 one-minute bars before each placement
+      plus the state, all 84 steps' gain and P10 at once). Judged the same way, it passed no risk
+      limit on 2019-2022 and made +0.40% per acted report under LightGBM's policy (P10 -2.72%, three
+      negative years). The average of the two was attractive on 2023-2026 (+2.01%, worst -11%) but
+      lost on the selection years, so it is noted, not used.
+- [x] Policy re-chosen on 2019-2022 with both sessions: margin 0.5%, P10 filter -2.0%. 2023-2026:
+      407 acted, +1.40% per acted report, P10 -0.09%. Whole period 589 acted, +1.36%, every year
+      positive; after the close +1.15% (434), before the open +1.95% (155); INTC 10 of 30, +3.43%.
+      The live watch now also runs the pre-market (04:00-09:35 ET) for holdings reporting before
+      the open.
+- [ ] Survival (first-passage) model for the fill and buy-back probabilities; hierarchical shrinkage
+      for the per-stock gate; MiniRocket as a cheap sequence challenger
 
 ---
 
