@@ -4360,6 +4360,29 @@ no deadline: the bar is evidence.
    by evolution / Bayesian optimisation over the grammar, then a state-conditional choice.
 4. **Peer spillover.** A bellwether's report as the event for its peers and the holdings.
 
+*Lab, first results (2026-10-26).* MLflow experiment `earnings_pulse` (id 2): eight models x 80
+policy variants = 640 trials. Each model's variant is chosen on 2019-2022 (highest total within
+worst > -10%, P10 > -2%) and reported on 2023-2026; the deflated Sharpe ratio (DSR) is computed
+against every trial logged so far.
+
+| Model | 2023-2026 acted | Mean | P10 / worst | DSR |
+|---|---|---|---|---|
+| CatBoost | 257 | +2.03% | 0.00% / -10.5% | 0.992 |
+| 5 LightGBMs averaged (seeds, feature subsets) | 252 | +1.97% | 0.00% / -10.0% | 0.979 |
+| LightGBM + CNN average | 281 | +2.01% | 0.00% / -11.3% | 0.950 |
+| single LightGBM (live until today) | 407 | +1.40% | -0.09% / -24.0% | 0.247 |
+| average of all four | 467 | +1.31% | 0.00% / -21.4% | 0.338 |
+| average of the three GBDTs | 623 | +1.04% | -1.00% / -19.6% | 0.001 |
+| XGBoost, 1D-CNN | no variant within the risk limits on 2019-2022 | | | |
+
+The single LightGBM's record did not survive the deflation (its per-trade Sharpe 0.335 is below the
+0.366 that 240 trials reach by luck); the ensembles and CatBoost did. Champion rule fixed from now
+on: DSR >= 0.95, highest wins. Live since 2026-10-26: CatBoost champion (acts, announces), the
+LightGBM ensemble as shadow (saved with status `shadow`, scored the next morning, compared at
+`/api/markets/pulse/scorecard`). Next: choose a model's variant by its per-trade Sharpe within the
+risk limits rather than by its total (the total favours loose margins: the GBDT average picked 0.3
+and failed); then the action grammar.
+
 
 ---
 
