@@ -4339,6 +4339,43 @@ positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far abo
 - [ ] Survival (first-passage) model for the fill and buy-back probabilities; hierarchical shrinkage
       for the per-stock gate; MiniRocket as a cheap sequence challenger
 
+### Q.7 Action RL — the system chooses among actions it can compose (🔴, started 2026-10-26)
+
+**Goal (user, 2026-10-26).** "设计 action，RL 能选择最合理的 action": the advisor kept proposing the
+same two-step TSM ladder (+0.36% on 47 heavily overlapping windows), because its candidates are a
+fixed list of eight. Replace the list with a grammar the policy composes from, and let only what
+survives the lab's statistics through.
+
+- **Decision points**: report evenings and pre-markets (minute placements), peer reports, the
+  daily 13:00 check and event triggers.
+- **State**: position (shares, cost, unrealised, weight, cash), the price path (minute and daily),
+  volatility, event context (days to report, implied move, release read, peers), news sentiment,
+  the ranking model, regime; constraints (whole shares, the Irish four-week rule).
+- **Actions = entry x exit x size**, distances in units of the stock's daily volatility: reduce
+  then buy back, reduce, add with cash, buy a stock not held, exit; entries at market, limit
+  above/below, breakout; exits by limit, trailing stop, stop loss, bracket (OCO), or time (session
+  end, next open, day 1/3/5/10/20); sizes as fractions of the position or the cash, in whole shares.
+  Single legs are scored; ladders are composed from them (as in Q.5 v4.2).
+- **Reward**: against doing nothing, net of costs; a CVaR penalty; a penalty for a loss sale bought
+  back within four weeks. Hard constraints, not rewards: no sale below cost without a buy-back, no
+  sale beyond the shares held, no buy beyond the cash.
+- **Learning**: offline (no money spent exploring). The orders are too small to move prices, so
+  every action's outcome is computed exactly on the bars: a full-information contextual bandit at
+  each decision point, fitted Q iteration for when to act and how long to hold, distributional Q
+  (mean and P10) from the lab's champion (CatBoost); composition and size under a CVaR limit.
+  Default action: hold; anything else must clear the margin and the lab's deflated Sharpe gate.
+- **New actions**: evolutionary / Bayesian search over the grammar and LLM-proposed hypotheses
+  enter the library only through the same out-of-sample gate.
+- **Rollout**: walk-forward (select on 2019-2022, report on 2023-2026), shadow, champion, a
+  per-stock hierarchical gate, live drift monitoring.
+
+- [ ] 1. Grammar and simulator: minute, 5-minute and daily bars stitched into one path per decision;
+      limit, trailing, bracket and time exits; multi-day holds; numba kernel; tests
+- [ ] 2. The advisor on the grammar, with the significance gate
+- [ ] 3. Holding period by fitted Q iteration; CVaR sizing
+- [ ] 4. Stocks not held; peer spillover events
+- [ ] 5. Grammar search and LLM-proposed actions
+
 ### Q.6 Event strategy lab — many algorithms, many actions, every result kept (🔴, ongoing)
 
 **Goal (user, 2026-10-26).** Try many algorithms and keep every backtest in MLflow; let the system
