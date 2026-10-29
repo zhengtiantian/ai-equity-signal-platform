@@ -131,7 +131,7 @@ services:
 
   quant_ui:
     # d1c8eef: My Holdings on quant_ai's markets API, Market Briefs with forward briefs + scorecard (built on the host, Dockerfile.runtime)
-    image: xiz001/quant_ui:e4f02b6
+    image: xiz001/quant_ui:594b8a6
     container_name: quant_ui
     restart: always
     logging: *default-logging
