@@ -2789,8 +2789,8 @@ Verified against the redeployed API and over the real MCP protocol. 26 tests in 
 
 > **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
 > (`quant_ai/markets/`, SQLite), moved there from job_agent's dashboard together with global
-> markets and the daily briefs — see **Q.0**, **Q.8** (3-layer upcoming catalysts modal) and
-> **Q.9** (per-stock order status & swing lot allocation manager). The `quant_api` / MySQL holdings below are
+> markets and the daily briefs — see **Q.0**, **Q.8** (3-layer upcoming catalysts modal),
+> **Q.9** (per-stock order status & swing lot allocation manager), and **Q.10** (ATR dip-spacing & swing-lot exit advisor). The `quant_api` / MySQL holdings below are
 > deprecated; `get_my_holdings` / `get_my_transactions` read quant_ai first and fall back to them.
 
 ### P.1 Manual holdings tracker
@@ -4433,6 +4433,38 @@ LightGBM ensemble as shadow (saved with status `shadow`, scored the next morning
 risk limits rather than by its total (the total favours loose margins: the GBDT average picked 0.3
 and failed); then the action grammar.
 
+*Lab, second round — SIP extended-hours phantom-wick audit, two-stage Hurdle models & `sharpe_trade` selection (2026-10-30, `quant_data` `f607022`, `quant_ai` `a82430a`).*
+Scoring `INTC`'s live `2026-10-29` report evening (`advice_orders` `#28–#39`) uncovered a systemic
+contamination in Alpaca SIP 1-minute extended-hours bars: late-reported regular-session `16:00`
+closing-cross / TRF benchmark prints appear after `16:02` ET (e.g. `INTC` `16:15/16:16` `high = $92.07`
+while trading at `$75` on a `-30%` crash, and `AAPL` `2024-05-02` `16:53` `low = $173.03` while at
+`$185` on a `+7%` rally), creating fake limit fills on both crash sells and runaway buy-backs.
+- **Scrubber (`scrub_extended_bars` in `earnings_pulse.py`, `rl/build_events.py`, and `quant_ai/markets/pulse.py`):**
+  clamps extreme extended-hours `high`/`low` needles after `16:02` ET whose excursion from the bar's
+  `open`/`close` body exceeds `max(1.5%, 2.5×body)` and matches `regular_close` within `0.35%`. Across
+  `3,835` earnings reports (`2,539,584` step rows), **`1,319` phantom bars across `844` reports** were
+  scrubbed; live `INTC` `#28–#39` orders were re-scored from bogus `+14.35%..+18.35%` to accurate
+  `expired` / `void` (`0.0%`).
+- **Two-stage Hurdle Bandit (`hurdle_lgbm`, `hurdle_catboost`) & `sharpe_trade` selection (`zoo.py`):**
+  decomposes unconditional expected step value into $\hat{P}(	ext{fill}) \cdot \hat{\mathbb{E}}[	ext{gain} \mid 	ext{fill}]$
+  while keeping the tail gate on conditional downside $\hat{Q}_{10}[	ext{gain} \mid 	ext{fill}]$ (multiplying
+  $Q_{10}$ by small $P(	ext{fill})$ shrinks `-15%` adverse-selection fills below `-1%` and breaks tail gating),
+  with variants chosen on `2019–2022` by `select_sharpe_trade` within `worst > -10%`, `P10 > -2%`.
+- **MLflow experiment `earnings_pulse_scrubbed` (`400` clean variant runs across `5` models):**
+
+| Scrubbed Model (`2019–2022` `sharpe_trade` choice) | Passing `/80` | `2023–2026` OOS acted | OOS Mean | OOS `P10` / Worst | OOS `SR/trade` | Status (2026-10-30) |
+|---|---|---|---|---|---|---|
+| **5-seed LightGBM (`lgbm_seeds`)** | 26 / 80 | 116 | **+1.40%** | `0.00%` / **`-3.18%`** | **0.454** | **Champion** (`margin=0.5, q10>=-1.5, risk`) |
+| **5-seed LGBM + Hurdle LGBM (`avg_lgbm_hurdle`)** | 6 / 80 | 122 | **+1.38%** | `0.00%` / `-5.05%` | **0.463** | Ensemble (`DSR_80 = 0.973`) |
+| **Two-stage Hurdle LGBM (`hurdle_lgbm`)** | 20 / 80 | 163 | **+1.06%** | `0.00%` / `-5.08%` | 0.342 | **Shadow** (`margin=0.5, q10>=-1.0, risk`, `DSR_80 = 0.961`) |
+| **CatBoost + 5-seed LGBM (`avg_cb_lgbm`)** | 20 / 80 | 61 | **+1.56%** | `0.00%` / `-5.57%` | 0.438 | `87` total trades (`<100` live floor) |
+| **CatBoost (`catboost`, prior champion)** | **0 / 80** | (141) | (+0.96%) | (`0.00%` / `-7.00%`) | (0.348) | **Retired** (`2019–2022` worst `-12.02%` once phantom fills removed) |
+
+  Removing SIP phantom fills exposed that roughly half of standalone CatBoost's prior `+2.03%` headline
+  relied on unfillable `close16` late prints, whereas `lgbm_seeds` retained `+1.40%` OOS mean (`t = +4.89`)
+  with a `-3.18%` worst loss across 4 OOS years. Refreshed `/Volumes/Data4T/earnings_policy/pulse_model/`
+  on `2026-10-30` with `lgbm_seeds` as live champion and `hurdle_lgbm` as live shadow.
+
 ### Q.8 Three-layer upcoming catalysts, per-stock event modal & AI query (✅ Done 2026-10-30 — `quant_ai` `74741a9`..`52b50e9`, `quant_ui` `da1a8f9`..`8d33dc4`)
 
 **Goal (user, 2026-10-30).** Every stock in **My Holdings** and **Watchlist** needs forward-looking
@@ -4506,6 +4538,43 @@ cost basis on the main Holdings table.
    - Verified by 123 unit tests across `quant_ai/tests/test_markets_*.py` and clean strict TypeScript
      build in `quant_ui`.
 
+### Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor (✅ Done 2026-10-30 — `quant_ai` `a82430a`, `quant_ui` `51ce6e8`)
+
+**Goal (user, 2026-10-30).** Bridge empirical multi-day swing research directly into the user's manual
+tranche workflow (`📦 批次`) without black-box daily RL overfitting (where `learn_daily` scored
+`-1.79%` OOS, `DSR = 0.000`, and `learn_peers` scored `+0.01%..+0.13%` OOS, `DSR = 0.000`): prevent
+clustered knife-catching (e.g. `INTC` `#40 @ $71.68` and `#41 @ $73.14`, spaced only `0.29×ATR` apart)
+and give every open lot concrete volatility-calibrated profit targets (`TP1` / `TP2`) so underwater
+positions can rotate capital profitably without waiting for an anchored overall average cost (`$92.24`).
+
+1. **Out-of-sample empirical calibration (`102` US stocks, `2023–2026`, `703` `≥2×ATR` single-day drops):**
+   - After a `≥2×ATR` single-day drop, there is a **`42.8%`** probability of dropping another `≥1.0×ATR`
+     within 3 sessions (`24.9%` for `≥1.5×ATR`).
+   - Immediate Day-1 dip entry (`+1.5×ATR` 15-day take-profit) yields `+0.97%` mean per trade (`54.8%`
+     TP hit rate), whereas spacing limit tranches **`-1.5×ATR`** below yields **`+2.50%` mean per trade**
+     (`33.6%` fill rate, `54.2%` `+2.0×ATR` TP hit rate — **2.6×** higher expectancy per trade).
+2. **Backend engine (`quant_ai/markets/lot_advisor.py` + `GET /api/markets/portfolio/lot-advice`):**
+   - Computes 14-day Wilder `ATR(14)`, `RSI(14)`, `SMA(20)`, 1-day/3-day drop in `%` and `×ATR`, and
+     post-drop stabilization (`close >= prev_close && close >= open` once crash velocity subsides).
+   - Integrates **7-day binary catalyst risk** from `Q.8` (`catalysts.upcoming_feed`, escalating minimum
+     tranche spacing from `1.5×ATR` to `2.0×ATR` when earnings/policy/macro high-impact events are due
+     within 7 days or when a crash has not yet stabilized) and **semiconductor/memory cluster weight**
+     across `My Holdings`.
+   - Retrospectively flags tight historical lot pairs (`gap < 0.75×ATR`, e.g. `INTC` `#40` & `#41` at
+     `0.29×ATR`) and computes exact suggested limit entry prices (`anchor_lowest_lot - min_spacing×ATR`,
+     e.g. `INTC ≤ $61.51`).
+   - Generates per-lot exit plans for every active buy tranche: `TP1 = unit_cost + 1.5×ATR`,
+     `TP2 = unit_cost + 2.0×ATR`, and `1.0×ATR` trailing protection once a lot reaches `+1.0×ATR`.
+3. **Interactive UI (`LotManagerModal.tsx`):**
+   - Top **⚡ 波段风控引擎** strip displaying `ATR(14)`, `RSI(14)`, stabilization badge, 7-day catalyst
+     alert pill, and semiconductor cluster weight.
+   - Live debounced **🛡️ 抄底档位与风控检查** card inside the Buy tab (`green` / `amber` / `red`) with
+     one-click **`🎯 填入建议挂单价`** button and OOS benchmark summary.
+   - Per-lot `TP1` / `TP2` column and **`🎯 目标测算`** button on the Orders list & Sell tabs to pre-fill
+     any lot's `+1.5×ATR` target directly into the swing settlement simulator.
+   - Verified by 126 unit tests across `quant_ai/tests/test_markets_*.py` (`test_markets_lot_advisor.py`
+     included) and zero-error `eslint` + `tsc -b && vite build` in `quant_ui`.
+
 
 ---
 
@@ -4524,6 +4593,7 @@ the weight: it turns retrieval into numbers.
 | 🔥 | **Q.5 Holdings advisor (event-driven advice with limit prices, scored)** | AI agent on real decisions, with a track record | 🔴 The user's own positions | ~3 days | 🟡 In progress (2026-10-25) |
 | ⭐⭐⭐ | **Q.8 3-layer upcoming catalysts, per-stock modal & AI query** | Event-driven + LLM extraction + web fallback | 🔴 Forward binary risk on every holding | 1.5 days | ✅ Done (2026-10-30) — L1 calendars/conferences/implied moves + L2 6h RSS/8-K extraction + L3 web fallback, 90D modal (`52b50e9`, `8d33dc4`) |
 | ⭐⭐⭐ | **Q.9 Per-stock order status & swing lot allocation manager** | Accounting invariants & atomic ledger design | 🔴 Dip-buying tranche P&L without mutating Mine/FIFO avg cost | 1 day | ✅ Done (2026-10-30) — `transactions.lot_allocations`, open/partial/closed statuses, 3-way P&L conservation (`52b50e9`, `8d33dc4`) |
+| ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | Empirical execution guardrails vs overfit daily RL | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
