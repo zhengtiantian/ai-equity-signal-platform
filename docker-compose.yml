@@ -131,7 +131,7 @@ services:
 
   quant_ui:
     # ab54717: Unified Task & Schedule Monitor tab in Dashboard (Airflow, Job Agent :5050, system daemons)
-    image: xiz001/quant_ui:dc24529
+    image: xiz001/quant_ui:d457404
     container_name: quant_ui
     restart: always
     logging: *default-logging
