@@ -4575,6 +4575,29 @@ positions can rotate capital profitably without waiting for an anchored overall 
    - Verified by 126 unit tests across `quant_ai/tests/test_markets_*.py` (`test_markets_lot_advisor.py`
      included) and zero-error `eslint` + `tsc -b && vite build` in `quant_ui`.
 
+### Q.11 全系统定时任务与数据管道中控大盘 (Unified Task & Schedule Monitor Dashboard) (✅ Done 2026-10-30 — `quant_ai` `a4baa2f`, `quant_ui` `ab54717`, `quant_docker` `2cf687a`)
+
+**Goal (user, 2026-10-30).** Unified system observability dashboard in personal quant UI displaying
+progress, logs, running tasks, upcoming schedules, and health across all background automation on
+the machine — bridging:
+1. **Airflow Pipelines**: All active DAGs (`daily_signal_pipeline`, `backfill_1_collect_and_match`,
+   `quant_intraday_news`, `price_history_backfill`, `quant_retail_sentiment`, `weekly_model_training`),
+   running tasks, execution durations, next schedules, step-by-step progress bars, and live task logs.
+2. **找工中控平台 (Job Agent on `http://127.0.0.1:5050/`)**: Launchd daemon (`com.xiangyu.jobagent`
+   scheduled at 11:00 & 16:00), web server health, next execution countdown, last successful scrape
+   record, generated report metadata (`Today_Jobs.md`), and real-time log viewer modal.
+3. **Core System Daemons**: `com.quant.ai` (:18000), `com.quant.airflow-scheduler`, `com.quant.lmstudio-server`
+   (:1234), `com.quant.disk-watch`, and Docker infrastructure containers.
+
+- **Backend API (`quant_ai/markets/task_monitor.py` + `api.py`)**:
+  - `GET /api/markets/tasks/monitor`: queries Airflow PostgreSQL metadata directly, checks port health
+    & process status, parses `launchctl list`, `scrape_state.json`, and `Today_Jobs.md`.
+  - `GET /api/markets/tasks/log`: tails live execution logs across Airflow task instances, Airflow
+    scheduler, Job Agent (`job_agent.log`, `launchd.log`), and `quant_ai.log`.
+- **Frontend Dashboard (`quant_ui/src/components/TaskMonitorPanel.tsx` + `Dashboard.tsx`)**:
+  - Dedicated `⏱️ Task Monitor` tab with auto-polling (10s), running status strip, pipeline breakdown cards,
+    step instance expandable views, and a full-featured dark monospace terminal modal with refresh and copy.
+
 
 ---
 
