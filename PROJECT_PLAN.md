@@ -2789,7 +2789,8 @@ Verified against the redeployed API and over the real MCP protocol. 26 tests in 
 
 > **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
 > (`quant_ai/markets/`, SQLite), moved there from job_agent's dashboard together with global
-> markets and the daily briefs — see **Q.0**. The `quant_api` / MySQL holdings below are
+> markets and the daily briefs — see **Q.0**, **Q.8** (3-layer upcoming catalysts modal) and
+> **Q.9** (per-stock order status & swing lot allocation manager). The `quant_api` / MySQL holdings below are
 > deprecated; `get_my_holdings` / `get_my_transactions` read quant_ai first and fall back to them.
 
 ### P.1 Manual holdings tracker
@@ -4432,6 +4433,79 @@ LightGBM ensemble as shadow (saved with status `shadow`, scored the next morning
 risk limits rather than by its total (the total favours loose margins: the GBDT average picked 0.3
 and failed); then the action grammar.
 
+### Q.8 Three-layer upcoming catalysts, per-stock event modal & AI query (✅ Done 2026-10-30 — `quant_ai` `74741a9`..`52b50e9`, `quant_ui` `da1a8f9`..`8d33dc4`)
+
+**Goal (user, 2026-10-30).** Every stock in **My Holdings** and **Watchlist** needs forward-looking
+visibility into upcoming binary catalysts — not just earnings dates, but conferences, product/node
+launches, policy/tariff/antitrust milestones, and supply-chain spillover — presented cleanly without
+bloating the Holdings page, plus an AI search bar to ask targeted forward-risk questions.
+
+**Architecture (`quant_ai/markets/events.py`, `quant_ai/markets/catalysts.py`, `quant_ui/src/components/markets/CatalystsPanel.tsx`):**
+
+1. **Layer 1 (`L1_calendar` — deterministic structured schedules):**
+   - Nasdaq + Finnhub earnings calendars (including ADR underlying tickers `000660.KS`, `2330.TW`,
+     `ASML.AS`) enriched with ATM-straddle options implied moves (`±%`).
+   - Nasdaq cash dividend ex-dates / pay-dates (with estimated USD payout on held shares) and stock splits.
+   - Authoritative macro & market-structure dates (`OFFICIAL_MACRO_SCHEDULE`: US Midterm Elections,
+     BLS Nonfarm Payrolls & CPI, FOMC & SEP dot plots, SEC 13F deadlines, monthly OpEx / Quad Witching),
+     deduplicated against Nasdaq's economic calendar with secondary ISM sub-indices filtered out.
+   - TSMC 10th-of-month consolidated revenue releases (`_tsm_monthly_revenue_dates`) and verified
+     semiconductor / cloud / investor conferences (`OFFICIAL_INDUSTRY_CONFERENCES`: SC26, Microsoft
+     Ignite, AWS re:Invent, UBS Global Tech & AI Conference, Barclays Global Tech Conference, IEEE
+     IEDM 2026, CES 2027).
+2. **Layer 2 (`L2_extracted` — automated forward-event extraction every 6h in `markets/background.py`):**
+   - Pulls forward-filtered Google News RSS (excluding post-earnings price-recap noise), SEC EDGAR
+     recent `8-K` / `6-K` material filings, and MongoDB `news_articles`, extracting structured dated
+     catalysts via the local LLM into SQLite (`collected_catalysts`).
+3. **Layer 3 (`L3_web` — web catalyst discovery with resilient fallback):**
+   - Daily / on-demand Claude CLI `WebSearch` sweep for non-earnings catalysts, with automatic
+     graceful fallback (`_collect_l3_thematic_web_fallback`) to targeted thematic RSS + local LLM
+     extraction whenever Claude CLI is unavailable or hits weekly quota.
+4. **Per-stock pop-up modal & compact 1-line AI search bar (`CatalystsPanel.tsx`):**
+   - Default 90-day horizon covering full quarterly conference + next-earnings cycle; per-row
+     `🔭 事件` button on every Holding and Watchlist row opens a closable modal (`✕`, `Esc`, backdrop)
+     grouped into **Direct**, **Supply-Chain & Peer Spillover**, and **High-Impact Macro** events.
+   - Interactive AI query endpoint (`POST /api/markets/catalysts/query`, modes `fast` and `web`) with
+     persisted history (`catalyst_queries`) and one-click deletion.
+
+### Q.9 Per-stock order status & swing lot allocation manager (✅ Done 2026-10-30 — `quant_ai` `52b50e9`, `quant_ui` `8d33dc4`)
+
+**Goal (user, 2026-10-30).** While brokers settle disposals under FIFO for tax reporting (Irish CGT),
+swing-trading tranches bought on dips (e.g. buying 20 shares at `$73.14` when overall `avg_cost` is
+`$92.24` and taking profit at `$85.00`) require per-order lifecycle visibility and explicit lot
+matching — **without** mutating the portfolio's headline average cost (`Mine`) or Irish CGT `FIFO`
+cost basis on the main Holdings table.
+
+**Architecture (`quant_ai/markets/portfolio.py`, `quant_ui/src/components/markets/LotManagerModal.tsx`, `Holdings.tsx`):**
+
+1. **Single-ledger atomic storage (`transactions.lot_allocations`):**
+   - Added nullable JSON column `lot_allocations` (`[{"buy_id": <int>, "quantity": <float>}, ...]`)
+     on `transactions` rows (`side == "sell"`). Buy/sell entries inside the modal write directly to
+     `transactions` inside `_write_conn` (`BEGIN IMMEDIATE`), preserving a single source of truth.
+   - Validation in `compute_holdings`: rejects over-allocating beyond any buy lot's `open_qty`,
+     rejects deleting a buy order explicitly referenced by a subsequent sale (rolling back atomically),
+     absorbs 8-decimal Revolut fractional-share precision cleanly (`SNAP_EPS = 5e-9`), preserves
+     custom allocations when editing a sale's note via the legacy trade form, and falls back to FIFO
+     for any unallocated shares.
+2. **Per-order statuses & three-way accounting conservation:**
+   - Every buy order carries an explicit status (`"open"` 🟢 持仓中, `"partial"` 🟡 部分平仓,
+     `"closed"` ⚪ 已结清), live independent unrealized P&L (`open_pnl`, `open_pnl_pct`), realized
+     swing P&L, matched sale slices, and parallel strict-FIFO status (`fifo_status`, `fifo_open_qty`)
+     for one-click side-by-side comparison.
+   - Headline `avg_cost` (`Mine`) and `fifo_avg_cost` (`FIFO`) remain bit-for-bit unchanged; the
+     modal additionally reports `swing_realized`, `open_lots_avg`, and true net-cash `breakeven_price`
+     (`(cycle_buys - cycle_sells - dividends + fees) / held_qty`), satisfying the exact conservation
+     identity `open_lots_unrealized + swing_realized == fifo_unrealized + fifo_realized == unrealized + realized`.
+3. **Interactive UI (`StockLotButton` + `LotManagerModal.tsx`):**
+   - Every row in **My Holdings** displays a `📦 批次` button highlighting any currently profitable
+     open tranches (e.g. `🟢 3笔浮盈 +$xx.xx`) or the lowest-cost open lot when underwater.
+   - Inside the modal, users can filter/sort buy orders by status or cost, record new buys (by shares
+     or USD amount), or sell by checking specific open buy orders and entering partial/full share
+     counts (with quick `✨ 全选盈利批次` / `最低成本优先` / `LIFO` / `FIFO` helpers, live hypothetical
+     sell-price profit simulation, and one-click re-allocation `🎯 改配批次` on historical sales).
+   - Verified by 123 unit tests across `quant_ai/tests/test_markets_*.py` and clean strict TypeScript
+     build in `quant_ui`.
+
 
 ---
 
@@ -4448,6 +4522,8 @@ the weight: it turns retrieval into numbers.
 | 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-24: caught up (company match current, health all green); LM Studio tasks serialised and sized by `lm_session`; confirm one automatic night |
 | ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | Quant+AI | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
 | 🔥 | **Q.5 Holdings advisor (event-driven advice with limit prices, scored)** | AI agent on real decisions, with a track record | 🔴 The user's own positions | ~3 days | 🟡 In progress (2026-10-25) |
+| ⭐⭐⭐ | **Q.8 3-layer upcoming catalysts, per-stock modal & AI query** | Event-driven + LLM extraction + web fallback | 🔴 Forward binary risk on every holding | 1.5 days | ✅ Done (2026-10-30) — L1 calendars/conferences/implied moves + L2 6h RSS/8-K extraction + L3 web fallback, 90D modal (`52b50e9`, `8d33dc4`) |
+| ⭐⭐⭐ | **Q.9 Per-stock order status & swing lot allocation manager** | Accounting invariants & atomic ledger design | 🔴 Dip-buying tranche P&L without mutating Mine/FIFO avg cost | 1 day | ✅ Done (2026-10-30) — `transactions.lot_allocations`, open/partial/closed statuses, 3-way P&L conservation (`52b50e9`, `8d33dc4`) |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
