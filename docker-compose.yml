@@ -130,8 +130,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # d1c8eef: My Holdings on quant_ai's markets API, Market Briefs with forward briefs + scorecard (built on the host, Dockerfile.runtime)
-    image: xiz001/quant_ui:51ce6e8
+    # ab54717: Unified Task & Schedule Monitor tab in Dashboard (Airflow, Job Agent :5050, system daemons)
+    image: xiz001/quant_ui:ab54717
     container_name: quant_ui
     restart: always
     logging: *default-logging
