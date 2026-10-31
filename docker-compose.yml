@@ -130,8 +130,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # 8740ed8: soft dark theme; Jobs / Budget / Time tabs embedding the job_agent dashboard
-    image: xiz001/quant_ui:8740ed8
+    # be2b410: dark theme, Jobs / Budget / Time tabs; usable from signed-in home devices
+    image: xiz001/quant_ui:be2b410
     container_name: quant_ui
     restart: always
     logging: *default-logging
