@@ -4668,9 +4668,10 @@ add orders are next.
 - [ ] Per-stock measured after-hours costs; re-judge `learn_peers` with them
 - [x] Quick PEAD test on daily bars (2026-10-31, below)
 - [x] Sell the rebound, buy back lower, against holding (2026-10-31, below)
-- [ ] `learn_peers` rebuilt with the measured costs (0.125% a side after hours, 0.025% regular;
-      EP_DIR `/Volumes/Data4T/earnings_policy_realcost`, MLflow `action_rl_peers_realcost`); the
-      run with 0.25% / 0.05% chose +0.13% a trade on 2023-26 (no cash) and +0.01% (cash), DSR 0.000
+- [x] `learn_peers` rebuilt with the measured costs (0.125% a side after hours, 0.025% regular;
+      EP_DIR `/Volumes/Data4T/earnings_policy_realcost`, MLflow `action_rl_peers_realcost`,
+      2026-10-31): still nothing. No cash: 125 trades on 2023-26 at +0.03% (se 0.19), DSR 0.000;
+      with cash: 2 trades on 2023-26. Halving the cost did not make the peer spillover pay; dropped
 
 **Agreed order (user, 2026-10-31).** 1) the user reviews INTC's Action column and the targets above;
 2) score the user's own trades; 3) re-judge `learn_peers`, quick PEAD test; 4) everything else
@@ -4716,6 +4717,32 @@ drops -0.15%. Larger b and longer T lose more (the stock is not there to buy bac
 the same orders lose -0.9% to -1.9% a signal (t -3.6 to -4.5), what `learn_daily` found. The 10-29
 trade was the stock carrying on down after its report, not a repeatable rule: the Action column
 keeps trims as reductions and adds no buy-back. `scratchpad q10/swing_back.py`, `pead/pead.py`.
+
+**Infrastructure, 2026-10-31 evening.**
+*Data4T incident.* Between 19:17 and 19:26 every container whose data lives on the external disk
+(`/Volumes/Data4T/docker-volumes`) lost it at once: mysql8 crashed, airflow-postgres PANICked ("Not a
+directory"), mongo6 aborted, mlflow could not open its sqlite file; the host walk-forward writing to
+the same disk died at 19:35 without a traceback. The files were intact on the host; Docker Desktop's
+share of the disk had gone stale (`mkdir /host_mnt/Volumes/Data4T: file exists` on every start).
+Restarting containers does not help; restarting Docker Desktop does, and the databases recovered on
+their own (InnoDB / WAL crash recovery). Likely the disk hiccuped under the heavy parquet I/O.
+
+*MySQL retired.* Three databases were one too many. mysql8 held only Keycloak (realm re-imported
+from `quant-realm.json` on every start anyway) and the GDELT batch queue (`workflow`: two tables,
+~6,000 rows); quant_api had the MySQL driver and a datasource but no SQL at all. Now:
+- Keycloak on PostgreSQL (`keycloak` DB and role in airflow-postgres). The image's entrypoint sources
+  a baked-in `.env` with `KC_DB=mysql`, so compose overrides the entrypoint with the same two steps.
+- The batch queue in PostgreSQL (`workflow` DB and role): the two tables copied (counts match),
+  `historical_collector.py` ported (`ON CONFLICT DO NOTHING`, `make_interval`, `RealDictCursor`,
+  psycopg2 lock errors); `TASKDB_*` / `USE_DB_BATCH_QUEUE` / `TASK_TABLE`, the old `MYSQL_*` names
+  still read. Exercised end to end on a scratch table. Note: a batch now turns `failed` on its third
+  failure, as `retries+1 >= 3` reads; MySQL's left-to-right `SET` made it the second.
+- quant_api: JDBC starter, MySQL driver and datasource removed (10 tests pass).
+- quant_api `POST /api/auth/refresh`: tokens are issued by `http://quant_keycloak:8080`, and Keycloak
+  refuses a refresh on any other address, so the browser's refresh on :18082 had always failed
+  (the 5-minute access token simply lapsed); quant_ui now refreshes through quant_api.
+- mysql8 stopped and removed from compose; its data stays at `docker-volumes/mysql_data`, dumps in
+  `docker-volumes/backup/mysql-2026-10-31` and `~/Quant_trade_db_backups/mysql-2026-10-31`.
 
 ### Q.13 Today's action per holding and watchlist stock (🟡 pilot on INTC, 2026-10-31)
 

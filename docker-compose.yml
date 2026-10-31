@@ -13,20 +13,9 @@ services:
   # ======================================================
   # 1. Databases and infrastructure
   # ======================================================
-  mysql:
-    image: mysql:8.0
-    container_name: mysql8
-    restart: always
-    logging: *default-logging
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: workflow
-    ports:
-      - "23306:3306"
-    volumes:
-      - /Volumes/Data4T/docker-volumes/mysql_data:/var/lib/mysql
-    networks:
-      - project-net
+  # mysql8 was retired on 2026-10-31: Keycloak and the GDELT batch queue (workflow) moved to
+  # PostgreSQL in airflow-postgres, and quant_api never used SQL. Its data is kept at
+  # /Volumes/Data4T/docker-volumes/mysql_data, dumps in docker-volumes/backup/mysql-2026-10-31.
 
   mongodb:
     image: mongo:6.0
@@ -83,19 +72,23 @@ services:
     container_name: quant_keycloak
     restart: always
     logging: *default-logging
+    # Its database moved from MySQL to PostgreSQL (airflow-postgres) on 2026-10-31. The image's
+    # own entrypoint sources a baked-in .env that still says KC_DB=mysql, so the same two steps
+    # run here without it: re-import the quant realm from quant-realm.json, then start.
+    entrypoint: ["/bin/sh", "-c", "/opt/keycloak/bin/kc.sh import --dir /opt/keycloak/data/import --override true && exec /opt/keycloak/bin/kc.sh start-dev --import-realm"]
     ports:
       - "18082:8080"
     environment:
-      - KC_DB=mysql
-      - KC_DB_URL=jdbc:mysql://mysql8:3306/keycloak?useSSL=false&allowPublicKeyRetrieval=true
-      - KC_DB_USERNAME=root
-      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://airflow-postgres:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KEYCLOAK_PG_PASSWORD}
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
     volumes:
       - ../quant_keycloak/quant-realm.json:/opt/keycloak/data/import/quant-realm.json:ro
     depends_on:
-      - mysql
+      - airflow-postgres
     networks:
       - project-net
 
@@ -106,7 +99,7 @@ services:
     # Locally built, not in the registry: CI tags by commit sha and this fix
     # (e9938cc) had not been built when it was deployed. Replace with the CI tag
     # once it exists -- see the note in PROJECT_PLAN.
-    image: xiz001/quant_api:d2c41c2
+    image: xiz001/quant_api:71b14b7
     container_name: quant_api
     restart: always
     logging: *default-logging
@@ -117,7 +110,6 @@ services:
       # daily close from stock_prices_history rather than failing the page.
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
     depends_on:
-      - mysql
       - mongodb
       - keycloak
     networks:
@@ -130,8 +122,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # be2b410: dark theme, Jobs / Budget / Time tabs; usable from signed-in home devices
-    image: xiz001/quant_ui:be2b410
+    # 21f9395: dark theme, Jobs / Budget / Time tabs, home devices; session refreshed via quant_api
+    image: xiz001/quant_ui:21f9395
     container_name: quant_ui
     restart: always
     logging: *default-logging
