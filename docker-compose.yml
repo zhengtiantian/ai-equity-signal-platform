@@ -130,8 +130,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # ab54717: Unified Task & Schedule Monitor tab in Dashboard (Airflow, Job Agent :5050, system daemons)
-    image: xiz001/quant_ui:d457404
+    # adf19cb: Action column in My Holdings (daily action, INTC pilot)
+    image: xiz001/quant_ui:adf19cb
     container_name: quant_ui
     restart: always
     logging: *default-logging

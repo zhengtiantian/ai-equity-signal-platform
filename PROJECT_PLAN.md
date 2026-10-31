@@ -4599,6 +4599,96 @@ the machine — bridging:
     step instance expandable views, and a full-featured dark monospace terminal modal with refresh and copy.
 
 
+### Q.12 Review of the 2026-10-30 suggestions, and the portfolio risk gate (🟡 started 2026-10-31)
+
+**Why (user, 2026-10-31).** INTC: 98.9 shares at an average of $106.74; sold 30 at $92.22, bought 30
+back at $71.68 two hours later, then added 20 at $73.14 and 23.28 at $64.44. The round trip earned
++$616 against holding, but the average-cost books show a realised loss of -$435.60, which made it
+look like a losing trade. The adds afterwards were the problem: two lots 0.29 x ATR apart while
+the stock was still falling, INTC at 43.6% of the portfolio, chips / memory at 98.7%, no cash.
+The lesson for every model here: a trade is judged against not doing it, never against the average
+cost. And a sale at a loss bought back within four weeks has its loss restricted under Irish CGT.
+
+**Review of the suggestions made on the other machine (2026-10-30).**
+
+| Suggestion | Verdict |
+|---|---|
+| Stop daily buy-low/sell-high RL (`learn_daily`) | Agree: 2023-2026 -1.79%, DSR 0 |
+| Stop peer-spillover RL (`learn_peers`) | Pause, not refuted: the evening catch-up signal is there (IC about 0.11, top-bottom quintile about 0.65% gross); it is the assumed 0.5% round trip that eats it, and the spreads below say that is about twice the real cost on liquid names |
+| No larger action spaces, no PPO / DQN | Agree (the single LightGBM over 576 actions showed the winner's curse) |
+| Three layers: signal / position-and-risk / execution | Agree; the missing piece is layer 2 as one gate every module passes (below) |
+| "Pulse model +2.03%, DSR 0.992" | Out of date: that was CatBoost before the phantom-bar scrub; live is the 5-seed LightGBM (+1.40%, 116 trades, worst -3.18%), hurdle LightGBM in shadow. The pulse sells into the spike and buys back; it does not "catch the knife" |
+| Dip-entry spacing model | As a rule yes, as a trained model no: the per-fill figures overstate it (re-run below) |
+| Swing-lot exit model | Display only: lots are fungible (selling the $64 lot or the $106 lot sells the same INTC; Irish CGT uses FIFO whatever the lot), so "take profit on the cheap lot" is "reduce after a rebound", which `learn_daily` found loses to holding on these names |
+
+**Checks run on 2026-10-31.**
+
+1. *Pulse release minute (fixed, `quant_ai` `markets/pulse.py`).* STX 2026-10-27: the closing cross
+   moved the quote +0.6% at 16:00:22 and the watch took that as the release; the wire came at
+   16:05 (-3.5%), so the r+1 / r+3 / r+5 placements were five minutes early. In the first three
+   minutes after 16:00 a release now needs 2% (INTC 2026-07-23 moved 4.8% at 16:00: still caught).
+2. *Dip entry re-run (daily bars, 102 stocks; script kept in the session scratchpad).* Drops of
+   >= 2 x ATR: 2,593 since 2016, 899 in 2023-2026; another >= 1 x ATR within three sessions 47%
+   (2023-2026). A buy at the close or a limit k x ATR lower (five sessions to fill), out at
+   +tp x ATR or after 15 sessions, 0.05% a side; chosen on 2016-2022, reported on 2023-2026:
+
+   | k (limit below the close) | fill | per fill | **per signal** | same rule on random days |
+   |---|---|---|---|---|
+   | 0 (buy at the close), tp 3 | 100% | +1.34% | **+1.34%** | +1.30% |
+   | 0.5, tp 3 (best on 2016-2022) | 75% | +2.18% | **+1.64%** (t 3.1 by date) | +0.98% |
+   | 1.5, tp 2 (Q.10's rule) | 39% | +1.89% | **+0.74%** | +0.49% |
+
+   Spacing raises the gain per fill, as Q.10 said, but lowers it per signal (most limits never
+   fill); buying right after a drop is no better than buying on any day of a rising market. The
+   spacing rule stays, for risk (no clustered adds), not as a source of return. After such drops
+   the high reached +1.5 x ATR within 15 sessions in 61% of cases and +2 x ATR in 50%.
+3. *After-hours spreads (Alpaca SIP quotes, 60 random report evenings since 2025).* Median full
+   spread: 0.05% at 15:00, 0.25% five minutes after the release, 0.22% at +20 min, 0.19% at
+   +60 min, 0.15% at 19:30 (75th percentile 0.43% at +5 min); INTC 0.10% at +5 min, then 0.05%.
+   A market order pays about half the spread, so the 0.25% a side assumed in the pulse and the RL
+   is conservative (roughly 2x) for liquid names. Next: per-stock measured costs, then re-judge the
+   peer-spillover policy with them.
+
+**The gate (`quant_ai/markets/risk_rules.py`).** Fixed rules, not learned, checked on every order
+before it is shown: a sale within the whole shares held; a buy within the cash; no stock above
+`RISK_MAX_SYMBOL_PCT` (30%, placeholder) of holdings + cash and no chips / memory cluster above
+`RISK_MAX_CLUSTER_PCT` (70%, placeholder); no buy before a >= 2 x ATR drop has stabilised; a buy at
+least 1.5 x ATR below the cheapest open lot (2 x with a high-impact event within 7 days). Each block
+says why. Wired into today's action (Q.13); the pulse (sales and buy-backs only) and the advisor's
+add orders are next.
+
+- [x] Pulse release fix, dip re-run, spread measurement, the gate with tests (2026-10-31)
+- [ ] The user sets the two caps
+- [ ] Advisor add orders through the gate; pulse orders annotated with it
+- [ ] Per-stock measured after-hours costs; re-judge `learn_peers` with them
+
+### Q.13 Today's action per holding and watchlist stock (🟡 pilot on INTC, 2026-10-31)
+
+**Goal (user, 2026-10-31).** Every holding and watchlist stock gets one action for the day. First
+INTC only; the user judges the result before it goes wider.
+
+**Design (`quant_ai/markets/daily_action.py`, `GET /api/markets/portfolio/daily-action`; `quant_ui`
+column "Action" in My Holdings).** The three layers in one line: a tested signal or a rule makes an
+action, the gate sizes it, the limits come from ATR. The first that applies:
+
+| Action | When | Basis |
+|---|---|---|
+| Earnings | the stock reports tonight or before the next open: the pulse watch runs, no buys | tested (pulse champion) |
+| Trim | above the symbol cap: the excess in two limits at +1.5 and +2 x ATR, good 15 sessions | rule + the rebound statistics above |
+| Add | a buy every rule allows | rule |
+| Hold | otherwise; what blocks a buy is listed | default |
+
+Each day's answer is kept (`daily_actions` in markets.db) to be scored against doing nothing.
+
+*First answer, INTC on 2026-10-31 (price $64.89, ATR $6.86):* Trim 45 shares into a rebound, 23 at
+$75.18 and 22 at $78.61 (43.6% of the portfolio against the 30% cap); buys blocked (not stabilised,
+$50.72 or lower by spacing, no cash, chips / memory 98.7%); the limits are below the $87.69 average,
+so a buy-back within four weeks restricts the loss for Irish CGT.
+
+- [x] Backend, tests, the column for INTC (2026-10-31)
+- [ ] Score the kept answers against doing nothing
+- [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
+
 ---
 
 ## Consolidated Priority Table (all pending items)
@@ -4617,6 +4707,8 @@ the weight: it turns retrieval into numbers.
 | ⭐⭐⭐ | **Q.8 3-layer upcoming catalysts, per-stock modal & AI query** | Event-driven + LLM extraction + web fallback | 🔴 Forward binary risk on every holding | 1.5 days | ✅ Done (2026-10-30) — L1 calendars/conferences/implied moves + L2 6h RSS/8-K extraction + L3 web fallback, 90D modal (`52b50e9`, `8d33dc4`) |
 | ⭐⭐⭐ | **Q.9 Per-stock order status & swing lot allocation manager** | Accounting invariants & atomic ledger design | 🔴 Dip-buying tranche P&L without mutating Mine/FIFO avg cost | 1 day | ✅ Done (2026-10-30) — `transactions.lot_allocations`, open/partial/closed statuses, 3-way P&L conservation (`52b50e9`, `8d33dc4`) |
 | ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | Empirical execution guardrails vs overfit daily RL | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
+| 🔥 | **Q.12 Portfolio risk gate** (caps, cash, spacing, falling-knife) + review of the 10-30 suggestions | Layered advice like a desk: signal / risk / execution | 🔴 INTC 43.6%, chips 98.7%, no cash | 1 day | 🟡 2026-10-31: gate, pulse release fix, dip re-run, spreads done; caps to be set |
+| 🔥 | **Q.13 Today's action per holding / watchlist** | One line per stock, each with its basis, scored | 🔴 What to do today | 1 day | 🟡 2026-10-31: pilot on INTC |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
