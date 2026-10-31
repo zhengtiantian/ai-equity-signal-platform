@@ -130,8 +130,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # adf19cb: Action column in My Holdings (daily action, INTC pilot)
-    image: xiz001/quant_ui:adf19cb
+    # 8740ed8: soft dark theme; Jobs / Budget / Time tabs embedding the job_agent dashboard
+    image: xiz001/quant_ui:8740ed8
     container_name: quant_ui
     restart: always
     logging: *default-logging
