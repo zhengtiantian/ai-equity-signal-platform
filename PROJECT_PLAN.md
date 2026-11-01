@@ -4771,6 +4771,40 @@ $50.72 or lower by spacing, no cash, chips / memory 98.7%). If both fill: cash 1
 - [ ] Score the kept answers against doing nothing
 - [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
 
+### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01, nothing started)
+
+The 2026-11-01 review of every model (factor ranking, earnings pulse, lab, action RL, risk gate,
+RAG) gave these next steps. They are ranked by what they can change per day of work. The
+strength to keep is the evaluation layer: walk-forward, DSR, bootstrap CIs and t-tests on
+overlap-adjusted samples, with the negative results kept. The weak point is evidence: small
+samples, assumed costs, and a survivor universe.
+
+- [ ] 1. **Re-run the pulse champion at the measured cost.** Training assumes `PULSE_COST_PCT`
+      0.10% a side after hours; the measured spread is 0.125% (Q.12). The peer spillover died of
+      cost alone. Re-judge `lgbm_seeds` (+1.40%, 116 OOS trades, t 4.89, worst -3.18%) and
+      `hurdle_lgbm` at 0.125% before trusting the headline. One parameter; largest possible change.
+- [ ] 2. **Fitted weights for the factor scorer.** The hand-weighted regime scorer lost 0.074 net
+      Sharpe when syndicated news was deduplicated (M.12), while the fitted models moved by less
+      than 0.005 IC. Fit each regime's weights walk-forward (ridge or constrained regression)
+      instead of fixed weights such as `news_burst_20d` 0.9; compare net Sharpe and drawdown
+      against today's 0.58 / -39.6% (20d).
+- [ ] 3. **Overfitting defences (M.5) and survivorship.** Keep an untouched final holdout; report
+      DSR for the factor model as the lab does. Build the universe point in time: today's large caps
+      bias every test (in the PEAD test even the random-day control beat SPY by +1.1% over 20
+      sessions in 2023-26).
+- [ ] 4. **Fill-probability (first-passage / survival) model.** The phantom-bar scrub (Q.6, round
+      two) showed about half of CatBoost's +2.03% came from fills that could not have happened.
+      Estimate "does it fill" apart from "what it makes if filled". This feeds the hurdle models.
+- [ ] 5. **No more neural networks for now.** With ~2,490-3,835 reports, gradient-boosted trees
+      are the right tool: the 1D-CNN found no variant within the risk limits on its own, and PPO /
+      DQN were rejected (winner's curse over 576 actions). If tried later: MiniRocket (planned,
+      not implemented), or self-supervised pre-training on all 1-minute bars, then fine-tuning.
+- [ ] 6. **RAG.** Only 30.2% of articles fit 512 tokens, and the index holds title + lede.
+      Chunk and index long bodies; try query rewriting. Keep Claude as the judge, since the local
+      judges are not reliable (R.11).
+- [ ] 7. **Live evidence first.** Once `daily_actions` holds one to two months, score it against
+      doing nothing (Q.13). That is the only test of the advice itself and outranks any new model.
+
 ---
 
 ## Consolidated Priority Table (all pending items)
@@ -4791,6 +4825,7 @@ the weight: it turns retrieval into numbers.
 | ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | Empirical execution guardrails vs overfit daily RL | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
 | 🔥 | **Q.12 Portfolio risk gate** (caps, cash, spacing, falling-knife) + review of the 10-30 suggestions | Layered advice like a desk: signal / risk / execution | 🔴 INTC 43.6%, chips 98.7%, no cash | 1 day | 🟡 2026-10-31: gate, pulse release fix, dip re-run, spreads, targets (10% cash / 70% chips / 30% one stock), own trades scored; next learn_peers + PEAD |
 | 🔥 | **Q.13 Today's action per holding / watchlist** | One line per stock, each with its basis, scored | 🔴 What to do today | 1 day | 🟡 2026-10-31: pilot on INTC |
+| ⭐⭐⭐ | **Q.14 Model optimisation backlog** (pulse at real cost, fitted factor weights, M.5 holdout + point-in-time universe, fill model, RAG chunking) | Evidence over more models | 🔴 Is +1.40% real after costs | ~1 day for item 1 | [ ] Recorded 2026-11-01 |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
 | 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
