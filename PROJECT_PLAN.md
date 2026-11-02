@@ -4912,6 +4912,59 @@ sets the expectation: direction forecasts did not beat simple averages (Q.14), r
       sentiment store; tested as features in the drop / fill models rather than read as signals.
 - [ ] Q.16.6 Real-time alerts (phone) when one of the above fires.
 
+**2026-11-02 first build and the plan after it.** `daily_advice.py` (LightGBM quantiles + P(up), MLP
+challenger, 102 stocks x 2016-2026, 5 / 20 / 60 days) found no direction skill (20-day IC 0.004, t 0.5;
+"reduce" days did better than "hold" in 2023-2026; excess-return targets no better), so the action
+shows hold, calibrated odds and ranges, the news causes and the add rule. What the literature and
+practice suggest instead (sources in the 11-02 session notes): ML return prediction is weak per stock
+(Gu-Kelly-Xiu: monthly R2 ~0.4%) and pays through breadth; LLM scores of individual headlines predict
+the next days' returns (Lopez-Lira-Tang; Chen-Kelly-Xiu); drift continues after bad earnings / guidance
+as analysts revise (PEAD); option skew and put-call volume (Xing-Zhang-Zhao; Pan-Poteshman) and short
+interest / days-to-cover (Boehmer et al.) carry informed trading; stops add value only when losses have
+momentum (Kaminski-Lo); pre-set limit orders curb the disposition effect (Odean). Order of work:
+
+- [x] Q.16.7 ✅ 2026-11-02 (`quant_data/research/models/barrier_model.py`, live in the action as "Getting out"):
+      walk-forward multiclass LightGBM per barrier set. 5 sessions (+1 / -1.5 x ATR): beats the base rate
+      (Brier 0.6287 vs 0.6326; P(lower first) sorts 21% -> 30% across fifths), calibrated and shown. 20 and
+      60 sessions: worse than the base rate, so the situation rates are shown instead. Managing with both
+      barriers against holding to the time limit, out of sample: 20 sessions, 30%+ under the high after
+      bad news (4,758 cases) +0.6% vs +2.1% mean, worst 5% -14% vs -18%; 60 sessions +3.0% vs +6.8%, -23% vs
+      -37% (holding flattered by a survivor universe). The action sizes the position so the worst 5% with
+      the stop fits the loss budget: INTC on 11-02, sell 23 now, 119 with a $70.44 sell and a $46.01 stop.
+      Original note: Ask which
+      comes first from today: a rebound to +u x ATR (a sell level), a fall to -l x ATR (a stop), or the
+      time limit; P(each) per horizon, walk-forward, judged against the pooled and grouped base rates
+      (which beat ML on the 11-02 fill test) and on deep-drawdown days.
+- [x] Q.16.8 ✅ 2026-11-02 (`news_events.py`): 880k articles placed on the first tradable session; excess
+      returns vs all days (t clustered by date): guidance cut 20d -1.61% (t -4.4), 60d -2.35% (t -3.6);
+      bad earnings news 20d -0.76% (t -5.0); high-impact bad news 20d -0.50% (t -3.4); upgrade 20d +0.46%
+      (t 2.9); a 5%+ fall without bad news 20d +1.11% (t 3.0), 60d +3.12% (t 4.2); bad news on a 5%+ fall
+      20d -0.66% (t -1.2). The title rule for "guidance raise" misfires (it trails too) and is not used.
+      Features for Q.16.7; the guidance-cut line is on the action.
+      Original note: Each article of the 880k store scored by its
+      own sentiment / event type and time; forward returns from the next session by type (guidance cut,
+      downgrade, results, sector, macro); features for Q.16.7 and a line on the action ("after news like
+      this, stocks went on X% over 20 days").
+- [x] Q.16.12 ✅ 2026-11-02 **Scheduled events ahead** (`calendar_events.py`; FOMC dates from the Fed's calendars
+      2016-2027): SPY 2016-2026 — options-expiration week -0.09% a day vs others (t -2.2); with an FOMC
+      decision within 5 sessions SPY made +0.05% over 5 days vs +0.32% otherwise; FOMC day / eve, jobs day,
+      turn of month, pre-holiday not significant (the pre-FOMC drift has faded since its 2012 publication);
+      stocks the session before their report +0.16% over SPY (t 3.2). As model features: the 5-day barrier
+      model's Brier 0.6287 -> 0.6271 (kept), the 5-day direction model unchanged (IC 0.004 -> 0.003). On the
+      action as "Coming up", with these figures.
+- [~] Q.16.9 🟡 2026-11-02 collection started (`collectors/market/options_analyst_snapshot.py`, DAG
+      `market_snapshots` weekdays 21:15 UTC): per stock (102 + holdings) the option chain's ATM / 10%-OTM
+      implied vols (Black-Scholes from the mid), skew, straddle %, put / call volume and open interest for
+      the first expiries >= 5 and >= 25 days, and Finnhub's monthly rating counts and surprises (price
+      targets, rating changes and estimates are paid tiers). To be tested once months have accumulated.
+      Original note: **Institutional data**: analyst estimate / rating revisions (Finnhub), short interest and
+      days-to-cover (FINRA / Nasdaq), option skew and put-call volume (Nasdaq chain; no free history, so
+      a daily snapshot starts now).
+- [ ] Q.16.10 **Breadth**: rank all 100+ names daily for entry / rotation ("what to own instead of INTC"),
+      rather than timing one stock.
+- [ ] Q.16.11 **Pre-set take-profit / stop orders** at entry from the barriers, against the disposition
+      effect (the SKHY +$450 and STX $718 that were not taken; INTC averaged down 11 times).
+
 ---
 
 ## Consolidated Priority Table (all pending items)
