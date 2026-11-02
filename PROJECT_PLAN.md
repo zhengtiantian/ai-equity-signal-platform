@@ -4771,7 +4771,7 @@ $50.72 or lower by spacing, no cash, chips / memory 98.7%). If both fill: cash 1
 - [ ] Score the kept answers against doing nothing
 - [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
 
-### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1 and 4 and tests A1-A4 done 2026-11-02)
+### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1, 2, 4, 6, tests A1-A4 and the action's risk plan done 2026-11-02; 3 partly; 7 needs live months)
 
 The 2026-11-01 review of every model (factor ranking, earnings pulse, lab, action RL, risk gate,
 RAG) gave these next steps. They are ranked by what they can change per day of work. The
@@ -4784,12 +4784,30 @@ samples, assumed costs, and a survivor universe.
       0.10% a side after hours; the measured spread is 0.125% (Q.12). The peer spillover died of
       cost alone. Re-judge `lgbm_seeds` (+1.40%, 116 OOS trades, t 4.89, worst -3.18%) and
       `hurdle_lgbm` at 0.125% before trusting the headline. One parameter; largest possible change.
-- [ ] 2. **Fitted weights for the factor scorer.** The hand-weighted regime scorer lost 0.074 net
+- [x] 2. **Fitted weights for the factor scorer.** ✅ 2026-11-02 (`quant_data/research/backtest/factor_lab.py`,
+      top 5 every 20 sessions, the backtest's costs, selection 2019-01..2025-10 = 86 rebalances). The hand
+      weights ranked no better than chance: mean 20-day rank IC -0.0005 (NEUTRAL) / -0.007 (regime), Sharpe
+      0.79 / 0.83 against 0.88 for buying the whole universe equally. A ridge refitted at each rebalance on
+      past sessions reached IC 0.049 (t 2.62), Sharpe 0.97, +7.8%/yr over the universe (t 1.52, not
+      significant), DSR 0.989 (0.847 on the excess). Live since 2026-11-02: `score_daily_signals.py` reads
+      `research/signals/fitted_weights.json` (`SIGNAL_WEIGHTS=hand` restores the old dicts). Only features
+      filled on >= 30% of rows and half the sessions are weighted: retail_sent_score (from 2025-12),
+      analyst_buy_ratio (2026-03) and ah_gap (2026-05) had taken the largest weights from a few months of
+      data. Also found: `backtest_portfolio.py` never switched regime (it did not load the macro columns), so
+      the 0.58 reference was NEUTRAL weights throughout.
+      Original note: The hand-weighted regime scorer lost 0.074 net
       Sharpe when syndicated news was deduplicated (M.12), while the fitted models moved by less
       than 0.005 IC. Fit each regime's weights walk-forward (ridge or constrained regression)
       instead of fixed weights such as `news_burst_20d` 0.9; compare net Sharpe and drawdown
       against today's 0.58 / -39.6% (20d).
-- [ ] 3. **Overfitting defences (M.5) and survivorship.** Keep an untouched final holdout; report
+- [~] 3. **Overfitting defences (M.5) and survivorship.** 🟡 2026-11-02, partly: an untouched final holdout
+      (2025-11..2026-10, 12 rebalances) is reported once in factor_lab.py and chose nothing; DSR counts the
+      four scored variants. In it no variant beat the universe (fitted -9.8%/yr, fitted by regime -0.4%, hand
+      -22% / -37%; 12 periods, t within +/-1.6). Survivorship is now measured rather than assumed: today's
+      102 names bought equally made Sharpe 0.88 against SPY's 0.66 in 2019-2025, so every factor result is
+      reported as excess over that universe. A point-in-time universe is not built: it needs historical
+      index membership and the prices of delisted names, which yfinance does not carry.
+      Original note: Keep an untouched final holdout; report
       DSR for the factor model as the lab does. Build the universe point in time: today's large caps
       bias every test (in the PEAD test even the random-day control beat SPY by +1.1% over 20
       sessions in 2023-26).
@@ -4816,9 +4834,24 @@ samples, assumed costs, and a survivor universe.
       are the right tool: the 1D-CNN found no variant within the risk limits on its own, and PPO /
       DQN were rejected (winner's curse over 576 actions). If tried later: MiniRocket (planned,
       not implemented), or self-supervised pre-training on all 1-minute bars, then fine-tuning.
-- [ ] 6. **RAG.** Only 30.2% of articles fit 512 tokens, and the index holds title + lede.
+- [x] 6. **RAG.** ✅ 2026-11-02, measured before spending the 20 hours (`quant_ai/eval/chunk_ablation.py`):
+      the 60 evaluation queries' judged pools (2,487 pairs, qwen3.8-27b rubric v3) re-ranked by the
+      query's cosine to title + lede (the index today) or to the best ~400-token chunk of the whole body.
+      nDCG@10 0.760 -> 0.773 (+0.013, 95% CI -0.010..+0.036, t 1.11; 25 queries better, 16 worse),
+      strict P@10 0.710 -> 0.723. Paraphrase queries gained (0.461 -> 0.531), temporal lost (0.807 ->
+      0.755). Not significant, and a third of the reranker's +0.076, which already reads the bodies; the
+      title + lede index stays and the 20-hour chunked re-index is not run. (A re-ranking of judged
+      documents: it cannot show first-stage recall of articles whose relevant part is deep in the body.)
+      Original note: Only 30.2% of articles fit 512 tokens, and the index holds title + lede.
       Chunk and index long bodies; try query rewriting. Keep Claude as the judge, since the local
       judges are not reliable (R.11).
+- [x] **Action: risk plan (2026-11-02).** The daily action had no return forecast that earned a place
+      (the factor score ranked the user's holdings no better than chance, item 2), so it now uses a
+      risk model the way a desk's optimiser does with zero alpha: `quant_ai/markets/optimizer.py` sells
+      each stock's excess over 30%, then takes what the chip cluster is over 70% and cash under 10% in
+      $50 steps from the holding with the largest marginal variance (6-month covariance, 20% shrinkage).
+      On 2026-11-02: sell $5,842 — INTC $2,914, SKHY $2,928 — portfolio volatility 69.5% -> 46.3%; INTC
+      carried 49% of the risk, SKHY 39%. The INTC trim is sized by the plan (48 shares, not 43).
 - [ ] 7. **Live evidence first.** Once `daily_actions` holds one to two months, score it against
       doing nothing (Q.13). That is the only test of the advice itself and outranks any new model.
 
