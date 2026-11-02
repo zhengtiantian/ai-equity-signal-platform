@@ -4855,6 +4855,63 @@ samples, assumed costs, and a survivor universe.
 - [ ] 7. **Live evidence first.** Once `daily_actions` holds one to two months, score it against
       doing nothing (Q.13). That is the only test of the advice itself and outranks any new model.
 
+### Q.15 Get out of INTC, and the rules that would have kept it small (🔴 recorded 2026-11-02, user's request)
+
+**The case.** INTC fell from $127 (09-24) to $90 (10-16) and, after a Q3 beat with a weak Q4 outlook
+(PC slowdown, an Israeli fab explosion, supply shortages), 28.6% on 10-30. Causes in the news store:
+10-05..06 Musk said Terafab was talking to TSMC (Intel's foundry role in doubt, -6%; relief on 10-07
+when Intel's CEO said it stays); 10-08..09 a chip sell-off "ahead of the Oct 29 report" (-7%); 10-29 the
+guidance. The user added 12 times: 9 lots from $119.91 to $90.98 (three on 10-08 alone) and three after
+the report ($71.68, $73.14, $64.44). Replayed on the daily bars, the add rules now in `risk_rules.gate`
+would have allowed only the first: seven were 0.1-0.8 x ATR apart (the rule wants >= 1.5, 2.0 within 7
+days of a report), two came while the stock fell 1.9 x ATR in 3 sessions, and the three after the
+report broke the falling, report-day and guidance rules together. Today: 142.18 shares at $87.69
+average, -31%; breakeven needs +46%. After 193 earnings drops of >= 4 x ATR (102 stocks, 2016-2026)
+the price was back above the pre-drop close within 60 / 120 / 250 sessions in 29% / 49% / 73% of cases,
+and 46% above the drop-day close within 250 sessions in 37%.
+
+- [ ] Q.15.1 **Why it fell, on the action.** For a holding down >= 2 x ATR or 5% in a day, retrieve the
+      news (hybrid search_news) and state the cause with sources, classified: guidance / results,
+      sector sell-off, macro, company news, none found. The cause feeds the reach rates (A1) and the
+      add rules below.
+- [ ] Q.15.2 **Add planner (补仓): when, at what price, how many.** Allowed only when stabilised, >= 1.5
+      x ATR below the lowest lot (2.0 within 7 days of a report), not in the week before a report, not
+      for N sessions after a guidance cut (N to be measured on the post-earnings drift), and sized so
+      the stock stays under 30% and the portfolio's bad day under the loss budget. Show the next
+      allowed price and size, or why none.
+- [ ] Q.15.3 **Recovery plan (解套) per losing holding.** Together, with each part's odds:
+      (a) rebound tranche sells (in the action since 11-02: 39% / 28% reach after such a drop);
+      (b) **profit offset (the user's idea)**: when another holding is sold at a gain G, sell the losing
+      one so its realised loss is X% of G (X = 30% proposed). Measured on today's numbers it is slow:
+      at $65, $1,000 of gains clears 13 INTC shares at X = 30%, 44 at 100%; clearing all 142 needs
+      ~$10.8k of gains at 30%. SKHY and TSM are below cost today, so it has nothing to work with yet;
+      (c) optional swing of the recent cheap lots ($64.44-$73.14) on rebounds — no tested plan has beaten
+      holding (Q.5 advisor), so labelled as such; (d) the base rates above, so "wait for breakeven" is a
+      known 1-in-3 bet over a year, not a plan. Decisions are on the position's risk from today, not
+      on its cost.
+- [ ] Q.15.4 **Profit-offset engine**: watch the other holdings; when one gains (above cost + a
+      threshold), propose the paired orders (sell part of the winner, sell INTC for X% of the gain) in
+      the action, and score them against doing nothing (daily_actions).
+
+### Q.16 What to do with each name: enter, take profit, stop loss, hold (🟡 recorded 2026-11-02, user's request)
+
+The user wants, per holding and watchlist name: which can be entered now, which to take profit on,
+which to cut, which to hold, and whatever news and events can add. Every rule is tested on the
+102-stock history (walk-forward, net of cost, against doing nothing and against the universe) before it
+shows; a rule that does not beat holding is shown as such or not at all. What the 11-02 work found
+sets the expectation: direction forecasts did not beat simple averages (Q.14), risk and fill rates did.
+
+- [ ] Q.16.1 **Take profit**: trailing exits (give back X% of the peak gain, or k x ATR from the high) and
+      partial profit-locking — would have fired on SKHY at +$450 (10-28) and STX at $718 (10-29).
+- [ ] Q.16.2 **Stop loss / cut**: k x ATR below cost or the entry, time stops, and "cause = guidance cut"
+      exits; measured against holding on the drop events (drop_rebound.py).
+- [ ] Q.16.3 **Entry**: watchlist names that pass the add rules (stabilised, spacing, no report within 7
+      days) with the fitted factor score (IC 0.049) as a tie-break, not as a forecast.
+- [ ] Q.16.4 **Hold**: the default, with the loss budget and the next event shown.
+- [ ] Q.16.5 **News and events as features**: cause of each move (Q.15.1), event calendars (Q.8), the
+      sentiment store; tested as features in the drop / fill models rather than read as signals.
+- [ ] Q.16.6 Real-time alerts (phone) when one of the above fires.
+
 ---
 
 ## Consolidated Priority Table (all pending items)
@@ -4875,6 +4932,8 @@ the weight: it turns retrieval into numbers.
 | ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | Empirical execution guardrails vs overfit daily RL | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
 | 🔥 | **Q.12 Portfolio risk gate** (caps, cash, spacing, falling-knife) + review of the 10-30 suggestions | Layered advice like a desk: signal / risk / execution | 🔴 INTC 43.6%, chips 98.7%, no cash | 1 day | 🟡 2026-10-31: gate, pulse release fix, dip re-run, spreads, targets (10% cash / 70% chips / 30% one stock), own trades scored; next learn_peers + PEAD |
 | 🔥 | **Q.13 Today's action per holding / watchlist** | One line per stock, each with its basis, scored | 🔴 What to do today | 1 day | 🟡 2026-10-31: pilot on INTC |
+| 🔥 | **Q.15 Get out of INTC + add discipline** (why it fell, add planner, recovery plan, profit offset) | Event-driven decisions on a real loss | 🔴 INTC -31%, 42% of the portfolio | ~3 days | [ ] Recorded 2026-11-02 |
+| ⭐⭐⭐ | **Q.16 Enter / take profit / stop loss / hold per name** (trailing exits, stops, entries, news features, alerts) | Rules tested before shown | 🔴 SKHY +$450 and STX $718 not taken | ~5 days | [ ] Recorded 2026-11-02 |
 | ⭐⭐⭐ | **Q.14 Model optimisation backlog** (pulse at real cost, fitted factor weights, M.5 holdout + point-in-time universe, fill model, RAG chunking) | Evidence over more models | 🔴 Is +1.40% real after costs | ~1 day for item 1 | [ ] Recorded 2026-11-01 |
 | ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
 | 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |

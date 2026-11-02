@@ -128,8 +128,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # 21f9395: dark theme, Jobs / Budget / Time tabs, home devices; session refreshed via quant_api
-    image: xiz001/quant_ui:21f9395
+    # action-model (2026-11-02): today's action from the advice models, English / Chinese, by section; built from 21f9395 + Holdings ActionCell
+    image: xiz001/quant_ui:action-model
     container_name: quant_ui
     restart: always
     logging: *default-logging
