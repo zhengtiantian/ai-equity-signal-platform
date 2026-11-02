@@ -4771,7 +4771,7 @@ $50.72 or lower by spacing, no cash, chips / memory 98.7%). If both fill: cash 1
 - [ ] Score the kept answers against doing nothing
 - [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
 
-### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01, nothing started)
+### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1 and 4 and tests A1-A4 done 2026-11-02)
 
 The 2026-11-01 review of every model (factor ranking, earnings pulse, lab, action RL, risk gate,
 RAG) gave these next steps. They are ranked by what they can change per day of work. The
@@ -4779,7 +4779,8 @@ strength to keep is the evaluation layer: walk-forward, DSR, bootstrap CIs and t
 overlap-adjusted samples, with the negative results kept. The weak point is evidence: small
 samples, assumed costs, and a survivor universe.
 
-- [ ] 1. **Re-run the pulse champion at the measured cost.** Training assumes `PULSE_COST_PCT`
+- [x] 1. **Re-run the pulse champion at the measured cost.** ✅ 2026-11-02: already stricter than measured — the weekly refresh trains at `PULSE_COST_PCT=0.25` a side plus 0.05% fill-through (`_strict`), twice the 0.125% spread; the note below predates it. New finding: the champion `lgbm_seeds` has DSR 0.712 (< 0.95), the shadow `hurdle_lgbm` 0.961 — the shadow is the one that survives the multiple-testing deflation.
+      Original note: training assumes `PULSE_COST_PCT`
       0.10% a side after hours; the measured spread is 0.125% (Q.12). The peer spillover died of
       cost alone. Re-judge `lgbm_seeds` (+1.40%, 116 OOS trades, t 4.89, worst -3.18%) and
       `hurdle_lgbm` at 0.125% before trusting the headline. One parameter; largest possible change.
@@ -4792,7 +4793,23 @@ samples, assumed costs, and a survivor universe.
       DSR for the factor model as the lab does. Build the universe point in time: today's large caps
       bias every test (in the PEAD test even the random-day control beat SPY by +1.1% over 20
       sessions in 2023-26).
-- [ ] 4. **Fill-probability (first-passage / survival) model.** The phantom-bar scrub (Q.6, round
+- [x] 4. **Fill-probability (first-passage / survival) model.** ✅ 2026-11-02 for the trim limits
+      (`quant_data/research/models/drop_rebound.py`, 2,455 drops of >= 2 x ATR, 102 stocks, 2016-2026,
+      walk-forward 2019-2026). LightGBM on 17 features (AUC 0.58-0.60) was over-confident and lost to the
+      pooled rate on Brier; logistic and an earnings x size x market table did no better. What wins at
+      every level, in 5-7 of 8 years: the rate split by cause. +1.5 / +2 x ATR reached in 15 sessions:
+      earnings drops >= 4 x ATR 39% / 28% (193), other earnings drops 50% / 36% (509), no report 65% / 54%
+      (1,753) — the action quoted 61% / 50% for all. Unfilled, the close 15 sessions later averaged
+      -4.3 to -6.3% vs selling at the next open. Picking the limit per drop by model lost 0.16% vs the
+      fixed pair (CI crosses 0), so the pair stays. Live in `daily_action.REBOUND` (cause from the
+      Nasdaq calendar; `lot_advisor._last_big_drop`).
+      Tests from the 11-01 reading list, same script: **A2** overnight vs intraday: +0.051% vs +0.049% a
+      day, after drops +0.05% vs -0.01% (CIs cross 0) — no reason to prefer the open or the close.
+      **A3** session before an after-the-close report: +0.149% vs +0.099% other sessions (CI crosses) —
+      no pre-report run-up in this universe. **A4** volatility-managed exposure per stock (1/sigma,
+      1/sigma^2): median Sharpe 0.578 / 0.546 vs 0.602 held, t -1.59; max drawdown -55.5% vs -60.6% —
+      no return gain, only a little less drawdown, so the fixed caps stay.
+      Original note: the phantom-bar scrub (Q.6, round
       two) showed about half of CatBoost's +2.03% came from fills that could not have happened.
       Estimate "does it fill" apart from "what it makes if filled". This feeds the hurdle models.
 - [ ] 5. **No more neural networks for now.** With ~2,490-3,835 reports, gradient-boosted trees
