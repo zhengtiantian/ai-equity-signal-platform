@@ -75,7 +75,9 @@ services:
     # Its database moved from MySQL to PostgreSQL (airflow-postgres) on 2026-10-31. The image's
     # own entrypoint sources a baked-in .env that still says KC_DB=mysql, so the same two steps
     # run here without it: re-import the quant realm from quant-realm.json, then start.
-    entrypoint: ["/bin/sh", "-c", "/opt/keycloak/bin/kc.sh import --dir /opt/keycloak/data/import --override true && exec /opt/keycloak/bin/kc.sh start-dev --import-realm"]
+    # kc.sh import does not resolve ${...} placeholders (it stored the literal string as the
+    # quant-ai secret, 2026-11-02), so the secret is substituted into a copy in /tmp first.
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /tmp/kc-import && sed \"s|\\$${QUANT_AI_CLIENT_SECRET}|$$QUANT_AI_CLIENT_SECRET|\" /opt/keycloak/data/realm-src/quant-realm.json > /tmp/kc-import/quant-realm.json && /opt/keycloak/bin/kc.sh import --dir /tmp/kc-import --override true && exec /opt/keycloak/bin/kc.sh start-dev"]
     ports:
       - "18082:8080"
     environment:
@@ -85,8 +87,12 @@ services:
       - KC_DB_PASSWORD=${KEYCLOAK_PG_PASSWORD}
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+      # quant-realm.json carries no secret for the quant-ai client, only ${QUANT_AI_CLIENT_SECRET}:
+      # without it every re-import generated a new random secret and quant_ai's copy stopped
+      # working at each restart (MCP calls to quant_api got 401). Same value as quant_ai/.env.
+      - QUANT_AI_CLIENT_SECRET=${QUANT_AI_CLIENT_SECRET:?set QUANT_AI_CLIENT_SECRET in quant_docker/.env}
     volumes:
-      - ../quant_keycloak/quant-realm.json:/opt/keycloak/data/import/quant-realm.json:ro
+      - ../quant_keycloak/quant-realm.json:/opt/keycloak/data/realm-src/quant-realm.json:ro
     depends_on:
       - airflow-postgres
     networks:
