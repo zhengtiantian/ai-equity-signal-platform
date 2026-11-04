@@ -128,8 +128,7 @@ services:
       start_period: 30s
 
   quant_ui:
-    # keywords (2026-11-04): the weekly keyword review tab, built from dd4844f + Keywords page (local image, Dockerfile.runtime)
-    image: xiz001/quant_ui:keywords
+    image: xiz001/quant_ui:1013207
     container_name: quant_ui
     restart: always
     logging: *default-logging
