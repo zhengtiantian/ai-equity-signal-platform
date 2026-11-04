@@ -129,7 +129,7 @@ services:
 
   quant_ui:
     # indices (2026-11-04): Holdings page Indices module, built from 1013207 + IndicesPanel (local image, Dockerfile.runtime)
-    image: xiz001/quant_ui:indices
+    image: xiz001/quant_ui:44e127c
     container_name: quant_ui
     restart: always
     logging: *default-logging
