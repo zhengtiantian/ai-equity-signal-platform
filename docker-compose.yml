@@ -128,8 +128,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # indices (2026-11-04): Holdings page Indices module, built from 1013207 + IndicesPanel (local image, Dockerfile.runtime)
-    image: xiz001/quant_ui:indices
+    # schedule (2026-11-04): Task Monitor today/tomorrow list + Indices module, built from 44e127c + TaskSchedulePanel (local image)
+    image: xiz001/quant_ui:schedule
     container_name: quant_ui
     restart: always
     logging: *default-logging
