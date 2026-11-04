@@ -128,8 +128,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # action-model (2026-11-02): today's action from the advice models, English / Chinese, by section; built from 21f9395 + Holdings ActionCell
-    image: xiz001/quant_ui:dd4844f
+    # keywords (2026-11-04): the weekly keyword review tab, built from dd4844f + Keywords page (local image, Dockerfile.runtime)
+    image: xiz001/quant_ui:keywords
     container_name: quant_ui
     restart: always
     logging: *default-logging
