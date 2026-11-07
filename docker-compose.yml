@@ -147,7 +147,7 @@ services:
       start_period: 30s
 
   quant_data:
-    image: xiz001/quant_data:cc5108c
+    image: xiz001/quant_data:f2d84d9
     container_name: quant_data
     restart: unless-stopped   # stays stopped after core.sh stops it (2026-10-22)
     logging: *default-logging
