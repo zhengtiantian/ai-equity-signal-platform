@@ -856,6 +856,28 @@ missing piece is propagation, and the honest question is not "can this be captur
   predicting stay available as a research tool: telling the user why a position moved today
   is genuinely useful, and is a different claim from telling them what to buy tomorrow.
   Keeping those two apart is the discipline this series is built around.
+- [ ] **N.6** 🟡 **Automatic news linkage for holdings** (recorded 2026-11-05, user's request). One article
+  alone can mislead; its impact often depends on *other* news. The user's illustration (one example of
+  the general case, not the feature's scope): "Democrats win the midterms" may not hurt INTC by itself,
+  but together with "Democrats push to restrict AI data-center construction" it is strongly bearish, and
+  much less so if Republicans had won. The system must find such links **by itself**, for any pair or
+  chain of articles, with no hand-listed event pairs.
+  - **Alert (first deliverable).** After every 30-minute `quant_intraday_news` run (and the nightly GDELT
+    pass): tag each new article with themes and entities, matched or not (macro and policy news names no
+    company); map themes to holdings / watchlist with a direction (exposure table, reviewed by the user,
+    N.3); retrieve related earlier articles by theme, entity and meaning, date-bounded to before the
+    article (no look-ahead); an agent judges whether the combination changes the impact and writes
+    symbol, severity (strongly bearish .. strongly bullish), confidence, a 2-4 step chain, cited URLs, and
+    whether the news is new or already priced in. Shown in the symbol's **Action** within minutes (holdings
+    page, phone), strongly bearish/bullish also pushed; one live alert per symbol and theme per day.
+    **A prompt only — it does not change the buy/sell advice**, which the user considers not mature yet.
+  - **Labels and training.** A `themes` field in the per-article labels, added in the same prompt change
+    as the speed work (prompt order / distilled model) so the backfill is relabelled once; daily
+    exposure-weighted theme sentiment and the logged linkage judgments as features, used by the models
+    only after N.4's event study shows they predict. Every alert is logged and scored against 5/20-day
+    excess returns.
+  - Open choice: the reasoning model (Claude via the CLI already used by `catalysts.py` L3, or local 27b);
+    the theme tagger is a local small model either way.
 
 ### Stock Universe
 - [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
