@@ -266,6 +266,7 @@ bash run_host.sh
 | `scripts/host_proxy.py` | Host-side HTTP(S) proxy so Docker can pull and build behind a VPN |
 | `docker/airflow/` | Airflow image for the web UI and `airflow-init` (Dockerfile + vendored provider wheel) |
 | `PROJECT_PLAN.md` | Roadmap, status and the detailed spec of every item |
+| `docs/STRUCTURE.md` | Directory-by-directory map of all six repositories and where each part runs |
 
 ---
 
