@@ -129,7 +129,7 @@ services:
 
   quant_ui:
     # schedule (2026-11-04): Task Monitor today/tomorrow list + Indices module, built from 44e127c + TaskSchedulePanel (local image)
-    image: xiz001/quant_ui:c999d5c
+    image: xiz001/quant_ui:21eaea3
     container_name: quant_ui
     restart: always
     logging: *default-logging
