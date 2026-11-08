@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Start the platform's always-on core and stop everything else.
 #
-#   login chain : mysql, mongodb, keycloak, kafka, quant_api, quant_ui
+#   login chain : mongodb, keycloak, kafka, quant_api, quant_ui
 #                 (quant_api does not start without kafka: "No resolvable bootstrap urls")
 #   data pipeline: airflow-postgres (the host Airflow scheduler's metadata DB), qdrant (news
-#                 vectors), mlflow (weekly training); mongodb and mysql are shared with the above
+#                 vectors), mlflow (weekly training); keycloak also keeps its database in airflow-postgres
 #
 # The Airflow scheduler itself runs on the host (launchd com.quant.airflow-scheduler) and
 # crash-loops while airflow-postgres is down, so the daily pipeline needs this core running.
 # The portfolio, global markets and daily briefs run in quant_ai on the host without Docker.
-# Not started: kafka-ui, airflow-webserver, quant_data / quant-ai containers (their work runs
-# on the host). Start the full platform with: docker compose up -d
+# Not started: kafka-ui, airflow-webserver, and the reference-only quant-ai container (it runs
+# on the host). quant_data has no container: its code runs under the host scheduler. Start the full platform with: docker compose up -d
 set -euo pipefail
 cd "$(dirname "$0")/.."          # the repo root, where docker-compose.yml is
 
@@ -20,7 +20,7 @@ if [ ! -d /Volumes/Data4T/docker-volumes ]; then
   exit 1
 fi
 
-CORE=(mysql mongodb keycloak kafka quant_api quant_ui airflow-postgres qdrant mlflow)
+CORE=(mongodb keycloak kafka quant_api quant_ui airflow-postgres qdrant mlflow)
 others=$(docker compose config --services | grep -vxF -f <(printf '%s\n' "${CORE[@]}") || true)
 if [ -n "$others" ]; then
   # Containers created before the compose change may still carry "always", which Docker

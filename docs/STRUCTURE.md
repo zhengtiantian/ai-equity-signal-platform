@@ -32,8 +32,8 @@ the Docker images reference these paths.
 ```
 
 quant_ai and the Airflow scheduler run on the host because, under the VPN, containers cannot
-reach LM Studio on `127.0.0.1:1234`. The `quant_data` container's in-process scheduler is kept
-disabled by environment flags in the compose file; scheduling belongs to host Airflow.
+reach LM Studio on `127.0.0.1:1234`. quant_data has no container (retired 2026-11-08): the host
+scheduler runs its code directly.
 
 ### Data outside the repositories
 
@@ -66,11 +66,10 @@ disabled by environment flags in the compose file; scheduling belongs to host Ai
 | `research/quality/` | Data-quality checks and the news-validation audit. |
 | `research/universe/` | `build_universe.py`: point-in-time S&P 500 + Nasdaq-100 membership. |
 | `tools/` | Operational scripts: news backfills (`backfill_symbol_news.py`, `backfill_universe_news.py`), rule generation / validation / optimisation, weekly `keyword_refresh.py`, `gkg_parquet.py`, `llm_judge.py`, and `lm_session.py` (the shared LM Studio lock every LLM task runs under). |
-| `scripts/` | One-off benchmarks and environment setup. |
+| `scripts/` | `setup_python311_env.sh`: creates the `.venv311` the scheduler and tools run in. |
 | `tests/` | pytest suite (features, regime scoring, positions, RL simulator, LM session, pulse scrubber). |
 | `docs/` | Research write-ups: `RESEARCH_FACTORS.md`, `RESEARCH_SUMMARY.md`. |
-| `main.py`, `api_server.py`, `health_checker.py`, `scheduler/`, `test_db_connection.py` | Docker image entry point (script API on :8000, health monitor, the disabled in-container scheduler) and the image's health check. |
-| `Dockerfile`, `requirements*.txt`, `pytest.ini`, `ty.toml`, `.github/workflows/` | Image build, dependencies, test and type-check config, CI. |
+| `requirements*.txt`, `pytest.ini`, `ty.toml`, `.github/workflows/` | Dependencies, test and type-check config, CI (tests only; there is no image). |
 
 ## quant_ai — AI service and portfolio advisor
 
@@ -96,7 +95,7 @@ All Java code is under `src/main/java/org/example/quantapi/`.
 
 | Path | Contents |
 |---|---|
-| `controller/` | Endpoints: auth, signals, positions and performance, holdings and transactions, market data, news, agent data (read-only, for quant_ai's tools), scripts, health; `ApiExceptionHandler`. |
+| `controller/` | Endpoints: auth, signals, positions and performance, holdings and transactions, market data, news, agent data (read-only, for quant_ai's tools), health; `ApiExceptionHandler`. |
 | `service/` | Holdings (derived from the transaction log), portfolio, quotes, market data, news search; `service/signal/` publishes and consumes the daily-signal Kafka events. |
 | `config/` | Security (Keycloak JWT, deny by default, read/write separation), Keycloak role mapping, Kafka. |
 | `scheduler/` | Publishes the daily signals to Kafka on a schedule. |

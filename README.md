@@ -1,6 +1,6 @@
 # AI-Driven Equity Signal Platform
 
-An end-to-end quantitative research and signal generation platform that processes financial news through LLM pipelines to produce daily equity trading signals across 100 US stocks.
+An end-to-end quantitative research and signal generation platform that processes financial news through LLM pipelines to produce daily equity trading signals for a ~100-stock core universe, with news coverage extended to 490 point-in-time S&P 500 / Nasdaq-100 companies.
 
 ## Platform Overview
 
@@ -14,9 +14,9 @@ An end-to-end quantitative research and signal generation platform that processe
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                       NLP / LLM LABELING LAYER                           │
 │                                                                           │
-│   SLM company match ──▶  Pass A: Gemma 3B  ──┐                          │
+│   SLM company match ──▶  Pass A: Gemma-4-E4B ┐                          │
 │                                               ├──▶ merge (77.3% agr.)   │
-│                          Pass B: Qwen 4B   ──┘                          │
+│                          Pass B: Qwen3.5-9B ─┘                          │
 │                                    │                                     │
 │                       llm_sentiment_final / event_type                  │
 └────────────────────────────────┬────────────────────────────────────────┘
@@ -31,7 +31,7 @@ An end-to-end quantitative research and signal generation platform that processe
 │   Price: past_ret_20d/60d, volatility_20d/60d, volume_shock_20d         │
 │   Alt:   macro_*, retail_*, analyst_*, ah_gap/pm_gap                    │
 │                                                                           │
-│   → 189K+ rows │ 100 symbols │ 7 return horizons (5–60d)               │
+│   → 189K+ rows │ core universe │ 7 return horizons (5–60d)             │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
                                  ▼
@@ -58,16 +58,18 @@ An end-to-end quantitative research and signal generation platform that processe
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│              ORCHESTRATION LAYER (Airflow, host-based) — 10 DAGs        │
-│                                                                           │
-│   Scheduled (7)                          Manual / on-demand (3)         │
-│   */30min  quant_intraday_news           backfill_1_collect_and_match   │
-│   06:30 d. price_history_backfill          (GDELT ⟶ SLM company match)  │
-│   07:30 d. daily_signal_pipeline                                        │
-│   20:30 d. quant_retail_sentiment        backfill_2_enrich_and_features │
-│   04:00 Su gdelt_batch_verify              (LLM A/B ⟶ merge ⟶ features) │
-│   06:00 Su weekly_inst13f_holdings       quant_news_validation          │
-│   07:00 Su weekly_model_training           (quality audit report)       │
+│               ORCHESTRATION LAYER (Airflow, host-based) — 14 DAGs       │
+│                                                                         │
+│  Scheduled (11, UTC)                    Nightly chain / manual          │
+│  */30min  quant_intraday_news           04:00 backfill_1 (collect+match)│
+│  06:30 d. price_history_backfill          GDELT -> SLM company match    │
+│  wkdy x3  daily_advice                  -> backfill_2 (enrich, features)│
+│  21:15 wd market_snapshots                LLM A/B -> merge -> features  │
+│  20:30 d. quant_retail_sentiment        -> daily_signal_pipeline        │
+│  04:00 Su gdelt_batch_verify            quant_news_validation (manual)  │
+│  06:00 Su weekly_inst13f_holdings                                       │
+│  07:00 Su weekly_model_training                                         │
+│  Sat/hr   keyword_refresh_weekly/_apply                                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,7 +81,7 @@ An end-to-end quantitative research and signal generation platform that processe
 |--------|-------|
 | Raw news data processed | **13TB** (GDELT GKG, 2016→present) |
 | Articles labeled | **845K+** |
-| Stock universe | **100 US equities** |
+| Stock universe | **~100-stock core** (signals) + **490** point-in-time S&P 500 / Nasdaq-100 companies (news) |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.58** (gross 0.73) vs SPY 0.54 — *0.78 → 0.69 after the M.7 look-ahead fix, → 0.58 after the M.12 syndication fix* |
 | Portfolio backtest Sharpe (60d, net of cost) | **0.60** (gross 0.65) vs SPY 0.47 — re-run 2026-07-30, no longer stale |
@@ -177,10 +179,10 @@ An end-to-end quantitative research and signal generation platform that processe
 ## Tech Stack
 
 ### Data & ML
-`Python` `LightGBM` `Ridge Regression` `Gemma 3B` `Qwen 4B` `LM Studio` `MLflow` `SHAP`
+`Python` `LightGBM` `Ridge Regression` `Gemma-4-E4B` `Qwen3.5-9B` `LM Studio` `MLflow` `SHAP`
 
 ### Data Engineering
-`Apache Airflow` `Apache Kafka` `MongoDB` `MySQL` `GDELT` `Finnhub API` `SEC EDGAR`
+`Apache Airflow` `Apache Kafka` `MongoDB` `PostgreSQL` `GDELT` `Finnhub API` `SEC EDGAR`
 
 ### Backend
 `Java 21` `Spring Boot 3` `Keycloak` `REST API` `Kafka Producer/Consumer`
@@ -189,7 +191,7 @@ An end-to-end quantitative research and signal generation platform that processe
 `React` `TypeScript` `Vite` `RAG` `ReAct Agent` `Function Calling` `SSE Streaming` `LM Studio` `FastAPI`
 
 ### Infrastructure
-`Docker` `Docker Compose` `launchd` (host scheduler) `Multi-node work queue` (MySQL-backed, 2× MacBook workers + RTX 5090 inference node)
+`Docker` `Docker Compose` `launchd` (host scheduler) `Multi-node work queue` (PostgreSQL-backed, 2× MacBook workers + RTX 5090 inference node)
 
 ---
 
@@ -201,7 +203,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | `quant_api` | 18081 | Spring Boot REST API |
 | `quant_keycloak` | 18082 | Auth server |
 | `mongo6` | 37018 | MongoDB (845K articles, feature store) |
-| `mysql8` | 23306 | MySQL (workflow, user data) |
+| `airflow-postgres` | 25432 | PostgreSQL (Airflow metadata, Keycloak, GDELT batch queue) |
 | `airflow-webserver` | 15060 | Airflow DAG management |
 | `mlflow` | 15050 | Experiment tracking |
 | `kafka` | — | Signal event streaming |
