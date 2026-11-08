@@ -1,7 +1,76 @@
-# Quant Data Project Plan
+# Project Plan — AI-Driven Equity Signal Platform
+
+Every item carries a stable ID (C.1, R.4, Q.12 …) that commits and the rest of this document
+refer to. Status marks: ✅ done · 🟡 in progress · 🔴 high priority or blocker · ❌ cancelled ·
+*Skipped* where noted.
+
+Reorganised on 2026-11-08: the sections are grouped into five parts and each series is in ID
+order. The content was moved, not rewritten — apart from translating the Chinese passages,
+taking out personal and career notes, and marking the items whose state has changed.
+
+## Contents
+
+- [Part 1 · Overview](#part-1--overview)
+  - [Goal](#goal)
+  - [Current Status](#current-status)
+  - [Consolidated Priority Table](#consolidated-priority-table)
+- [Part 2 · Roadmap Checklist](#part-2--roadmap-checklist)
+  - [Roadmap Overview](#roadmap-overview)
+- [Part 3 · Workstreams](#part-3--workstreams)
+  - [C. Project Productionization Roadmap (News Events → Buy/Sell/Hold Decisions)](#c-project-productionization-roadmap-news-events--buysellhold-decisions)
+  - [D. Research Layer Extensions (improve model quality)](#d-research-layer-extensions-improve-model-quality)
+  - [E. Engineering Layer Completion](#e-engineering-layer-completion)
+  - [F. AI Engineering Layer](#f-ai-engineering-layer)
+  - [G. Live Trading Execution and Universe Expansion](#g-live-trading-execution-and-universe-expansion)
+  - [H. Live Trading System Roadmap (from research → truly usable)](#h-live-trading-system-roadmap-from-research--truly-usable)
+  - [I. MCP Integration](#i-mcp-integration)
+  - [J. Pipeline Workflow Orchestration & Daily Enrichment](#j-pipeline-workflow-orchestration--daily-enrichment)
+  - [K. Architecture & Language Decisions](#k-architecture--language-decisions)
+  - [L. Multi-Frequency Strategy Layer](#l-multi-frequency-strategy-layer)
+  - [M. Signal Research Rigor](#m-signal-research-rigor)
+  - [N. News Propagation — events outside the universe](#n-news-propagation--events-outside-the-universe)
+  - [P. Portfolio Holdings](#p-portfolio-holdings)
+  - [Q. Market Briefs and Event-Driven Decisions (2026-10-22)](#q-market-briefs-and-event-driven-decisions-2026-10-22)
+  - [R. AI at Scale — RAG depth and MCP depth](#r-ai-at-scale--rag-depth-and-mcp-depth)
+  - [S. Security — the AI attack surface](#s-security--the-ai-attack-surface)
+- [Part 4 · Research Foundations](#part-4--research-foundations)
+  - [System Scope](#system-scope)
+  - [Required Data](#required-data)
+  - [Core Collections / Tables](#core-collections--tables)
+  - [Current Feature Set](#current-feature-set)
+  - [Prediction Targets](#prediction-targets)
+  - [Research Workflow](#research-workflow)
+  - [Research Principles](#research-principles)
+  - [Recommended Success Criteria](#recommended-success-criteria)
+  - [File / Module Roadmap](#file--module-roadmap)
+  - [Notes](#notes)
+- [Part 5 · Stage History](#part-5--stage-history)
+  - [Stage 1. Immediate Next Tasks](#stage-1-immediate-next-tasks)
+  - [Stage 2. Near-Term Data Expansion](#stage-2-near-term-data-expansion)
+  - [Stage 3. Modeling](#stage-3-modeling)
+  - [Stage 3.5 Event-Driven Strategy Research](#stage-35-event-driven-strategy-research)
+  - [Stage 4. Production Readiness](#stage-4-production-readiness)
+  - [Practical Recommendation (snapshot, 2026-06-20)](#practical-recommendation-snapshot-2026-06-20)
+  - [Stage 5. Engineering Extensions (post-research)](#stage-5-engineering-extensions-post-research)
+  - [Stage 6 — GDELT GKG Full Index Import into MongoDB (Implemented; `$text` index dropped 2026-10-07 — see 6.7 and Stage 6B)](#stage-6--gdelt-gkg-full-index-import-into-mongodb-implemented-text-index-dropped-2026-10-07--see-67-and-stage-6b)
+  - [Stage 6B — GKG Columnar Store: Parquet + DuckDB (In progress, started 2026-10-07)](#stage-6b--gkg-columnar-store-parquet--duckdb-in-progress-started-2026-10-07)
+  - [Stage 7 — New Mac Validation + Scheduled Task Verification + Execution Records (Pending development)](#stage-7--new-mac-validation--scheduled-task-verification--execution-records-pending-development)
+- [Appendix](#appendix)
+  - [Ref. Reference Resources (compiled 2026-05-22)](#ref-reference-resources-compiled-2026-05-22)
+  - [SG. Strategy Generation Implementation Plan (quant_langchain) — ❌ Cancelled 2026-11-08](#sg-strategy-generation-implementation-plan-quant_langchain---cancelled-2026-11-08)
+
+# Part 1 · Overview
 
 ## Goal
-Build a research-ready, then production-ready, mid-frequency stock prediction system for holding periods of:
+
+**Today (2026-11).** A self-hosted equity research platform that turns financial news into
+structured, point-in-time signals with local LLMs, and uses them — together with prices, earnings
+and alternative data — for stock ranking, event-driven strategy research, and daily decision
+support on the user's own holdings. Every claim is measured out of sample and reported with its
+failure cases.
+
+**Original goal (2026-05)** — build a research-ready, then production-ready, mid-frequency stock
+prediction system for holding periods of:
 
 - 1 week
 - 2-4 weeks
@@ -16,6 +85,36 @@ The immediate objective is not live trading. The immediate objective is:
 - model-ready feature tables
 
 ## Current Status
+
+**As of 2026-11-08.**
+
+- **Data** — GDELT (nightly chain) plus Finnhub / NewsAPI / Yahoo every 30 minutes, prices,
+  earnings, analyst, options, 13F, macro and retail sentiment. A ~100-stock core universe for
+  signals, plus 490 point-in-time S&P 500 / Nasdaq-100 companies for news (M.1), all news from
+  2018-01; the full-text crawl of the 490 holds ~743K articles, ~661K with a body.
+- **Labelling** — local dual LLM (Gemma-4-E4B pass A, Qwen3.5-9B pass B) on title + the first 500
+  characters; 885K core articles labelled. Distilling the teacher into small students
+  (Qwen3-0.6B / 1.7B, ModernBERT-large) is in progress (3.5.5): per article they agree with the
+  teacher 71–73% on all three labels, and the daily features they produce are being validated.
+- **Features and models** — feature store (189K+ rows, 7 horizons), Ridge + LightGBM ranking with
+  walk-forward fitted factor weights; the event strategy lab (CatBoost champion, LightGBM-ensemble
+  shadow, MLflow, deflated Sharpe, Q.6); the earnings pulse; Action RL research (no edge over
+  holding out of sample, Q.7).
+- **Decision support** (quant_ai `markets/`) — holdings derived from the trade log, the portfolio
+  risk gate, a daily action per holding from the advice models (English / Chinese), upcoming
+  catalysts, market briefs, indices against the last close, a phone page.
+- **AI layer** — hybrid retrieval (MongoDB text + Qdrant dense, RRF) with cross-encoder rerank and
+  cited answers (R.1–R.4, R.10–R.12); a ReAct agent whose tools come from the MCP server
+  (12 tools); prompt-injection defence at the MCP boundary (S.1–S.2).
+- **Platform** — host Airflow scheduler (14 DAGs) running quant_data directly; Docker core
+  (MongoDB, PostgreSQL, Qdrant, Kafka, MLflow, Keycloak); Spring Boot API with JWT, deny by
+  default; React UI; CI images.
+
+**Open fronts** (ranked in the table below): N.6 automatic news linkage for holdings; Q.14–Q.16
+model and advice work; 3.5.5 distillation; M.2–M.6 research rigor; G.1 live trading, blocked on
+rigor.
+
+### Status at the start (2026-05)
 
 What already exists:
 
@@ -39,638 +138,108 @@ What is still missing:
 - portfolio construction layer
 - production signal generation layer
 
-## System Scope
-
-The system should support:
-
-- company/news relevance filtering
-- daily feature generation
-- mid-horizon return prediction
-- factor and model research
-- portfolio simulation
-- scheduled data refresh
-- production deployment later
-
-## Required Data
-
-### 1. News Data
-Already partially done.
-
-Needed:
-
-- raw news store
-- company-matched clean news store
-- source metadata
-- title
-- body/content
-- data quality tags
-- company relevance result
-
-Current collections:
-
-- `news_articles`
-- `news_articles_company_matched_v1`
-
-### 2. Price Data
-Needed:
-
-- daily OHLCV
-- adjusted close if possible
-- volume
-- trading date alignment
-
-Current collection:
-
-- `stock_prices_history`
-
-### 3. Benchmark and Market Data
-Still needed / should be added:
-
-- SPY / QQQ / sector ETF daily prices
-- benchmark forward returns
-- optional factor benchmarks:
-  - momentum
-  - size
-  - quality
-  - volatility
-
-### 4. Fundamental / Event Data
-Recommended next:
-
-- earnings dates
-- EPS / revenue / guidance
-- valuation metrics
-- analyst estimate revision data if available
-- corporate actions
-
-### 5. Metadata
-Needed:
-
-- sector / industry
-- market cap bucket
-- symbol universe definition
-- active/inactive date ranges
-
-## Core Collections / Tables
-
-### Raw Layer
-
-- `news_articles`
-- `stock_prices_history`
-
-### Clean Layer
-
-- `news_articles_company_matched_v1`
-
-### Feature Layer
-
-- `daily_symbol_features_company_matched_v1`
-
-### Planned Next Collections
-
-- `daily_symbol_features_research_v1`
-  - optional refined feature table after additional research-quality filtering
-- `backtest_results`
-  - optional persistent experiment tracking
-- `benchmark_prices`
-  - benchmark ETF / index data
-- `earnings_events`
-  - earnings calendar / event layer
-
-## Current Feature Set
-
-Already generated in daily features:
-
-- `article_count`
-- `full_count`
-- `title_only_count`
-- `url_only_count`
-- `full_ratio`
-- `title_only_ratio`
-- `avg_content_length`
-- `max_content_length`
-- `unique_url_count`
-- `unique_source_count`
-- `unique_platform_count`
-- `extraction_failed_count`
-- `timeout_fallback_count`
-- `news_count_3d`
-- `news_count_5d`
-- `news_count_20d`
-- `full_count_5d`
-- `avg_full_ratio_5d`
-- `news_burst_20d`
-- `trade_date`
-- `close`
-- `future_ret_5d`
-- `future_ret_20d`
-- `future_ret_60d`
-
-## Prediction Targets
-
-The system should support multiple target definitions.
-
-### Absolute Return Targets
-
-- `future_ret_5d`
-- `future_ret_20d`
-- `future_ret_60d`
-
-### Direction Targets
-
-- `future_ret_5d > 0`
-- `future_ret_20d > 0`
-- `future_ret_60d > 0`
-
-### Recommended Future Targets
-
-- benchmark-relative return:
-  - stock return minus SPY / QQQ / sector ETF return
-- ranking target:
-  - cross-sectional rank by future return
-
-For this project, ranking and excess-return targets are likely more useful than pure up/down classification.
-
-## Research Workflow
-
-### Phase 1. Data Integrity
-
-Done or mostly done:
-
-- collect raw news
-- clean company relevance
-- build daily features
-- align with price labels
-
-Still needed:
-
-- benchmark alignment
-- event/fundamental enrichment
-
-### Phase 2. Factor Research
-
-Current next step.
-
-Need to run:
-
-- top/bottom bucket tests
-- long-short tests
-- top 3 / top 5 / top 10 portfolio comparisons
-- stability by year
-- stability by horizon
-
-First candidate factors:
-
-- `full_ratio`
-- `news_burst_20d`
-- `article_count`
-- `unique_source_count`
-- `avg_content_length`
-- `extraction_failed_count` as a reverse-quality feature
-
-### Phase 3. Multi-Factor Research
-
-After single-factor validation:
-
-- combine quality factors
-- combine quantity + quality + recency factors
-- compare weighted score vs single-factor selection
-
-### Phase 4. Modeling
-
-Only after factor validation.
-
-Recommended order:
-
-1. linear / logistic models
-2. tree models:
-   - LightGBM
-   - XGBoost
-3. ranking models
-
-Do not start with large text models for price prediction.
-
-### Phase 5. Portfolio Construction
-
-Need explicit rules for:
-
-- rebalance frequency
-- top N holdings
-- equal weight vs score weight
-- sector cap
-- single-name cap
-- turnover limit
-- transaction cost assumptions
-
-### Phase 6. Production
-
-Later phase:
-
-- daily incremental collection
-- feature refresh
-- model scoring
-- signal generation
-- order routing
-- monitoring
-- logging
-- retry / failure handling
-
-## Research Principles
-
-### 1. Prefer simple baselines first
-
-Always test:
-
-- single factor
-- grouped returns
-- naive top-N strategy
-
-before training larger models.
-
-### 2. Use safe date windows
-
-Backtests should use:
-
-- `trade_date >= 2015-12-04`
-
-because current price data coverage starts there.
-
-### 3. Use clean collection by default
-
-Research should prefer:
-
-- `news_articles_company_matched_v1`
-- `daily_symbol_features_company_matched_v1`
-
-instead of raw collections.
-
-### 4. Keep raw data immutable
-
-Do not delete raw source collections.
-
-Use separate clean / derived layers.
-
-## Engineering Plan
-
-## Stage 1. Immediate Next Tasks
-
-1. Extend first-pass backtest
-- top / bottom buckets
-- long-short
-- top 3 / top 5 / top 10
-
-2. Add benchmark comparison
-- SPY / QQQ / sector baseline
-
-3. Build quality factor basket
-- combine `full_ratio`, `unique_source_count`, `avg_content_length`, etc.
-
-4. Validate by horizon
-- 5d
-- 20d
-- 60d
-
-## Stage 2. Near-Term Data Expansion
-
-Status: substantially complete.
-
-### Completed items
-
-- benchmark/index price collection:
-  - done (`SPY`, `QQQ` daily prices, `benchmark_ret_5d/20d/60d`, `excess_ret_*`)
-- earnings event Layer 1 (timing only):
-  - done
-  - features: `days_to_earnings`, `days_since_earnings`,
-    `is_earnings_window_5d`, `is_post_earnings_window_20d`
-- earnings event Layer 2 (surprise + richer timing):
-  - done
-  - features: `eps_estimate_last`, `reported_eps_last`, `surprise_pct_last`,
-    `is_positive_surprise`, `is_negative_surprise`,
-    `days_to_earnings_bucket`, `days_since_earnings_bucket`,
-    `is_pre_earnings_10d`, `is_post_earnings_5d`, `is_post_earnings_10d`,
-    `is_post_positive_surprise_20d`, `is_post_negative_surprise_20d`
-  - result: Ridge `60d` IC improved from `0.073` to `0.121` (+66%)
-- sector mapping: basic version integrated
-
-### Next: earnings event Layer 3
-
-Build on Layer 2 with deeper surprise structure and interaction features.
-
-1. surprise magnitude buckets
-   - split `surprise_pct_last` into ordinal buckets:
-     - large miss (< -5%), small miss (-5% to 0), small beat (0 to +5%),
-       large beat (> +5%)
-   - rationale: the market reacts non-linearly to surprise size
-
-2. news quality × earnings interaction features
-   - `full_ratio_x_post_positive`: `full_ratio` × `is_post_positive_surprise_20d`
-   - `quality_score_x_post_negative`: `quality_score` × `is_post_negative_surprise_20d`
-   - rationale: a positive surprise with high-quality news coverage is a
-     stronger combined signal than either alone
-
-3. earnings recency decay
-   - `earnings_recency_weight`: exponential decay of `days_since_earnings`
-     (weight = exp(-days_since / 20))
-   - rationale: the post-earnings drift effect weakens as time passes
-
-4. rerun backtest and model after Layer 3
-   - compare against the Layer 2 baseline (Ridge `60d` IC = `0.121`)
-
-### Most important next step: universe expansion
-
-The current universe is 14 symbols.
-This is the single biggest constraint on signal reliability.
-
-Why this matters:
-
-- at 14 symbols, one bad year (e.g. 2022, 2024) can make the IC negative
-  due to sampling noise alone
-- cross-sectional ranking needs depth: `top 3 / top 5` out of 14 is not
-  robust; `top 5 / top 10` out of 50-100 is meaningfully more stable
-- the current signals may be real but cannot be confirmed at this universe size
-
-Target: expand to 50-100 symbols.
-
-What is required:
-
-1. extend `stock_universe` collection with new symbols
-   - suggested scope: S&P 500 tech/growth names, or a defined sector basket
-   - keep sector distribution balanced
-
-2. collect historical news for new symbols
-   - extend GDELT / news collector coverage
-   - run `company_match_rescore` on new articles
-
-3. collect price history for new symbols
-   - extend `stock_prices_history`
-
-4. rebuild feature table
-   - `FEATURE_REBUILD_ALL=true` after data is ready
-
-5. rerun all backtests and models on expanded universe
-   - compare single-factor IC at 50-symbol vs 14-symbol universe
-   - a good signal should survive and become more stable
-
-## Stage 3. Modeling
-
-Status: first-pass baselines done.
-
-Current baseline results (14-symbol universe):
-
-- `Ridge` `60d` Rank IC: `0.121` / Top 5 excess return: `+6.58%`
-- `HistGB` `60d` Rank IC: `0.118` / Top 5 excess return: `+6.32%`
-
-Known issue: year-by-year variance is high.
-
-- strong years: 2020 (IC = 0.35), 2023 (IC = 0.19), 2025 (IC = 0.24)
-- weak years: 2022 (IC = -0.06), 2024 (IC = -0.04)
-- likely cause: macro regime shifts (2022: rate hikes + war; 2024: election
-  + rate pivot) break the news-quality thesis temporarily
-
-Next modeling steps (do only after universe expansion):
-
-1. year stability analysis
-   - run `--group-by-year` on factor backtest with full feature set
-   - identify which features drive the 2022/2024 failures
-   - test whether regime-aware features (e.g. VIX level, market vol) help
-
-2. simple Ridge + HistGB ensemble
-   - average predictions from both models
-   - rationale: the two models now have comparable IC and different error
-     patterns; blending should reduce variance
-
-3. sector-relative feature normalization
-   - normalize `full_ratio`, `quality_score` within sector on each day
-   - reduces bias from sectors that structurally attract more/less news
-
-4. ranking model
-   - convert to a pairwise ranking objective (LambdaRank or similar)
-   - more directly aligned with the top-N portfolio construction goal
-
-## Stage 3.5 Event-Driven Strategy Research
-
-Goal: evolve the fixed-horizon model into a news event-driven strategy where
-signals trigger dynamic entry, hold, and exit decisions rather than fixed
-holding periods.
-
-This stage must be completed before Stage 5 engineering work begins.
-
-### 3.5.1 Article-level event tagging (LLM batch annotation) ✅ Done 2026-05-22
-
-All 840,212 articles in `news_articles_company_matched_v2` tagged with:
-
-- Pass A (Gemma): `llm_sentiment_a`, `llm_event_type_a`, `llm_signal_strength_a` — 100%
-- Pass B (Qwen): `llm_sentiment_b`, `llm_event_type_b`, `llm_signal_strength_b` — 100%
-- Dual-LLM merge: `llm_sentiment_final`, `llm_disagreement`, `llm_label_model_probs` — 100%
-- Inter-model agreement rate 77.3%; mean sentiment +0.296 (overall positive bias)
-
-Deliverable: `research/labeling/llm_enrich_articles.py`, `research/snorkel_label_merge.py`
-
-Resume framing:
-*"Enriched 845K financial news articles with two-pass LLM ensemble (Gemma +
-Qwen), merged by a hand-written dual-LLM reconciler achieving 77.3% inter-model
-agreement on sentiment, event type, and signal strength labels."*
-
-### 3.5.2 Event-level daily features ✅ Done 2026-05-22
-
-Rebuilt `daily_symbol_features_company_matched_v2` (134,642 rows, 100 symbols)
-with full LLM sentiment feature coverage (100%):
-
-| Feature | Coverage |
-|---|---|
-| `avg_sentiment_3d/5d` | 100% |
-| `sentiment_shift_5d` | 99.6% |
-| `high_signal_count_3d` | 100% |
-| `negative_event_count_5d` | 100% |
-| `disagreement_avg_5d` | 100% |
-| `has_regulatory_risk_5d` | 100% |
-| `earnings_beat_signal` / `earnings_miss_signal` | 100% |
-
-Multi-horizon model results with LLM features (walk-forward, 100 symbols):
-
-| Horizon | Ridge IC | Ensemble IC | Ensemble Top5 Excess Return |
-|---|---|---|---|
-| 20d | 0.036 | 0.031 | +1.83% |
-| 45d | 0.044 | 0.043 | +4.38% |
-| 60d | 0.056 | 0.059 | +6.59% |
-
-IC increases monotonically with holding period; the 60d signal is strongest.
-
-Deliverable: `research/features/daily_symbol_features.py`, `research/models/train_baseline_models.py`
-
-### 3.5.3 Dynamic holding period backtest ✅ Done 2026-05-22
-
-Event-driven framework results (100 symbols, 2018–2026):
-
-Best config: `min_hold=20d`, `max_hold=60d`, `sentiment_shift_exit=-0.35`
-
-| Metric | Event-Driven | Fixed 20d Baseline | Fixed 60d Baseline |
-|---|---|---|---|
-| Avg Hold | 13.7d | 20d | 60d |
-| Excess Return | +1.40% | +1.22% | +3.80% |
-| Win Rate | 52.7% | 58.0% | 63.1% |
-| Trades | 390 | 2,060 | 2,020 |
-
-Event-driven outperforms the fixed 20d baseline within 13.7 days (+1.40% vs +1.22%) with lower turnover.
-Exit reasons: score_below_exit 69%, sentiment_reversal 17% (reasonable).
-2022/2024 remain weak years (macroeconomic regime shifts).
-
-Deliverable: `research/backtest/backtest_event_driven.py`
-
-### 3.5.4 Multi-horizon label expansion ✅ Done 2026-05-22
-
-Added to `daily_symbol_features_company_matched_v2`:
-- `future_ret_10d/15d/30d/45d` — 87-88% coverage
-- `excess_ret_10d/15d/30d/45d` — 87-88% coverage
-- Also fixed `load_feature_frame` projection in `backtest_news_factor.py`
-
-Deliverable: `research/features/daily_symbol_features.py`, `research/backtest/backtest_news_factor.py`
-
-### 3.5.5 Fine-tune small model for sentiment scoring
-
-After the two-pass LLM enrichment (3.5.1) completes, replace the slow LLM
-inference pipeline with a purpose-fine-tuned small model. This eliminates the
-need to keep Gemma + Qwen + a judge model running and reduces inference from
-days to minutes.
-
-**Training data**
-
-Use articles where Pass A (Gemma) and Pass B (Qwen) agree as high-confidence
-pseudo-labels:
-- `llm_sentiment_a` and `llm_sentiment_b` same sign AND |diff| ≤ 0.2
-- Expected: ~60-70% of 586K articles → ~350K+ clean training samples
-
-**Model**
-
-Fine-tune `ProsusAI/finbert` (110M params, already pre-trained on financial
-text) with three output heads:
-- sentiment: regression head, output -1.0 to +1.0
-- event_type: 7-class softmax (earnings / product / MA / regulation / macro /
-  competition / other)
-- signal_strength: 3-class softmax (high / medium / low)
-
-Training setup:
-- LoRA or full fine-tune (BERT is small enough for full fine-tune)
-- GPU: Windows machine (same as LM Studio)
-- Estimated training time: 1-2 hours on 350K samples
-- Framework: HuggingFace Transformers + PyTorch
-
-**Inference speed after fine-tuning**
-
-| Setup | Speed |
-|---|---|
-| Current LLM (Gemma via LM Studio) | ~3.9 art/s |
-| Fine-tuned FinBERT (GPU) | ~1000-2000 art/s |
-| Fine-tuned FinBERT (CPU only) | ~200 art/s |
-
-586K articles: current ~41h → fine-tuned ~5-10 min
-
-**Deliverables**
-
-- `research/finetune_sentiment.py` — training script
-- `research/infer_sentiment.py` — batch inference on remaining articles
-- benchmark report: fine-tuned vs LLM scores on held-out set
-
-**Resume framing**
-
-*"Fine-tuned FinBERT on 350K+ pseudo-labeled financial news articles
-(distilled from Gemma + Qwen ensemble), achieving 200x inference speedup
-while maintaining comparable sentiment, event classification, and signal
-strength accuracy."*
-
-### Execution order
-
-1. 3.5.4 Multi-horizon labels ✅
-2. 3.5.1 Article tagging ✅
-3. 3.5.2 Event features ✅
-4. 3.5.3 Dynamic backtest ✅
-5. 3.5.5 Fine-tune small model — Pending development
+## Consolidated Priority Table
+
+**Top of the queue, as of 2026-07-30.** The R-series is ranked above everything else pending:
+retrieval and MCP were the platform's thinnest layers (see R), and the corpus that makes depth
+credible — 845K articles — was already collected and sitting unindexed. R.4 carries the weight:
+it turns retrieval into numbers.
+
+| Priority | Item | Practical Value | Effort | Status |
+|---|---|---|---|---|
+| 🔥 | **Q.2 Revive the data pipeline** | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-24: caught up (company match current, health all green); LM Studio tasks serialised and sized by `lm_session`; confirm one automatic night |
+| ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
+| 🔥 | **Q.5 Holdings advisor (event-driven advice with limit prices, scored)** | 🔴 The user's own positions | ~3 days | 🟡 In progress (2026-10-25) |
+| ⭐⭐⭐ | **Q.8 3-layer upcoming catalysts, per-stock modal & AI query** | 🔴 Forward binary risk on every holding | 1.5 days | ✅ Done (2026-10-30) — L1 calendars/conferences/implied moves + L2 6h RSS/8-K extraction + L3 web fallback, 90D modal (`52b50e9`, `8d33dc4`) |
+| ⭐⭐⭐ | **Q.9 Per-stock order status & swing lot allocation manager** | 🔴 Dip-buying tranche P&L without mutating Mine/FIFO avg cost | 1 day | ✅ Done (2026-10-30) — `transactions.lot_allocations`, open/partial/closed statuses, 3-way P&L conservation (`52b50e9`, `8d33dc4`) |
+| ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
+| 🔥 | **Q.12 Portfolio risk gate** (caps, cash, spacing, falling-knife) + review of the 10-30 suggestions | 🔴 Concentration and no cash | 1 day | 🟡 2026-10-31: gate, pulse release fix, dip re-run, spreads, targets (10% cash / 70% chips / 30% one stock), own trades scored; next learn_peers + PEAD |
+| 🔥 | **Q.13 Today's action per holding / watchlist** | 🔴 What to do today | 1 day | 🟡 2026-10-31: pilot on one holding |
+| 🔥 | **Q.15 Exit a losing concentrated holding + add discipline** (why it fell, add planner, recovery plan, profit offset) | 🔴 A large losing position | ~3 days | [ ] Recorded 2026-11-02 |
+| ⭐⭐⭐ | **Q.16 Enter / take profit / stop loss / hold per name** (trailing exits, stops, entries, news features, alerts) | 🔴 SKHY +$450 and STX $718 not taken | ~5 days | [ ] Recorded 2026-11-02 |
+| ⭐⭐⭐ | **Q.14 Model optimisation backlog** (pulse at real cost, fitted factor weights, M.5 holdout + point-in-time universe, fill model, RAG chunking) | 🔴 Is +1.40% real after costs | ~1 day for item 1 | [ ] Recorded 2026-11-01 |
+| ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
+| 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
+| 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
+| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
+| 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
+| ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | Medium | 2 days | ✅ Done 2026-10-24 — thinking off: ~10x faster, faithfulness 0.869 vs 0.899 (n.s.); judge's evidence 2,996/2,996 verbatim |
+| ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
+| ⭐⭐⭐ | **R.13 One agent for every stock question (agent picks the tools)** | High: one place to ask anything | ~2 days | [ ] Pending (2026-10-25) — signals/performance tools answer 401; agent lacks the quant_ai tools; thinking still on per step |
+| ⭐⭐⭐ | **R.3 Cross-encoder reranking** | Medium | 1.5 days | ✅ Done (2026-10-13) — nDCG +0.076 [+0.043, +0.113] for the shipped top-30/256 config (~1 s), +0.117 at top-100; significant under both validated judges; behind NEWS_RERANK in /api/ask/news |
+| ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | Medium | 3 days | [ ] Pending |
+| ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | Medium | 2 days | [ ] Pending |
+| ⭐⭐ | **R.7 RAG as a feature source (grounded event extraction → features)** | High | 3 days | [ ] Pending (after R.2, N.1) |
+| ⭐⭐⭐ | **H.1 Backtest with transaction costs + liquidity filter** | 🔴 Real returns | 2 days | ✅ Done — COMMISSION_BPS=5, SLIPPAGE 10/30bps tiered, MIN_DOLLAR_VOL=$5M filter in backtest_portfolio.py |
+| ⭐⭐⭐ | H.2 Market Regime detection (VIX filter) | 🔴 IC stability | 4 days | ✅ Done (2026-07-15) — 4-regime weight switching (RISK_ON/NEUTRAL/STRESSED/RISK_OFF) |
+| ⭐⭐⭐ | H.3 Paper Trading engine + stop-loss | 🔴 OOS validation | 4 days | ✅ Done (2026-07-15) — vol-adaptive stop-loss (2×vol_20d) + OOS IC rolling monitor |
+| ⭐⭐⭐ | Stage 7 Airflow + Kafka end-to-end | High | 1 week | 🟡 Revived 2026-10-22 — the host Airflow scheduler (launchd) runs all 10 DAGs; its metadata DB and the data are in Docker, so `core.sh` must be up. Kafka runs (quant_api needs it). See Q.2 |
+| ⭐⭐⭐ | G.1 Live trading execution (Alpaca API) | 🔴 Real money | 2-3 weeks | [ ] Pending — paper trading done; need broker API + order manager + risk guardrails |
+| ⭐ | G.2 Stock universe expansion (103→150+) | Medium | 2-7 days | Phase 1 ✅ Done (STX/WDC/HXSCL added 2026-07-15); Phase 2 energy/materials [ ] Pending |
+| ⭐⭐⭐ | C.2 Risk metrics (Sharpe / drawdown) | High | - | ✅ Done |
+| ⭐⭐⭐ | C.9 Factor analysis report (IC/IR/SHAP) | Medium | - | ✅ Done |
+| ⭐⭐⭐ | C.8 ETL unit tests | Medium | 3 days | ✅ Done (2026-07-15) — 90 tests passing; scoring 60%, positions 52%, features 40% cov |
+| ⭐⭐⭐ | E.7 README + architecture diagram | Medium | 1 day | ✅ Done (2026-07-15) |
+| ⭐⭐⭐ | Stage 7 MLflow actual runs | Medium | 1 day | ✅ Done (2026-07-15) — 8 runs logged (Ridge/LightGBM/Ensemble × 20d+60d) |
+| ⭐⭐ | H.4 Signal quality monitoring (rolling IC) | 🟡 Signal health | 2 days | [ ] Pending |
+| ⭐⭐ | C.1 Daily signal automation | Extremely high | 3 days | ⚠️ Was silently broken 2026-07-21 → 2026-10-22: after the collectors reorganisation (d14f30c) the price and analyst collectors read a stale `news_collectors/finnhub/.env` path, failed every morning, and `score_signals` (downstream) never ran — signals stuck at 2026-07-17. Fixed 2026-10-22 (f97dc75); runs under Airflow |
+| ⭐⭐ | C.3 Signal UI page | Extremely high | 3 days | ✅ Done |
+| ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → sentiment features) | 🔴 Fills the data gap | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_1_collect_and_match` (02:00 UTC) matches every new `news_articles` doc, intraday sources included (N.0 gave them candidate symbols) |
+| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on any task failure) | 🔴 Operationally required | 0.5 days | ✅ Done 2026-10-22 — `notify_failure` on every task (macOS notification + `airflow_task_failures.log`) and quant_ai's freshness watchdog (`markets/pipeline_health.py`, every 30 min, widget warning) for when nothing runs at all |
+| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | Extremely high | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.6 |
+| ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → query signals from a Claude chat) | High | 0.5 days | ✅ Done — verified over the real MCP protocol |
+| ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
+| ⭐⭐ | F.3 SHAP interpretability | Medium | 1 day | ✅ Done (factor_analysis.py) |
+| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (daily Gemma+Qwen scoring of new articles, keeping sentiment features current) | High | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_2_enrich_and_features` (pass A gemma, pass B qwen3.5-9b, merge, features, Qdrant index) is triggered daily by backfill_1 |
+| ⭐⭐ | **J.1 Airflow DAG migration** (dependency-chain scheduling; a failed task stops its downstream; visual DAG view) | High | 3.5 days | ✅ Done 2026-07-17 — Airflow host scheduler replaced task.py; dependency chains per DAG |
+| ⭐⭐ | F.10 Strategy Studio → Backtest execution pipeline | High | 3-4 days | ❌ Cancelled 2026-11-08 — Strategy Studio removed from the UI, API and quant_ai |
+| ⭐⭐ | F.4 LangGraph multi-agent research assistant | High | 2 weeks | [ ] Pending |
+| ⭐⭐ | F.17 Portfolio Manager Agent (signals+positions→rebalance recommendation) | High | 3 days | ✅ Done (2026-07-27) — review layer over the rule engine; 3 validation gates; 25 unit tests |
+| ⭐⭐ | F.16 Real-time news monitoring agent (30-minute polling → immediate alerts) | High | 3 days | [ ] Pending |
+| ⭐⭐ | F.14 Earnings surprise prediction (pre-earnings beat/miss probability factor) | High | 3 days | [ ] Pending |
+| ⭐⭐ | F.12 Signal explanation SLM (explain why a stock scored high → shown in the UI) | Medium | 2 days | [ ] Pending |
+| ⭐⭐ | I.3 Alpaca order via MCP (LLM places orders itself, risk controls kept) | Extremely high | 2 days | [ ] Pending (after G.1+I.1) |
+| ⭐⭐ | I.4 External data MCP tools (Finnhub/EDGAR/yfinance as agent tools) | High | 2 days | [ ] Pending |
+| ⭐⭐ | F.15 SEC EDGAR + earnings transcript RAG | Medium | 3 days | [ ] Pending (after F.2) |
+| ⭐⭐ | F.8 Active learning Agent (disagreement samples) | High | 4 days | [ ] Pending |
+| ⭐⭐ | **F.9 Rule Optimization Agent (iterative eval→modify loop)** | 🔴 Fixes FP/FN in rule layer | 5-7 days | 🟡 Developed, not tested |
+| ⭐⭐ | E.2 CI/CD GitHub Actions | Medium | 2 days | [ ] Pending |
+| ⭐⭐ | C.7 Data quality checks | High | 2 days | ✅ Done (data_quality_check.py) |
+| ⭐⭐ | **L.1 Overnight news momentum** (15:30 sentiment scan → buy at the close → sell at the next open, no hourly bars) | High | 4 days | [ ] Pending (after G.1+J.3) |
+| ⭐⭐ | **L.3 5-minute bar infrastructure** (Alpaca API backfill + daily 16:35 increment + intraday features) | High | 2 days | [ ] Pending (after G.1 Alpaca key) |
+| ⭐ | **L.2 Intraday fast signal** (5-minute bars + Finnhub WebSocket live news → intraday momentum) | Medium | 2 weeks | [ ] Pending (after L.1+L.3) |
+| ⭐⭐ | B.1 Long-short portfolio | Medium | 3 days | [ ] Pending |
+| ⭐⭐ | B.1 Beta neutralization | Medium | 2 days | [ ] Pending |
+| ⭐⭐ | F.5 FinBERT fine-tuning | High | 1-2 weeks | [ ] Pending |
+| ⭐ | F.6 rule_validator ReAct Agent | Medium | 3 days | [ ] Pending |
+| ⭐ | F.7 Airflow adaptive scheduling Agent | Medium | 3 days | [ ] Pending |
+| ⭐⭐⭐ | D.1 Macro Regime features (merged into H.2) | 🔴 Real utility | 4 days | ✅ Done |
+| ⭐ | E.4 K8s configuration | Low | 3 days | [ ] Pending |
+| ⭐ | E.5 Data lineage diagram | Low | 2 days | [ ] Pending |
+| ⭐ | E.6 WebSocket real-time push | High | 3 days | [ ] Pending |
+| ⭐ | E.9 UI intraday price chart (TradingView + Alpaca API) | Medium | 3 days | [ ] Pending — no hourly DB needed; Alpaca API on-demand |
+| ⭐ | D.2 Retail sentiment | Medium | 3 days | ✅ Done (StockTwits, not Reddit) |
+| ⭐ | F.1 Prompt evaluation framework | Medium | 2 days | [ ] Pending |
+| ⭐ | F.11 News pre-filter SLM (light binary classifier ahead of the dual LLM, ~70% less inference) | Medium | 3 days | [ ] Pending |
+| ⭐ | F.13 Morning briefing agent (07:00 pre-market holdings brief) | Medium | 2 days | [ ] Pending |
+| ⭐ | F.18 Backtest reflection agent (diagnose weak years automatically + write a report) | Low | 2 days | [ ] Pending |
+| ⭐ | F.19 LLM factor hypothesis generator (LLM proposes new factors) | Low | 1 day | [ ] Pending |
+| ⭐ | I.5 MCP inter-service (quant_ai → quant_api over MCP) | Low | 3 days | [ ] Pending (after I.1) |
+| ⭐ | M.1 Point-in-time S&P 500 universe (survivorship-free) | 🔴 Signal validity | 1-2 weeks | ✅ Done 2026-11-03 — point-in-time S&P 500 + Nasdaq-100 membership (`research/universe/build_universe.py`), 490 companies added for news |
+| ⭐ | M.2 PIT data hygiene audit (dirty dates, lookahead lineage) | 🔴 Signal validity | 3 days | [ ] Pending |
+| ⭐ | M.3 IC significance (Newey-West t-stat, decay, regime tables) | Medium | 3 days | [ ] Pending |
+| ⭐ | M.4 Sentiment orthogonalization vs momentum/size/sector | 🔴 Core question | 1 week | [ ] Pending |
+| ⭐ | M.5 Overfitting defenses (holdout, trial registry, deflated Sharpe) | Medium | 2 days | [ ] Pending |
+| ⭐ | M.6 Research report writeup (paper-style, honest conclusions) | Medium | 3 days | [ ] Pending |
+| — | D.4 Analyst rating changes | Medium | 3 days | ✅ Done |
+| — | D.7 Institutional 13F holdings change | High | 3 days | ⚠️ **Withdrawn (M.7)** — the "strongest single factor, 60d IC=+0.20" was look-ahead: one undated row per symbol broadcast across all trade dates. Factor removed; net Sharpe 0.78→0.69 |
+| — | D.8 Pre-market / after-hours price signals | High | 1 day | ✅ Done (strongest short-term factor, 5d IC=+0.23) |
 
 ---
 
-## Stage 4. Production Readiness
+# Part 2 · Roadmap Checklist
 
-1. schedule feature build from clean news
-2. track model versions
-3. persist experiment results
-4. build daily signal job
-5. add monitoring
-
-## File / Module Roadmap
-
-### Existing
-
-- `research/features/daily_symbol_features.py`
-- `research/company_match_rescore.py`
-- `research/backtest/backtest_news_factor.py`
-- `research/features/load_earnings_events.py`
-- `research/load_benchmark_prices.py`
-- `research/models/train_baseline_models.py`
-- `collectors/news/gdelt/special_rules/slm_filter.py`
-- `collectors/news/gdelt/special_rules/slm_skills.py`
-
-### Suggested Next Files
-
-- `research/backtest_year_stability.py`
-  - year-by-year IC breakdown with the full feature set
-- `research/build_interaction_features.py`
-  - earnings × news quality interaction features (Layer 3)
-- `research/expand_universe.py`
-  - helper to onboard new symbols into stock_universe and trigger collection
-
-## Recommended Success Criteria
-
-The project should be considered healthy if:
-
-- clean company-matched news can be built reproducibly
-- feature table refresh is stable
-- at least one factor shows persistent positive excess return
-- results are stable across multiple years
-- simple baselines are competitive before modeling
-
-## Current Practical Recommendation
-
-Do next (in priority order, updated 2026-06-20):
-
-1. **H.1 Backtest with transaction costs + liquidity filter** (2 days) — current Sharpe 0.70-0.84 is pre-cost; quantitative interviews always ask this, highest ROI
-2. ~~**Stage 7 validation**~~ ✅ **Done** — Airflow now runs the full DAG set from a host `launchd` scheduler (containers cannot reach the host LLM under VPN), and the Kafka producer/consumer path was verified end to end after fixing a deserializer mismatch that had the consumer stuck in a poison-pill retry loop. Signals publish and are consumed with zero lag.
-3. **E.7 README + architecture diagram** (1 day) — required for all interviews, currently missing, fastest result
-4. **H.2.2 Dynamic factor weights** (regime-aware) — regime_mult base multiplier already exists; needs extension to auto-switch factor weight sets in volatile market
-5. **H.3.2/H.3.3 Paper trading improvements** — position tracking and exit triggers already exist; missing OOS IC monitoring and -5% stop-loss rule
-6. **Stage 3.5.5 FinBERT fine-tuning** — train on Gemma+Qwen consensus labels to replace LLM inference pipeline
-
-Completed:
-
-- universe expansion to 100 symbols ✅
-- year stability analysis ✅
-- earnings Layer 1 / 2 / 3 ✅
-- Ridge + LightGBM + Ensemble baseline (60d IC = 0.10, Top5 = +6.7%) ✅
-- Stage 3.5.1 LLM article tagging (845K articles, Gemma + Qwen + dual-LLM merge) ✅
-- Stage 3.5.2 event-level daily features (134K rows, 100% LLM coverage) ✅
-- Stage 3.5.3 event-driven backtest (min20d, +1.40% vs fixed 20d +1.22%) ✅
-- Stage 3.5.4 multi-horizon labels (10/15/30/45/60d) ✅
-- **D.1/D.2/D.4/D.7/D.8 research layer extensions all completed** (2026-06-16), D.3/D.5/D.6 skipped ✅
-- **C.1-C.7, C.9 all completed (baseline versions)** (daily signal automation + UI + position tracking + exit alerts + risk metrics + data quality checks + factor analysis report, 2026-06-16~20) ✅
-- **H.2.1 regime multiplier baseline** (score_daily_signals.py integrated macro_risk_on / macro_vix_pctile_252d to adjust signal strength) ✅
-- Ops: removed duplicate launchd scheduler job to prevent all collection tasks from running twice daily ✅
-
-Do not do next:
-
-- live trading automation (live trading is still H.1-H.5 fully complete + 3-6 months of paper trading away from being truly usable)
-- Stage 5 engineering before Stage 7 validation is complete
-
-## Notes
-
-The clean matched-news dataset is research-usable at the current scale.
-
-The two-layer earnings feature set has produced a meaningful model
-improvement (Ridge `60d` IC: `0.073` → `0.121`).
-
-Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.121 at 14 symbols (a larger universe dilutes overfitting). The weak 2022/2024 years are driven by macroeconomic regime shifts; the signal itself is credible.
-
----
-
-# Roadmap Overview
+## Roadmap Overview
 
 Every item carries a stable ID; its detailed spec and effort estimate are in the
 lettered sections of this document. Checked items are shipped and running.
@@ -679,9 +248,8 @@ lettered sections of this document. Checked items are shipped and running.
 agent (F.21) · MCP server + Claude Desktop (I.1/I.2) · Airflow migration (10 DAGs) ·
 multi-node distributed GDELT workers.
 
-**Current focus — the R-series (AI at scale).** Named interview feedback (2026-07-28) asked
-for more depth on RAG and MCP at scale. Audited against what is built, that is fair on both
-counts: MCP has ten tools but only stdio and nothing past `@mcp.tool()`, and the retrieval
+**Current focus — the R-series (AI at scale).** An audit (2026-07-28) of RAG and MCP depth
+against what is built found both thin: MCP has ten tools but only stdio and nothing past `@mcp.tool()`, and the retrieval
 layer is numpy cosine similarity over four markdown files (382 lines) while **845K
 company-matched news articles sit in MongoDB with zero embeddings**. R.1–R.9 below close
 that gap, and are ranked above everything else pending.
@@ -705,7 +273,7 @@ that gap, and are ranked above everything else pending.
 - [x] **Stage 7** Kafka end-to-end verified — publishing 20 signals advanced the consumer offsets across all four partitions with zero lag and the consumer logged the deserialized events. Getting there required fixing a consumer that could not deserialize its own producer's records (the producer omits Spring type headers by design) and, lacking an `ErrorHandlingDeserializer`, re-read the same offset forever at 100% CPU
 - [ ] **Stage 7 (remaining)** Execution-log API — surface DAG/task run history through the REST API
 
-### Signal Research Rigor (QR interview defense)
+### Signal Research Rigor
 
 > **Two of these gate G.1, and the order matters.** M.7 is a confirmed look-ahead leak in
 > the platform's best-performing factor, and M.1 is selection bias baked into the universe
@@ -715,7 +283,7 @@ that gap, and are ranked above everything else pending.
 > execution plumbing looks.
 
 - [x] **M.7** **13F look-ahead leak — fixed, factor removed.** `inst_13f_holdings` holds exactly 100 documents, one per symbol, with **no date, quarter, or filing-date field at all** — only `collectedAt`. `attach_inst13f_features()` then left-joins on symbol alone and, in its own words, *"broadcast[s] to all trade_dates"*. A feature row for 2018-03-15 therefore carries 2026 institutional holdings. This is not a diffuse rigor concern: `inst_holding_pct_chg` was the **best single factor at IC +0.198**, and it scores that well *because* it leaks — institutions accumulate what has already risen, so projecting today's holdings backwards manufactures exactly that correlation. Notably every other alt-data source in the same file is correct: `attach_analyst_features` joins on `YYYY-MM` and its docstring says *"avoids lookahead"*, retail carries symbol+date across 1,365 rows, macro carries dates across 16,369. Only 13F is broadcast. Fix requires historical 13F with filing dates (SEC EDGAR full-text search exposes them) joined as-of the filing date, not the reporting period — the 45-day statutory lag is the whole point. **Outcome: point-in-time 13F does not exist in the platform** — `inst_13f_raw` holds 595 rows across three quarters (2025-09 … 2026-03), with no filing-date field, against a feature store spanning 2016–2026. So the factor was removed rather than repaired, behind `ENABLE_INST13F_FEATURES` (default off) in all four places it reached: the feature join, the four regime weight dicts, the model input list, and the `inst_outflow` exit rule — which, being driven by a per-symbol constant, either fired for a symbol every single day or never, making it a permanent blacklist dressed as an exit signal. **Re-running the backtest cost 0.09 Sharpe: 0.78 → 0.69 net, gross 0.92 → 0.83.** That is the honest price of the leak, and the strategy survives it — still 0.69 against SPY's 0.54 net of cost, so the other factors were carrying real signal rather than riding along. Re-enabling requires backfilling filing-dated 13F from EDGAR and joining as-of the filing date, never the reporting period; the join seam is left in place so that becomes a flag rather than a rewrite. Walk-forward figures are retraining.
-- [ ] **M.1** Point-in-time S&P 500 universe (incl. delisted) — removes the survivorship/selection bias of the hand-picked tech list
+- [x] **M.1** Point-in-time S&P 500 universe (incl. delisted) — removes the survivorship/selection bias of the hand-picked tech list. ✅ 2026-11-03: point-in-time S&P 500 + Nasdaq-100 membership (`research/universe/build_universe.py`); 490 companies added for news
 - [ ] **M.2** PIT data hygiene audit — purge future-dated articles (the corpus contains GKG rows dated 2028–2037) and verify signal-available-time vs data-creation-time across all features
 - [ ] **M.3** IC significance — Newey-West t-stats, IC decay/half-life, per-year and per-regime stability tables
 - [ ] **M.4** Sentiment orthogonalization — residual IC after neutralizing momentum/reversal/size/sector: does news add information beyond price?
@@ -734,12 +302,12 @@ that gap, and are ranked above everything else pending.
 
 ### AI at Scale — RAG & MCP depth (R-series, current focus)
 
-The honest starting position: the retrieval layer is `SimpleVectorStore` in `quant_ai/main.py` — numpy cosine similarity over the four markdown files in `knowledge/`, **382 lines of text**, re-embedded into process memory on every startup, falling back to keyword token overlap when the embedding endpoint is unreachable. No chunking, no reranking, no hybrid retrieval, no retrieval metric ever computed. Meanwhile **845K company-matched news articles sit in MongoDB with zero embeddings**. On the MCP side: ten tools, three clients, but stdio only and nothing past `@mcp.tool()` — no resources, prompts, sampling, elicitation, or auth, and all of it Python. The gap is not the concepts; it is that the rarest asset in a RAG interview — a large dated domain corpus with entity labels — was already collected and left unindexed while the demo ran on four README-sized files.
+The honest starting position: the retrieval layer is `SimpleVectorStore` in `quant_ai/main.py` — numpy cosine similarity over the four markdown files in `knowledge/`, **382 lines of text**, re-embedded into process memory on every startup, falling back to keyword token overlap when the embedding endpoint is unreachable. No chunking, no reranking, no hybrid retrieval, no retrieval metric ever computed. Meanwhile **845K company-matched news articles sit in MongoDB with zero embeddings**. On the MCP side: ten tools, three clients, but stdio only and nothing past `@mcp.tool()` — no resources, prompts, sampling, elicitation, or auth, and all of it Python. The gap is not the concepts; it is that the rarest asset for RAG work — a large dated domain corpus with entity labels — was already collected and left unindexed while the demo ran on four README-sized files.
 
 - [x] **R.1** Qdrant + embedding pipeline over the news corpus — **qdrant deployed** (`v1.18.3`, storage bind-mounted to the external drive rather than the container layer, 2 GB memory cap, log rotation: the 584G and 103G disk-full incidents both came from unbounded container growth, and a vector index would repeat that exactly). Corpus measured on 851,071 documents before writing any pipeline, which corrected both assumptions the plan had been carrying: only **30.2% of articles fit a single 512-token window** (median body 2,956 chars), so full chunking is **2.96M vectors / 9.1 GB / 20.0 h**, not the 2.6 GB estimated; and **17.90% (152,332) have no body at all**, making title-only one document in six rather than an edge case. Also found: **121,970 duplicates (14.3%)** on `(symbol, title, date)`, which would have consumed top-k slots and inflated every recall number R.4 produces. Measured throughput of `nomic-embed-text` (768-dim, local): **title+lede 74.2 vec/s → 3.19 h for the full corpus; 512-token chunks 41.1 vec/s → 20.0 h**. The transferable finding is that throughput is **character-bound, not request-bound** — every configuration held 66–74 Kchar/s, and batch 8 → 64 moved vector rate by 7%, not 8×, because the model saturates on tokens per second. Batch size is not the lever; how much text you choose to embed is. **Decision: index title+lede first** (~2.7 h after dedupe) and let R.4's ablation decide whether chunking earns its 20 h, rather than spending the 20 h to avoid asking. Payload carries `symbol`/`date`/`event_type` so retrieval filters by entity and time window — **a dated corpus retrieved without a date filter is the M.7 look-ahead mistake in a different costume**. One detail that fails silently: `nomic-embed-text` is asymmetric and needs `search_document:` / `search_query:` prefixes — omit them and vectors still return, dimensions still match, nothing errors, retrieval is just quietly worse. *Remaining: the embedding pipeline itself, plus incremental daily indexing — a pipeline needing a full reindex to stay current is not a pipeline*
 - [x] **R.2** Hybrid retrieval — `tools/hybrid_search.py` fuses the MongoDB weighted text index (title:10, content:1) with the Qdrant dense index via RRF, **on rank rather than score** because `textScore` is an unbounded tf-idf-ish sum while cosine is bounded [-1,1], so weighted-sum fusion would need a normalisation that is itself a tuned parameter. Three defects surfaced by running it rather than reading about it: **the sparse leg had to be deduplicated to match the dense one** (Qdrant is deduplicated per M.12, Mongo is not — fusing a clean list against one where one story occupies 402 candidate slots compares a retriever against a broken one, not two retrievers); **RRF was double-counting**, because `index_news.py` keyed on the raw `date` so points distinct at index time collapse under the normalised fusion key and each occurrence banked another `1/(K+r)` — the **third** defect traceable to that dual date format, after the null `date_int` and the feature-layer key; and **13,027 redundant points (1.79%)** from the same cause, repaired in place in seconds by `tools/repair_index_dupes.py` rather than by re-embedding, since point ids are UUID5 of the mongo `_id` and the surviving vectors were never wrong — only the set was (729,101 → 716,074, matching the independent mongo aggregate exactly). **The result worth recording: naive RRF at the published default (K=60, depth 100, equal legs) underperforms both single legs on the queries tried.** `1/(60+60) + 1/(60+36) = 0.0187` beats `1/(60+1) = 0.0164`, so two mediocre ranks outrank one excellent one — **RRF scores consensus, and consensus is not relevance**. On "memory glut pressures chip makers" it promotes an article about chip factories and Trump over three sparse hits actually about a memory glut; on the bare ticker "LRCX" both legs rank content-free stub pages consistently, so consensus floats them above the real articles and dense alone wins. `K=5` at depth 30 looks much better on both, and **is deliberately not adopted as the default** — "looks better to me on two queries" is the same error as trusting the published default with the source swapped. `RRF_K`, candidate depth and per-leg weights are parameters for R.4 to sweep
-- [ ] **R.3** Cross-encoder reranking — retrieve top-100 by fusion, rerank to top-10. Bi-encoder similarity is computed without query and document ever meeting; a cross-encoder scores the pair jointly, is far better at relevance, and is far too slow over 845K rows. Retrieve-then-rerank is how that tradeoff resolves, with the latency budget as the design constraint
-- [ ] **R.4** Retrieval evaluation harness — `recall@k`, `MRR`, `nDCG@10` on 50–100 labelled queries drawn from real events already in the corpus, reported as an ablation across sparse / dense / hybrid / hybrid+rerank. **This is the item that actually answers "expected more technical depth"**: a table showing hybrid+rerank at `recall@10 = 0.87` against dense-only at `0.61`, plus which queries the reranker fixed and which it broke. A longer list of implemented components answers nothing. F.22's evaluation harness already set this pattern in the codebase; this points the same discipline at retrieval
+- [x] **R.3** Cross-encoder reranking (✅ 2026-10-13: +0.076 nDCG, significant under both judges) — retrieve top-100 by fusion, rerank to top-10. Bi-encoder similarity is computed without query and document ever meeting; a cross-encoder scores the pair jointly, is far better at relevance, and is far too slow over 845K rows. Retrieve-then-rerank is how that tradeoff resolves, with the latency budget as the design constraint
+- [x] **R.4** Retrieval evaluation harness (✅ labelled queries, two judges; judge agreement kappa 0.41 → 0.67 after the rubric fix) — `recall@k`, `MRR`, `nDCG@10` on 50–100 labelled queries drawn from real events already in the corpus, reported as an ablation across sparse / dense / hybrid / hybrid+rerank. **This is the item that actually answers "expected more technical depth"**: a table showing hybrid+rerank at `recall@10 = 0.87` against dense-only at `0.61`, plus which queries the reranker fixed and which it broke. A longer list of implemented components answers nothing. F.22's evaluation harness already set this pattern in the codebase; this points the same discipline at retrieval
 - [ ] **R.5** MCP server in Java — a second MCP endpoint inside `quant_api` (Spring Boot 3 / Java 21) over **streamable HTTP** rather than stdio, authenticated through the Keycloak realm already running in this stack. The only item that makes "Java backend engineer" and "AI at scale" one sentence instead of two claims about two services. **Framing that decides what to build**: adding auth to a *stdio* server is close to a non-question — the server is a child process the client spawned, the security boundary is the OS process, and a token there is a secret to store with no security gained. HTTP is what forces the question. It stopped being theoretical when `submit_judgment` shipped: with 10 read-only tools the worst case was disclosure, and a **write tool makes it unauthorised mutation**. Four problems get conflated under "agent auth" — authentication (routine), authorization (moderate), and two that are actually hard: **delegation**, where an agent needs broader permissions than any user and so returns data the asker was never allowed to see (the confused deputy — nothing is compromised, every component behaved correctly, and it is invisible in testing; the fix is a downscoped on-behalf-of token rather than the agent's own standing credential), and **permission-aware retrieval**, where *retrieve-then-filter* can return 2 results and leaks existence while *filter-then-retrieve* is correct only if the store evaluates the predicate inside the search. **This platform is already half-way there**: Qdrant filtering inside the query is that mechanism, and R.10 showed the cost of getting it wrong when one leg filtered inside the search and the other filtered after (37 results instead of 100, and the wrong 37). A date window and a permission boundary are the same filtering problem. Start from the two hard ones — "I added OAuth" is configuration, "I handled permission downscoping when an agent retrieves on a user's behalf" is design
 - [ ] **R.6** MCP protocol depth — resources with URIs and subscriptions (the tool-vs-resource split is a genuine design call worth having made on real data), server-side versioned prompts, **sampling** so the server can ask the client's model to summarise retrieved news and needs no model credentials of its own, and elicitation + progress + cancellation, which become mandatory the moment a tool writes (I.3 order execution) or runs long. Confirmation belongs in the protocol, not the prompt
 - [ ] **R.7** RAG as a feature source, not a chat feature — retrieval-grounded event extraction writing into the feature store. This is where the N-series meets the R-series: semantic retrieval over 845K articles is exactly the mechanism that surfaces "ChangXin Memory IPO" as relevant to MU/WDC/STX when no article names them. Every grounded claim carries its source article ids, and retrieval stays dated, since this is the code path where a retrieval bug becomes a look-ahead bug
@@ -749,6 +317,7 @@ The honest starting position: the retrieval layer is `SimpleVectorStore` in `qua
 - [x] **R.10** Retriever wired into generation — `POST /api/ask/news` answers from the 716K-article corpus with citations by article id, **refuses** when retrieval is empty rather than answering from parametric memory (a RAG system that silently falls back still reads as sourced, so its failure is invisible), and passes `symbol` + date window into **both** legs. Additive, not a replacement: `knowledge/` answers "how does the regime scorer weight factors", the news corpus answers "what happened to NVDA on export controls". Two defects surfaced only by wiring it: **the legs filtered asymmetrically** — qdrant filtered inside the search while the sparse leg took the best matches across all history and filtered in Python after, so one NVDA query returned 37 hits instead of 100 and they were the wrong 37, which **would have corrupted R.4's ablation silently**; and **body fetch took 5.9s** because `find_one({symbol, title})` has no index to use, now 1.5ms via one `$in` on the mongo `_id` both legs carry. Measured latency split rather than totalled — dense leg 16–23ms, sparse `$text` 1.1–3.6s, body fetch 1.5ms, **generation 66–111s**. Generation is 99% of it and the model is not slow: 47 tok/s is normal for a 9B on Apple Silicon, but it emitted **3,124 completion tokens for a ~100-token answer** — a thinking model spending ~3,000 tokens of hidden reasoning on summarisation. Disabling thinking timed out rather than helping, so it is recorded as **open**. Quality note: asked how investors reacted to Micron's guidance, it reported that the excerpts *disagree* (2019-09-25 "positively surprised" vs 2019-09-27 "stock tumbles") and cited both sides instead of picking one
 - [x] **R.11** Generation-side evaluation — retrieval metrics say the right document was in the context window, not whether the answer used it. faithfulness/groundedness, citation accuracy (a citation to a real document that does not contain the claim is a hallucination wearing a source), answer relevance. Reuses F.17's grounding gate, pointed at documents instead of tool outputs
 - [ ] **R.13** One agent for every stock question — the F.21 agent decides which tools to call (cited news answers, signals, backtest, holdings and quotes, briefs, or none); fix the signals/performance 401, add the quant_ai tools, no thinking on agent steps, and a tool-selection evaluation set
+
 ### Security — the AI attack surface
 - [x] **S.1** Indirect prompt injection defence — R.10 opened the exposure: `/api/ask/news` retrieves from 716,074 articles scraped from the open web and puts their body text in the model's context, so **nobody has to compromise anything to write there** — publishing an article GDELT ingests is enough. The system prompt telling the model to answer *only* from those excerpts makes an injected instruction **more** persuasive, not less, and R.7 intends to feed retrieval into the feature store, where a poisoned answer becomes a poisoned position. Four layers, deliberately unequal: **structural separation** (retrieved text lives only in a user message inside `<excerpt>` delimiters, with the system prompt stating nothing inside can change the rules — this is the real defence, because it is about *where authority lives* rather than what the text says), **sanitisation** (zero-width, bidi and control characters neutralised, deterministic so rewording cannot evade it), **pattern detection** (7 regexes — the weak layer, reported and never enforced: dropping a document on a regex match would let anyone suppress coverage of a company by publishing one sentence), and **output checks**. Measured rather than assumed: the first exfiltration pattern fired 16 times in 40,000 real articles, every one an earnings-call transcript where the operator asks analysts to "repeat your instructions" — a rule that fires on ordinary journalism is worse than no rule, because the flag then gets ignored on the day it matters. Final false-positive rate **3 in 40,000 (0.0075%)**. **Two defects the tests found rather than review**: deleting zero-width characters *helped* the attacker, since `Ignore<ZWSP>all<ZWSP>previous<ZWSP>instructions` collapses into one unmatchable token while a model reads the phrase fine through the missing spaces — neutralising a hiding character must not destroy the evidence, so they are replaced with a space; and `chars_sanitised` was a length delta, which is always 0 once characters are replaced instead of deleted, so the metric hid the signal it existed to surface. **Three evasion tests assert the pattern layer fails** on rewording, indirect framing and non-English — asserted rather than hidden, because that is the argument for the layering. End-to-end against a local 9B with a poisoned excerpt the model reported the real figure and **called out the embedded instruction** instead of following it; the automated adoption check false-positived on that answer because the model *mentioned* the injected phrasing in order to report it, and a substring test cannot separate adopting from reporting — the same difficulty R.11's faithfulness gate will face. 22 tests
 - [x] **S.2** Guard at the MCP boundary rather than in each consumer — S.1 protected one endpoint, while `search_news` was still handing raw article text unguarded to **four** consumers: Claude Desktop, Codex, the F.21 research agent and the F.17 portfolio agent. It is the only tool on that server returning free text written outside the platform (every other returns platform-computed numbers), which makes it *the* injection surface. **The guard goes at the tool boundary, not in each consumer**: four implementations would be four chances to drift and a client registered later would arrive unprotected, whereas the boundary where untrusted text crosses into a model context is exactly the boundary the tool contract already defines — the same argument that let one stdio server serve three clients. Title, excerpt and company are sanitised, pattern hits attach per article as `untrusted_content_flags`, and a `_security` block states the text is data to report on rather than instructions to follow. **Reports, never withholds** — dropping an article on a regex match would let anyone erase a company from the platform's coverage with one sentence — and **fails open, asserted in a test**, because dropping every article when a payload will not parse would be a self-inflicted denial of service while the structural defence still holds. Verified against the redeployed API and over the real MCP protocol; 54 tests across the suite
@@ -757,8 +326,8 @@ The honest starting position: the retrieval layer is `SimpleVectorStore` in `qua
 
 ### AI Engineering — LLM / RAG
 - [ ] **F.2** News semantic search UI — a search box in quant_ui over the R.2 retriever. Superseded on the retrieval side by R.1–R.3; the entry previously claimed "Qdrant already deployed", which was never true — there is no `qdrant` service in `docker-compose.yml`
-- [ ] **F.5** FinBERT fine-tuning — replace the dual-LLM labeling pipeline with a single fine-tuned model (~200× inference speedup)
-- [ ] **F.10** Strategy Studio → backtest execution — wire the natural-language strategy generator to `backtest_portfolio.py` so generated strategies produce real Sharpe / drawdown numbers
+- [ ] 🟡 **F.5** FinBERT fine-tuning — replace the dual-LLM labeling pipeline with a single fine-tuned model (~200× inference speedup). In progress as distillation (3.5.5): Qwen3-0.6B / 1.7B and ModernBERT-large students of the Qwen3.5-9B teacher, 18–108 articles/s against the teacher's 1.15
+- ❌ **F.10** *(cancelled 2026-11-08: Strategy Studio removed)* Strategy Studio → backtest execution — wire the natural-language strategy generator to `backtest_portfolio.py` so generated strategies produce real Sharpe / drawdown numbers
 - [ ] **F.11** Fast news pre-filter — an LLM relevance filter already runs ahead of the dual-LLM pass (`slm_filter.py`); replace it with a distilbert binary classifier for throughput, since relevance judgement does not need a 4B model
 - [ ] **F.12** Signal explanation generation — SLM writes a two-sentence "why this stock scored high" for each top signal, shown inline in SignalsPanel
 - [ ] **F.14** Earnings surprise prediction — in the 10-day pre-earnings window, aggregate news sentiment + analyst consensus into a beat/miss probability factor
@@ -774,7 +343,7 @@ The honest starting position: the retrieval layer is `SimpleVectorStore` in `qua
 - [ ] **F.9** Rule optimization agent — sample → LLM judge → diagnose FP/FN → modify rules (🟡 `tools/rule_optimizer.py` written, not tested)
 - [ ] **F.13** Morning briefing agent — 07:00 pre-market summary for held positions: overnight news, regime, exit warnings
 - [ ] **F.16** Real-time news monitoring agent — 30-minute polling for held positions; alerts on a sentiment spike or negative event cluster
-- [x] **F.17** Portfolio Manager agent — a **review layer over the rule engine**, not a replacement. `track_positions.py` already decides entries, exits and stops deterministically; a local 9B model would be both worse and non-reproducible at that job, and "why do you think the model beats your rules" has no good answer. The agent reviews those decisions instead, covering the two things a per-position rule structurally cannot do: reading *why* a price moved (it pulls the news via I.6 and the feature trend via I.7, so a stop fired by a sector-wide selloff that has already reversed reads as a whipsaw rather than a signal), and portfolio-level facts no rule considers. **The division of labour is the design**: code gathers context, picks what to review, fetches evidence, and runs every portfolio check — concentration and weight limits are arithmetic, and asking a model to do arithmetic a comparison operator cannot get wrong is a bad trade; the model handles only what needs language. Three gates then run on every verdict, trusting nothing: **schema** (one repair round-trip, then the review is dropped rather than emitted malformed), **grounding** (every cited `(tool, field, value)` must appear in a real observation from this run — numbers match with tolerance, since a model echoing 0.2803 as 0.28 is quoting rather than fabricating; a `flag` resting on nothing verifiable is demoted to `agree`), and **business rules**. Output is a machine-consumable decision table, so G.1 can later execute against it. First real run reviewed two rule exits in 213s on a local 9B: one AGREE at 0.9 confidence with three grounded citations, one SKIPPED when the model dropped its connection — degrading rather than crashing, which is what the gates are for. It also surfaced three portfolio findings the rule engine cannot see, including a single position at 41.9% of capital against a 5% limit. 25 unit tests with the LLM and MCP mocked.
+- [x] **F.17** Portfolio Manager agent — a **review layer over the rule engine**, not a replacement. `track_positions.py` already decides entries, exits and stops deterministically; a local 9B model would be both worse and non-reproducible at that job, and "why do you think the model beats your rules" has no good answer. The agent reviews those decisions instead, covering the two things a per-position rule structurally cannot do: reading *why* a price moved (it pulls the news via I.6 and the feature trend via I.7, so a stop fired by a sector-wide selloff that has already reversed reads as a whipsaw rather than a signal), and portfolio-level facts no rule considers. **The division of labour is the design**: code gathers context, picks what to review, fetches evidence, and runs every portfolio check — concentration and weight limits are arithmetic, and asking a model to do arithmetic a comparison operator cannot get wrong is a bad trade; the model handles only what needs language. Three gates then run on every verdict, trusting nothing: **schema** (one repair round-trip, then the review is dropped rather than emitted malformed), **grounding** (every cited `(tool, field, value)` must appear in a real observation from this run — numbers match with tolerance, since a model echoing 0.2803 as 0.28 is quoting rather than fabricating; a `flag` resting on nothing verifiable is demoted to `agree`), and **business rules**. Output is a machine-consumable decision table, so G.1 can later execute against it. First real run reviewed two rule exits in 213s on a local 9B: one AGREE at 0.9 confidence with three grounded citations, one SKIPPED when the model dropped its connection — degrading rather than crashing, which is what the gates are for. It also surfaced three portfolio findings the rule engine cannot see, including a single position far above its 5% limit. 25 unit tests with the LLM and MCP mocked.
 - [x] **F.22** Agent evaluation harness — `eval/cases.yaml` plus `eval/run_eval.py`. Whether a recommendation *makes money* cannot be scored without waiting for the market, and claiming otherwise would be dishonest; what is scored are the failure modes that actually keep agents out of production: schema validity, **grounding rate** (fraction of cited evidence that is real), tool recall and precision against the tools each case requires or forbids, run-to-run stability as mean pairwise Jaccard over repeated identical runs, and cost in steps and seconds. Stability earns its place — an agent that answers differently every time cannot be trusted even when each answer is defensible, and a demo run once cannot reveal it. The unit tests mock the LLM, so they prove the loop is correct rather than that the decisions are; this drives the real model against fixed cases to close that gap. One case asks about a symbol the corpus genuinely has no data for, so a run that reports the absence passes and one that produces a confident number fails.
 
 - [ ] **F.18** Backtest reflection agent — auto-diagnose weak-year IC failures (2022/2024) and generate a hypothesis report
@@ -858,7 +427,7 @@ missing piece is propagation, and the honest question is not "can this be captur
   Keeping those two apart is the discipline this series is built around.
 - [ ] **N.6** 🟡 **Automatic news linkage for holdings** (recorded 2026-11-05, user's request). One article
   alone can mislead; its impact often depends on *other* news. The user's illustration (one example of
-  the general case, not the feature's scope): "Democrats win the midterms" may not hurt INTC by itself,
+  the general case, not the feature's scope): "Democrats win the midterms" may not hurt a chip stock by itself,
   but together with "Democrats push to restrict AI data-center construction" it is strongly bearish, and
   much less so if Republicans had won. The system must find such links **by itself**, for any pair or
   chain of articles, with no hand-listed event pairs.
@@ -885,83 +454,10 @@ missing piece is propagation, and the honest question is not "can this be captur
 
 ---
 
-# Interview Roadmap
+# Part 3 · Workstreams
 
-## A. Data Engineer Interview Roadmap
-
-### Currently Available (can discuss directly)
-- MongoDB 845K+ articles + 675M GKG inverted index (large-scale document storage + full-text search)
-- Python ETL pipeline: news collection → company matching → feature build (multiple data sources, incremental/full load)
-- LLM batch inference pipeline (845K articles, two passes + dual-LLM merge)
-- Docker Compose multi-service orchestration (MongoDB / MySQL / Kafka / Airflow / MLflow / Qdrant)
-- Airflow DAG definitions (DAG structure, task dependencies, SLA)
-
-### Critical Gaps — Must Fill (will be asked in interviews)
-
-| What is missing | Why it matters | Stage | Effort |
-|---|---|---|---|
-| Kafka has no actual producer/consumer | DE must-ask; "deployed but unused" is unconvincing | Stage 7 / 5.1.1 | 3 days |
-| Airflow DAG has not actually run end-to-end | "wrote a DAG" ≠ "it ran" | Stage 7 | 1 week |
-| MLflow has no actual recorded runs | Can use the tool but has no output; can't answer interview questions about run results | Stage 7 / 5.2.3 | 1 day |
-| No ETL unit tests | DE interviews always ask how pipeline reliability is guaranteed | New | 3 days |
-| No data quality checks | Standard for production-grade pipelines; absence raises reliability doubts | New | 2 days |
-| No idempotency design doc | DE must-know: will re-running the pipeline produce duplicates? | New (add doc) | 1 day |
-
-### Bonus Items — Stronger with, not required to interview
-
-| Item | Value | Stage | Effort |
-|---|---|---|---|
-| Flink streaming pipeline | High-demand DE skill at large companies, most differentiating | 5.2.2 | 2 weeks |
-| dbt data lineage | Data modeling best practice, common in FinTech DE | 5.2.4 | 1 week |
-| Prometheus + Grafana monitoring | Observability, also useful for SRE interviews | 5.4 | 3 days |
-| Schema Registry (Kafka) | Avro schema evolution, large-scale data governance | 5.1.1 | 2 days |
-| CI/CD for data pipeline | GitHub Actions running tests + lint | New | 2 days |
-| Data lineage diagram | Which tables depend on which source; can use OpenLineage | New | 3 days |
-
-### Complete DE interview story (after filling gaps)
-*"Built a financial news processing system covering 100 stocks: established full-text index on GDELT raw data (675M records); Python ETL cleaned and matched 845K articles with idempotency design and data quality checks; Airflow scheduled 5 DAGs for daily incremental updates; Kafka publishes daily trading signals (complete producer/consumer pipeline); MLflow tracked 100+ model experiments; entire system deployable with a single Docker Compose command."*
-
----
-
-## B. FinTech / Quantitative Finance Interview Roadmap
-
-### Currently Available (can discuss directly)
-- Walk-forward validation (not backtest overfitting), IC=0.059 (60d), 100 symbol universe
-- Multi-factor model: news quality + momentum + earnings events + LLM sentiment
-- Event-driven backtest framework (min_hold=20d, +1.40% excess return, outperforming fixed holding baseline)
-- LLM dual-model ensemble labeling (Gemma + Qwen + dual-LLM merge, 77.3% agreement rate)
-- 845K articles with three-dimensional labels: sentiment / event type / signal strength
-
-### Critical Gaps — Must Fill (quantitative interview essentials)
-
-| What is missing | Why it matters | Effort |
-|---|---|---|
-| Sharpe ratio / max drawdown / Sortino | Must-ask for quant roles; no numbers = incomplete strategy | 2 days |
-| Turnover + transaction cost model (0.05% assumption) | Is the strategy still profitable after costs? | 1 day |
-| Annualized return vs SPY buy-and-hold comparison | Does the strategy beat passive holding? | 1 day |
-| Factor IC decay curve (autocorrelation) | How many days until the signal expires, determines rebalance frequency | 1 day |
-| Information Ratio (IC / std(IC)) | Signal stability; IC=0.059 is usable but IR must be shown | 0.5 days |
-| Long-short portfolio (not just Top-N) | Standard for quant funds; long-only = incomplete | 3 days |
-| Factor correlation matrix (VIF / redundancy check) | Avoid multicollinearity, model interpretability | 1 day |
-| Year-by-year Sharpe + drawdown chart | Quantify risk in weak years (2022/2024) | 1 day |
-
-### Bonus Items — Stronger with
-
-| Item | Value | Stage | Effort |
-|---|---|---|---|
-| FinBERT fine-tuning (200x inference speedup) | AI+Finance crossover, unique highlight | 3.5.5 | 1 week |
-| Factor attribution analysis (SHAP feature importance) | Interpretability, can demo live in interview | New | 1 day |
-| Beta neutralization / market-neutral portfolio | Institutional quant standard | New | 2 days |
-| Volatility-weighted position sizing (non-equal weight) | More sophisticated portfolio construction than equal weight | New | 1 day |
-| Liquidity filter (market cap threshold) | Avoid small-cap slippage, real-world executability | New | 0.5 days |
-| RAG news semantic search | "Semantic search + finance" highlight | 5.3.1 | 1 week |
-| Multi-agent research assistant | AI engineering depth showcase | 5.3.2 | 2 weeks |
-| Paper trading live verification record | Out-of-sample real-world performance, most convincing in interviews | C.6 | Ongoing |
-
-### Complete quantitative interview story (after filling gaps)
-*"Built a news-driven multi-factor model on a 100-stock tech universe: 845K articles labeled by Gemma+Qwen dual-model LLM ensemble (77.3% agreement); walk-forward validation 60d Rank IC=0.059, Information Ratio=X.X; event-driven holding framework achieved +1.40% excess return in an average of 13.7 days (after transaction costs +X.X%), annualized Sharpe=X.X, max drawdown X%, long-short annualized excess X%."*
-
----
+One section per series, in ID order. Item IDs are stable and are what the rest of the
+document (and commit messages) refer to.
 
 ## C. Project Productionization Roadmap (News Events → Buy/Sell/Hold Decisions)
 
@@ -1035,15 +531,15 @@ missing piece is propagation, and the honest question is not "can this be captur
 
 ```
 Stage 7 services running end-to-end (1 week)
-  → C.2 risk metrics + C.9 factor report (3 days)  ← can discuss in interview immediately
-  → C.8 ETL unit tests (3 days)                    ← proves reliability in DE interviews
+  → C.2 risk metrics + C.9 factor report (3 days)  ← reportable immediately
+  → C.8 ETL unit tests (3 days)                    ← proves pipeline reliability
   → C.7 data quality checks (2 days)               ← production-grade credibility
   → C.1 daily signal automation (3 days)           ← project starts "moving"
   → C.3 signal UI page (3 days)                    ← visualized decisions
   → C.4 position tracking (1 week)                 ← real decision support
   → C.5 exit alerts (3 days)                       ← loop closed
   → C.6 paper trading (ongoing)                    ← accumulate real-world performance
-  → project productionized + interview-ready ✓
+  → project productionized ✓
 ```
 
 ---
@@ -1119,11 +615,11 @@ All completed items are wired through the full pipeline:
 
 ---
 
-## E. Engineering Layer Completion (interview bonus / project completeness)
+## E. Engineering Layer Completion
 
 ### E.1 REST API documentation (Swagger / OpenAPI)
 - Add Swagger annotations to all `quant_api` endpoints; generate interactive documentation
-- Open `/swagger-ui.html` during interview demo to directly showcase API design
+- Open `/swagger-ui.html` to browse the API design
 - Status: [ ] Pending development (1 day)
 
 ### E.2 CI/CD Pipeline (GitHub Actions)
@@ -1139,15 +635,14 @@ All completed items are wired through the full pipeline:
 
 ### E.4 K8s deployment configuration
 - Convert docker-compose to Kubernetes YAML (Deployment / Service / ConfigMap)
-- No need to actually run K8s; having the config files is enough for interviews
-- Bonus for DE / Platform engineer interviews at large companies
+- No need to run K8s locally; the manifests document the production deployment
 - Status: [ ] Pending development (3 days)
 
 ### E.5 Data lineage diagram (OpenLineage)
 - Use OpenLineage or hand-written lineage JSON to describe:
   `news_articles` → `company_match` → `news_articles_company_matched_v2`
   → `daily_symbol_features_company_matched_v2` → `daily_signals`
-- Visualize data flow; a common DE interview topic
+- Visualize data flow end to end
 - Status: [ ] Pending development (2 days)
 
 ### E.6 WebSocket real-time push
@@ -1159,7 +654,7 @@ All completed items are wired through the full pipeline:
 ### E.7 Project README + architecture diagram
 - Write a complete README: project background, architecture diagram, quick start, key metrics
 - Architecture diagram: data flow → feature engineering → model → signals → UI
-- Required before any interview; first impression on GitHub
+- First impression on GitHub
 - Status: [x] Done (2026-07-15) — `quant_docker/README.md` with the layered architecture diagram
 
 ### E.9 UI Intraday Price Chart
@@ -1207,13 +702,34 @@ resolve_slm_endpoint():
 2. Log which endpoint served each batch (throughput differs ~5×; needed for run-time estimates)
 3. Optional: Slack alert on failover so silent GPU-node outages are visible
 
-**Interview value**: turns the multi-node setup into a defensible story — "heterogeneous GPU offload with health-checked failover and graceful degradation".
-
 - Status: [ ] Pending (1 day)
 
 ---
 
-## F. AI Engineering Layer (AI Engineer / MLE interview bonus)
+### Deployment drift — verify against the running system, not the repository
+
+Twice now a container has been running an image older than the one `docker-compose.yml`
+declares, because CI updates the tag in the compose file and nothing restarts the
+container:
+
+| service | was running | declared | consequence |
+|---|---|---|---|
+| `quant_data` | `e165324` | `e650994` | **none** — the Airflow DAGs run host code (`_host_common.py`: `cd $ROOT && $ROOT/.venv311/bin/python $ROOT/$script`), so M.7 and M.12 reached production without an image build |
+| `quant_api` | `9307bbe` | `e70b3cb` | **real** — `/api/news/search` existed in the Java source but not in the running image, so the `search_news` MCP tool returned 404 for all three clients |
+
+The second one went unnoticed because I.6 was marked done on the evidence that the function
+existed in `mcp_server.py`. **A file in the repository is not a working feature.** Both were
+fixed on 2026-08-03 by `docker compose pull` and recreating the two containers; all ten
+platform MCP tools were then called against the deployed API and confirmed to return real
+data, rather than confirmed to exist.
+
+The rule this leaves: a status of "done" for anything with a deployed surface needs evidence
+from the deployed surface. `quant_airflow:local` will always fail `docker compose pull` —
+it is built locally and lives in no registry — which is expected, not a fault.
+
+---
+
+## F. AI Engineering Layer
 
 ### F.1 Prompt Engineering evaluation framework
 - Compare labeling accuracy of different prompt templates (use 100 manually-annotated articles as ground truth)
@@ -1235,7 +751,7 @@ resolve_slm_endpoint():
 ### F.3 Model interpretability report (SHAP)
 - Run SHAP analysis on LightGBM model
 - Output: factor contribution ranking, per-stock prediction explanation (why AAPL gets a high score)
-- Interview demo killer: not just "IC=0.059" but also "driven primarily by avg_sentiment_5d and earnings_recency_weight"
+- Explains a score rather than only reporting it: not just "IC=0.059" but also "driven primarily by avg_sentiment_5d and earnings_recency_weight"
 - Status: [x] Done — `research/backtest/factor_analysis.py`
 
 ### F.4 Multi-Agent research assistant (LangGraph)
@@ -1266,15 +782,20 @@ risk_agent      → position sizing, stop-loss conditions, final output: positio
 4. Add ReAct loop: analysis_agent can decide whether it needs more data (1 day)
 5. Integrate Qdrant RAG (after F.2 is done): data_agent can semantically search relevant news (1 day)
 
-**Demo flow (for interviews):**
+**Demo flow:**
 - Input: "Has AAPL had any negative news in the last 30 days? Should I hold a position now?"
 - data_agent fetches news + sentiment distribution
 - analysis_agent finds `avg_sentiment_5d = -0.3`, identifies regulatory risk event
 - strategy_agent recommends "wait and watch; build position after sentiment recovers"
 - risk_agent adds: if holding, stop-loss at -3%, max position size 5%
 
-**Interview value:** covers ReAct reasoning + tool use + state graph — core competency for MLE / AI Engineer roles
 - Status: [ ] Pending development (2 weeks)
+
+### F.5 FinBERT fine-tuning (3.5.5)
+- Train on Gemma+Qwen consensus labels (~650K samples)
+- Three heads: sentiment regression + event_type 7-class + signal_strength 3-class
+- Inference speed: ~3.9 art/s → ~1000+ art/s (200x speedup)
+- Status: [ ] Pending development (1-2 weeks)
 
 ### F.6 Upgrade rule_validator to a real Agent (ReAct loop)
 **Current state:** `quant_data/tools/rule_validator_agent.py` has a prototype of "LLM judges → tool call → re-judges", but the sequence is hardcoded with no reasoning loop.
@@ -1325,12 +846,6 @@ risk_agent      → position sizing, stop-loss conditions, final output: positio
 4. Compare IC before and after
 
 - Status: [ ] Pending development (4 days)
-
-### F.5 FinBERT fine-tuning (3.5.5)
-- Train on Gemma+Qwen consensus labels (~650K samples)
-- Three heads: sentiment regression + event_type 7-class + signal_strength 3-class
-- Inference speed: ~3.9 art/s → ~1000+ art/s (200x speedup)
-- Status: [ ] Pending development (1-2 weeks)
 
 ### F.9 Rule Optimization Agent (Iterative Self-Improving Loop)
 
@@ -1406,16 +921,13 @@ symbols_sampled = 5                # rotate symbols each round to avoid overfitt
 - `--mode optimize` (full loop; modifies rules) — run after adding new symbols or when FP rate spikes
 - `--mode audit --round 3` (inspect a specific round's samples and verdicts)
 
-**Interview framing:**
-*"Built a self-improving news validation agent that iteratively samples historical articles across 10 years, evaluates relevance with an LLM judge, diagnoses failure modes (incidental mention FP, wrong-company FP, missed matches), and modifies SLM prompts and disambiguation rules — converging from F1=0.XX to F1=0.XX in 10 rounds."*
-
 **Relates to:** F.6 (rule_validator ReAct), F.8 (active learning), project_slm_optimization (incidental mention FP)
 
 - Status: 🟡 Developed, not yet tested (2026-07-13)
 
 ---
 
-### F.10 Strategy Studio → Backtest Execution Pipeline
+### F.10 Strategy Studio → Backtest Execution Pipeline — ❌ Cancelled 2026-11-08 (Strategy Studio removed)
 
 **Goal**: Close the loop on the existing Strategy Studio UI (quant_ui `StrategyStudio.tsx`). Currently the UI generates StrategySpec JSON + Tasks JSON + Strategy XML via LLM and saves them to the DB — but nothing executes them. This item wires the saved strategy into the existing Python backtest engine so users get real P&L results back in the UI.
 
@@ -1452,9 +964,6 @@ Returns to UI: Sharpe, annualized return, max drawdown, hit rate
 4. **UI result panel**: add "Run Backtest" button + result card below Save Result in `StrategyStudio.tsx` showing Sharpe/return/drawdown (0.5 day)
 
 **Scope constraint**: Only support strategies whose `entry_rule` maps to existing feature columns (avg_sentiment_5d, rsi, etc.) — not arbitrary code execution. This keeps scope tight while making the demo fully functional.
-
-**Interview framing:**
-*"Built a full natural-language → backtest pipeline: user describes a strategy in plain English, the local LLM (via LM Studio) generates a structured StrategySpec, which is then executed against 5 years of historical data using the existing walk-forward backtest engine, returning Sharpe / drawdown / hit rate directly in the UI."*
 
 - Status: [ ] Pending (3-4 days)
   - `tools/llm_judge.py` — LLM judge (Claude API + local SLM fallback, TP/FP + fp_type + regex proposal)
@@ -1619,39 +1128,6 @@ hand-written loop plus a validator is smaller and easier to test.
 
 ---
 
-### F.22 Agent Evaluation Harness
-
-**Goal**: Answer "how do you know the agent is any good" with numbers instead of a demo.
-
-**What cannot be evaluated**: whether a recommendation makes money. That needs the market
-to pass. Claiming otherwise would be dishonest.
-
-**What can be evaluated** — and these are the failure modes that actually keep agents out
-of production:
-
-| Metric | Definition |
-|---|---|
-| Schema validity | passed first try / passed after one repair / failed |
-| **Grounding rate** | cited evidence that is real ÷ total citations |
-| Tool recall | required tools that were called |
-| Tool precision | called tools that were required |
-| Stability | Jaccard overlap of the recommendation set across N runs of one input |
-| Cost | steps, wall-clock, tokens |
-
-The existing 7 unit tests mock the LLM, so they prove the loop is correct — not that the
-decisions are. This closes that gap.
-
-**Baseline**: the rule engine. The agent's job is not to differ from it; it is to be
-justifiably different when it does. Agreement rate is itself a signal — too high and the
-agent adds nothing, too low and it cannot be trusted.
-
-**Implementation**: `quant_ai/eval/cases.yaml` (golden cases: prompt, required tools,
-forbidden tools, schema, assertions) and `quant_ai/eval/run_eval.py` producing a report.
-
-- Status: 🟡 Written, not fully run — `eval/run_eval.py` + `eval/cases.yaml` exist; the full 15-run pass on the local 9B was deferred (~1h)
-
----
-
 ### F.18 Backtest Reflection Agent
 
 **Goal**: After each backtest run, an LLM agent automatically analyzes weak years (2022, 2024) and generates a diagnostic report with hypotheses for why the signal failed.
@@ -1718,6 +1194,294 @@ forbidden tools, schema, assertions) and `quant_ai/eval/run_eval.py` producing a
 
 ---
 
+### F.22 Agent Evaluation Harness
+
+**Goal**: Answer "how do you know the agent is any good" with numbers instead of a demo.
+
+**What cannot be evaluated**: whether a recommendation makes money. That needs the market
+to pass. Claiming otherwise would be dishonest.
+
+**What can be evaluated** — and these are the failure modes that actually keep agents out
+of production:
+
+| Metric | Definition |
+|---|---|
+| Schema validity | passed first try / passed after one repair / failed |
+| **Grounding rate** | cited evidence that is real ÷ total citations |
+| Tool recall | required tools that were called |
+| Tool precision | called tools that were required |
+| Stability | Jaccard overlap of the recommendation set across N runs of one input |
+| Cost | steps, wall-clock, tokens |
+
+The existing 7 unit tests mock the LLM, so they prove the loop is correct — not that the
+decisions are. This closes that gap.
+
+**Baseline**: the rule engine. The agent's job is not to differ from it; it is to be
+justifiably different when it does. Agreement rate is itself a signal — too high and the
+agent adds nothing, too low and it cannot be trusted.
+
+**Implementation**: `quant_ai/eval/cases.yaml` (golden cases: prompt, required tools,
+forbidden tools, schema, assertions) and `quant_ai/eval/run_eval.py` producing a report.
+
+- Status: 🟡 Written, not fully run — `eval/run_eval.py` + `eval/cases.yaml` exist; the full 15-run pass on the local 9B was deferred (~1h)
+
+---
+
+## G. Live Trading Execution and Universe Expansion
+
+### G.1 Live Trading Execution (Automated Trading)
+
+**Goal**: Connect the existing signal pipeline to a real broker API so that daily signals automatically place live orders, with position reconciliation and risk guardrails. This is the final step that turns the platform from a research/paper-trading system into a real execution system.
+
+**Three-stage progression:**
+
+```
+Stage 1 (paper → broker paper account)   ← safest starting point
+  track_positions.py signals
+      ↓
+  Alpaca Paper Trading API (free, no real money)
+      ↓
+  Real order book simulation with live market prices
+
+Stage 2 (live trading, small size)
+  Same signal pipeline
+      ↓
+  Alpaca Live API / Interactive Brokers TWS API
+      ↓
+  Real orders, real fills, real P&L
+
+Stage 3 (full automation)
+  launchd triggers score_daily_signals at 08:30
+      ↓
+  live_trader.py reads top-N signals → places market orders at open
+      ↓
+  Position monitor runs intraday → fires stop-loss orders if triggered
+      ↓
+  EOD reconciliation: compare expected vs actual fills
+```
+
+**What needs to be built:**
+
+| Component | Description | Effort |
+|-----------|-------------|--------|
+| `research/live_trader.py` | Read top-N LONG signals from MongoDB → submit buy orders via broker API | 2 days |
+| `research/order_manager.py` | Track open orders, handle partial fills, cancel stale orders | 2 days |
+| `research/position_reconciler.py` | Compare paper positions vs broker positions; alert on drift | 1 day |
+| Broker API integration | Alpaca REST API (simpler) or IBKR TWS API (more powerful) | 2-3 days |
+| Pre-trade risk checks | Max position size, daily loss limit, no-trade list, market hours check | 1 day |
+| Alert system | Kafka → Spring Boot → push notification on fill / stop-loss / error | 1 day |
+
+**Pre-trade risk guardrails (non-negotiable before going live):**
+- Max single position: 5% of portfolio
+- Max daily drawdown kill-switch: halt all trading if down >3% intraday
+- No trading in first/last 15 minutes of session (wide spreads)
+- Whitelist: only trade symbols already in the 100-stock universe
+- Position size = `kelly_fraction × account_equity / entry_price`, capped at 100 shares for initial testing
+
+**Broker options:**
+
+| Broker | API | Cost | Best for |
+|--------|-----|------|---------|
+| Alpaca | REST + WebSocket, Python SDK | Free (commission-free US stocks) | Starting point; easiest integration |
+| Interactive Brokers | TWS API (Python `ib_insync`) | Low commission | Professional; supports options/futures later |
+| Webull | Unofficial API | Free | Not recommended (unofficial) |
+
+**Recommended starting point**: Alpaca paper account → validate that orders match signal intent → switch to live with $1K–$5K test capital.
+
+**Key difference from paper trading:**
+- `track_positions.py` simulates fills at closing price → no slippage, no partial fills, no API errors
+- Live trading introduces: slippage, order rejection, partial fills, API downtime, margin calls
+- Need fill confirmation loop: place order → poll for fill → update position → log to MongoDB
+
+- Status: [ ] Pending (2–3 weeks for Stage 1 + Stage 2)
+
+---
+
+### G.2 Stock Universe Expansion
+
+**Goal**: Grow the current 103-stock universe to cover a broader range of sectors and international names.
+
+**Current state (2026-07-15):**
+- 100 original stocks (US tech, SaaS, biotech, financials, consumer, industrials)
+- 3 just added (STX, WDC, HXSCL) → **103 total**
+- Storage sector is now complete: MU (DRAM), HXSCL (DRAM/NAND), STX (HDD), WDC (HDD/NAND)
+
+**Planned expansions:**
+
+| Phase | Symbols | Notes | Effort |
+|-------|---------|-------|--------|
+| Phase 1 (near-term) | STX, WDC, HXSCL | ✅ Done 2026-07-15 | 0 days |
+| Phase 2 (energy/materials) | XOM, CVX, NEE, LIN, APD | Complete sector diversification; no current energy/materials coverage | 2 days |
+| Phase 3 (international ADRs) | BABA, JD, PDD, BIDU, SE, GRAB | US-listed ADRs for China/SE Asia tech; significant news coverage available | 2 days |
+| Phase 4 (broader S&P) | SPG, PLD, AMT (REITs), BRK-B, BAC, WFC | Financials/REITs expansion; less news-driven, lower priority | 3 days |
+
+**What adding a new symbol requires:**
+1. Add to `COMPANY_UNIVERSE` in `slm_company_match_v2.py` (keywords for news matching)
+2. Collect price history: `stock_prices_history` via `daily_price_collector/collector.py`
+3. Collect news history: `news_articles` via GDELT backfill (already running, just needs symbol added)
+4. Run `company_match_rescore` to label historical articles for the new symbol
+5. Rebuild features: `daily_symbol_features.py --symbol NEW_SYMBOL` or full rebuild
+6. Re-run backtests to verify IC is stable with the expanded universe
+
+**Note on HXSCL (SK Hynix):** Listed on US OTC markets (Pink Sheet: HXSCL). yfinance can pull price data. News coverage available via GDELT (English-language coverage of Korean semiconductor industry is substantial due to global supply chain relevance).
+
+**Note on hourly/intraday data:** Not planned. Current strategy holds 5–60 days; daily + pre-market/after-hours gaps are sufficient. Intraday bars would only help with sub-day execution timing, which is not a priority until Stage 2 live trading is proven.
+
+- Status: Phase 1 ✅ Done; Phases 2–4 [ ] Pending (low priority, expand only after live trading is validated)
+
+---
+
+## H. Live Trading System Roadmap (from research → truly usable)
+
+### Background: why live trading is not yet possible
+
+Backtest results (long-short annualized +21.7%, Sharpe 0.85) look promising, but the following issues would cause real money to lose:
+
+| Problem | Specific manifestation | Risk level |
+|------|---------|---------|
+| IC year-over-year instability | IC was negative in 2022/2024/2025, signal reversed | 🔴 Fatal |
+| No transaction costs | Backtest does not deduct commissions + slippage; real returns reduced by 30-40% | 🔴 Fatal |
+| Signal lag | LLM processing takes several hours after news is published | 🟡 Serious |
+| No position sizing | Equal-weight allocation; single-stock risk is unconstrained | 🟡 Serious |
+| No out-of-sample validation | All data used for backtest; overfitting risk | 🟡 Serious |
+| Only 100 stocks | Concentration too high; liquidity risk | 🟠 Moderate |
+
+---
+
+### H.1 Fix backtest realism (🔴 must do first)
+
+**H.1.1 Add transaction cost model**
+- One-way commission: 0.05% (standard broker level)
+- Slippage model: 0.3% for small-cap, 0.1% for large-cap (tiered by market cap)
+- Modify `backtest_news_factor.py` and `backtest_event_driven.py`:
+  ```python
+  net_return = gross_return - commission * 2 - slippage * 2
+  ```
+- Goal: determine how much of the long-short annualized return remains after costs
+- Status: [x] Done — `backtest_portfolio.py`: COMMISSION_BPS=5, liquidity-tiered slippage 10/30bps, $5M min dollar-volume filter; measured 30.4 bps round trip
+
+**H.1.2 Add liquidity filter**
+- Exclude stocks with average daily volume < $5M (avoid execution failure)
+- Add `avg_daily_volume` feature; filter at position selection
+- Status: [ ] Pending development (0.5 days)
+
+**H.1.3 Add position limit constraints**
+- Max position per stock: 5% (avoid over-concentration)
+- Max position per sector: 25%
+- Modify `score_daily_signals.py` to add position constraint logic
+- Status: [ ] Pending development (0.5 days)
+
+---
+
+### H.2 Resolve IC instability (🔴 must do first)
+
+**H.2.1 Market Regime detection**
+
+Year-by-year IC analysis reveals the signal is only effective in "trending markets":
+```
+2022 (bear market / high VIX): IC = -0.035 → disable signal
+2023 (recovery / low VIX):     IC = +0.163 → enable signal  
+2024 (choppy):                  IC = -0.022 → disable signal
+2025 (choppy):                  IC = -0.020 → disable signal
+```
+
+Implementation:
+- Data source: `yfinance` for daily VIX data
+- Regime definitions:
+  - **Trending market**: VIX < 20 AND SPY 20-day moving average trending up → enable LLM sentiment factor weighting
+  - **Choppy / panic**: VIX > 25 → reduce position to 50%, switch to mean-reversion factors
+- New field: `market_regime` (trend / volatile / crisis)
+- Adjust composite_score weights by regime in `score_daily_signals.py`
+- Status: [x] Done (2026-07-15) — `_WEIGHTS_BY_REGIME` in `score_daily_signals.py`, four regimes (RISK_ON / NEUTRAL / STRESSED / RISK_OFF) switched on VIX percentile and SPY vs 200MA
+
+**H.2.2 Dynamic factor weights**
+- Different factor weights for different regimes:
+  - Trending market: LLM sentiment weight 40%, momentum weight 30%, earnings weight 30%
+  - Choppy market: LLM sentiment weight 10%, mean-reversion weight 50%, earnings weight 40%
+- Add `market_regime` as a feature during model training, or train separate models per regime
+- Status: [ ] Pending development (2 days)
+
+---
+
+### H.3 Paper Trading validation (🔴 must do, run for at least 3-6 months)
+
+**Goal**: validate signals in a real market environment and accumulate out-of-sample data
+
+**H.3.1 Paper Trading engine**
+- Execute automatically after market close each day:
+  1. Read the top 10 stocks by composite_score from that day's `daily_signals`
+  2. Check regime: if VIX > 25, skip or halve the position
+  3. Simulate order entry; record entry price (use next day's open price)
+  4. Write to `paper_positions` collection
+- Fields: `symbol`, `entry_date`, `entry_price`, `size`, `score_at_entry`, `regime_at_entry`
+- Status: [x] Done (2026-07-15) — `track_positions.py`: vol-adaptive stop-loss at 2x vol_20d plus a rolling OOS IC monitor
+
+**H.3.2 Paper Trading performance tracking**
+- Update unrealized P&L daily
+- Compute real out-of-sample IC (each day's actual holdings: predicted vs actual performance)
+- Target metrics:
+  - OOS IC > 0.02 (signal is effective in real markets)
+  - OOS Sharpe > 0.5 (strategy is executable)
+  - 3 consecutive months of positive excess return (signal is stable)
+- Status: [ ] Pending development (1 day)
+
+**H.3.3 Stop-loss and exit logic**
+- Per-stock stop-loss: auto-exit if the position drops -5% from entry
+- Sentiment reversal stop-loss: if `avg_sentiment_5d` turns negative during holding, actively exit
+- Time stop-loss: auto-exit if holding exceeds `max_hold_days` (default 45 days)
+- Status: [ ] Pending development (1 day)
+
+---
+
+### H.4 Signal quality monitoring (🟡 important)
+
+**H.4.1 Real-time IC monitoring**
+- Compute rolling IC over the most recent 20 trading days every day
+- If IC stays below 0 for 5 consecutive days → trigger alert, pause new position entries
+- Write to `signal_quality` collection; UI displays IC trend chart
+- Status: [ ] Pending development (1 day)
+
+**H.4.2 Model drift detection**
+- Weekly: compare the latest feature distribution against the training-time distribution (KL divergence)
+- If distribution shift exceeds threshold → trigger retraining reminder
+- Status: [ ] Pending development (1 day)
+
+---
+
+### H.5 Live trading readiness checklist
+
+All of the following must be satisfied before considering real capital:
+
+- [ ] Paper trading has run for **at least 3 months**, OOS IC > 0.02
+- [ ] Backtest Sharpe **remains > 0.5** after including transaction costs
+- [ ] Regime detection works correctly; automatically reduces position when VIX > 25
+- [ ] Stop-loss logic tested (simulated extreme market conditions)
+- [ ] Max position per stock ≤ 5%; overall leverage = 1x (no leverage)
+- [ ] Broker API connected (Interactive Brokers / Alpaca)
+- [ ] First live-trading capital ≤ 10% of total capital (testing phase)
+
+---
+
+### H. Roadmap overview
+
+```
+Now (research validation complete)
+    ↓
+H.1 Fix backtest realism (3 days)        ← know the real returns
+H.2 Regime detection (4 days)            ← know when to use the signal
+H.3 Paper Trading (1 month to get going) ← real-market validation
+    ↓ continue running 3-6 months
+H.4 Signal monitoring (2 days)           ← keep signal effective
+    ↓ paper trading metrics pass
+H.5 Live trading checklist all ✓
+    ↓
+Small live position (≤10% of total capital)
+    ↓ 6 months of stable excess return
+Truly usable quantitative trading system ✓
+```
+
+---
+
 ## I. MCP Integration
 
 MCP (Model Context Protocol) standardizes how LLM clients interact with external tools and data. Adding MCP to this platform enables any MCP-compatible client (Claude Desktop, Claude Code, custom agents) to directly query signals, news, positions, and trigger backtests via natural language — with no custom API integration needed on the client side.
@@ -1757,8 +1521,6 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 > *"Run a backtest for a strategy that buys on avg_sentiment_5d > 0.4"* → Claude calls `run_backtest()`
 
 **Setup**: Add `quant_mcp_server` entry to `~/Library/Application Support/Claude/claude_desktop_config.json`.
-
-**Interview value**: "The platform is MCP-native — any Claude client can query live signals and positions without writing a single line of integration code."
 
  - Status: [x] Done — registered in claude_desktop_config.json, verified over the real MCP protocol
 
@@ -1811,8 +1573,6 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 **Current state**: `quant_ai/main.py` hardcodes `requests.get("http://quant_api:18081/api/v1/signals/daily")` — tightly coupled.
 
 **MCP version**: `quant_ai` connects to `quant_mcp_server` via MCP client; tool discovery is automatic; adding a new quant_api endpoint just requires registering a new MCP tool — no quant_ai code change needed.
-
-**Interview value**: Demonstrates understanding of MCP as a service mesh protocol for AI systems, not just a chatbot feature.
 
  - Status: [x] Done — quant_ai's agent is an MCP client (mcp_client.py); quant_mcp was folded into quant_ai
 
@@ -1885,18 +1645,1960 @@ MCP (Model Context Protocol) standardizes how LLM clients interact with external
 
 ---
 
+## J. Pipeline Workflow Orchestration & Daily Enrichment
+
+### J.0 Current Pipeline Overview
+
+The daily pipeline is driven by `launchd → scheduler/task.py` using the Python `schedule` library with fixed clock times. All 14 daily tasks and their implicit dependencies:
+
+```
+05:15  gdelt_backfill ──────────────────────────────────────────────────────┐
+06:00  inst_13f (Sunday only) ──────────────────────────────────────────────┤
+*/30m  finnhub_news / newsapi_news / yahoo_news (continuous, all day) ──────┤
+                                                                             │
+07:30  daily_price_quotes ──────────────────────────────────────────────────┤
+07:45  premarket_signals ───────────────────────────────────────────────────┤
+07:48  analyst_consensus ───────────────────────────────────────────────────┤
+07:50  macro_indicators ────────────────────────────────────────────────────┤
+                                                                             │ all above
+                                                                             ▼
+08:00  daily_symbol_features ──────── (depends on all data collectors above)
+                                                                             │
+                                                                             ▼
+08:30  score_daily_signals ──────────────────── (depends on features)
+                                │
+              ┌─────────────────┴──────────────────┐
+              ▼                                     ▼
+08:40  track_positions                  08:45  backtest_portfolio
+              │
+              ▼
+09:00  data_quality_check
+20:30  retail_sentiment  (standalone, next-day feature input)
+```
+
+**Problem with pure time-based scheduling:**
+
+| Risk | Current behavior | Desired behavior |
+|------|-----------------|-----------------|
+| Price collector fails at 07:30 | Features still run at 08:00 with stale prices | Wait for price success; skip or alert if failed |
+| GDELT backfill runs >2.5 hours | Features use yesterday's GDELT news | Wait for backfill; or soft-dependency with timeout |
+| Any task fails | No notification; next task starts anyway | Alert + optionally skip downstream tasks |
+| Tasks have hard-coded time gaps | 30-min buffer between price (07:30) and features (08:00); fragile | Dependency → task B starts immediately when A succeeds |
+
+---
+
+### J.1 Airflow DAG Migration (Dependency-Based Pipeline Orchestration)
+
+**Goal**: Replace the fixed-clock `schedule` library in `task.py` with proper Airflow DAGs that enforce task dependencies. Airflow is already deployed in Docker (`airflow-webserver:15060`); DAGs exist but haven't been validated end-to-end on the new machine.
+
+**Target DAG: `daily_pipeline_dag`**
+
+```
+gdelt_backfill (05:15 start)
+       │
+       │  [timeout 4h, soft dependency]
+       │
+daily_price_quotes ──► premarket_signals ──┐
+                         analyst_consensus ──┤
+                         macro_indicators  ──┤
+                                             │ all done
+                                             ▼
+                              daily_symbol_features
+                                             │
+                                             ▼
+                              score_daily_signals
+                                    │           │
+                                    ▼           ▼
+                              track_positions  backtest_portfolio
+                                    │
+                                    ▼
+                              data_quality_check
+```
+
+**Secondary DAGs (keep separate):**
+- `news_collection_dag`: finnhub/newsapi/yahoo every 30 min (TriggerRule.ALL_DONE, no upstream dep)
+- `weekly_dag`: inst_13f on Sunday 06:00
+- `evening_dag`: retail_sentiment at 20:30
+
+**Key Airflow advantages over current task.py:**
+1. Task failure stops downstream tasks automatically (no wasted compute on stale data)
+2. Visual DAG view in Airflow UI — see which step failed without log-diving
+3. Retry with backoff: `retries=2, retry_delay=timedelta(minutes=5)`
+4. Cross-task XComs: backfill task can pass "rows written" count to features task
+5. Backfill single DAG runs for missed dates without re-running everything
+
+**What needs to be built:**
+1. `airflow/dags/daily_pipeline_dag.py` — wire existing Python scripts as BashOperator tasks with dependencies (1 day)
+2. `airflow/dags/news_collection_dag.py` — 30-min news collectors with overlap detection (1 day)
+3. `airflow/dags/weekly_dag.py` — Sunday inst_13f + weekly performance summary (0.5 days)
+4. Alert hook: `on_failure_callback` → writes to MongoDB `pipeline_alerts` collection; quant_api polls and sends push notification (1 day)
+5. Disable corresponding jobs in `task.py` / launchd after each DAG is verified (migration, not big-bang switch)
+
+- Status: [ ] Pending (3.5 days; Stage 7.2.2 prerequisite)
+
+---
+
+### J.2 Daily SLM Company Match for Realtime News (Critical Pipeline Gap)
+
+**Goal**: Run SLM company matching on new Finnhub/NewsAPI/Yahoo articles every morning so they contribute to daily sentiment features.
+
+**Current gap (critical):**
+
+```
+Finnhub/NewsAPI/Yahoo collectors write to news_articles
+   → articles have NO "symbol" field
+   → daily_symbol_features.py filters {"symbol": {"$exists": true}}
+   → realtime news is COMPLETELY excluded from sentiment features
+   → sentiment features only use GDELT-matched articles
+```
+
+This means `avg_sentiment_3d`, `news_burst_20d`, `high_signal_count`, and other news-based features ignore ~30–50% of available news coverage for most stocks.
+
+**Fix**: Add a daily `slm_company_match_daily` job at ~07:55, just before `daily_symbol_features`:
+
+```python
+# Pseudocode for slm_company_match_daily.py
+articles = db.news_articles.find({
+    "symbol": {"$exists": False},   # unmatched realtime articles
+    "publishedAt": {"$gte": three_days_ago}   # only recent articles
+})
+for article in articles:
+    matched_symbol = run_slm_match(article["title"] + " " + article.get("content", ""))
+    if matched_symbol:
+        db.news_articles.update_one(
+            {"_id": article["_id"]},
+            {"$set": {"symbol": matched_symbol, "match_source": "slm_daily"}}
+        )
+```
+
+**Implementation:**
+1. Write `research/slm_company_match_daily.py` that calls `slm_company_match_v2.py` matching logic on articles with `publishedAt >= 3 days ago AND symbol not exists` (1 day)
+2. Add `ENABLE_SLM_MATCH_JOB` in `task.py` scheduled at `07:55` (before `08:00` features) (0.5 days)
+3. In Airflow: add as a node between news collectors and `daily_symbol_features`
+
+**Expected impact:**
+- Finnhub articles (very company-specific) → high match precision; adds targeted earnings/analyst news to sentiment
+- NewsAPI/Yahoo → moderate precision; adds broad market context
+- `avg_sentiment_3d` and `high_signal_count` features become richer without any feature engineering changes
+
+**Prerequisite:** Requires LM Studio `qwen3.5-4b` loaded (same as GDELT SLM filter; no new model needed)
+
+- Status: [ ] Pending (1.5 days)
+
+---
+
+### J.3 Daily LLM Sentiment Enrichment for New Articles
+
+**Goal**: Run Gemma 3B + Qwen 4B dual-pass labeling on new articles each morning so `llm_sentiment_final` stays current (currently only historical 845K articles have labels; new daily articles don't get scored).
+
+**Current gap**: Articles arriving via Finnhub/NewsAPI/Yahoo daily do not have `llm_sentiment_final` or `event_type` fields. The LLM labeling was a one-time batch job on historical data.
+
+**Daily enrichment job** (`research/llm_enrich_daily.py`):
+
+```
+07:56 (after J.2 company match, before 08:00 features)
+  1. Find articles: {symbol: {$exists: true}, llm_sentiment_final: {$exists: false}, publishedAt >= 3d}
+  2. Pass A: Gemma 3B → raw_sentiment, event_type
+  3. Pass B: Qwen 4B → cross-check; if agree → final label; if disagree → flag
+  4. Write llm_sentiment_final, event_type, llm_confidence to news_articles
+```
+
+**Volume estimate**: ~500–2,000 new company-matched articles per day (Finnhub + NewsAPI + Yahoo + new GDELT);
+at ~5 articles/sec (Gemma 3B), two-pass takes ~3–6 minutes → fits in the 07:56–08:00 window.
+
+**Implementation:**
+1. Write `research/llm_enrich_daily.py` using the same dual-pass logic as `llm_enrich_articles.py` but filtered to last-3d unscored articles (1 day)
+2. Add `ENABLE_LLM_ENRICH_JOB` in `task.py` at `07:56` (0.5 days)
+3. In Airflow DAG: `slm_company_match_daily` → `llm_enrich_daily` → `daily_symbol_features`
+
+**Prerequisite:** Requires LM Studio `gemma3:4b` + `qwen3:4b` loaded (or a single Qwen3.5-4b if using single-pass for speed)
+
+- Status: [ ] Pending (1.5 days; do after J.2)
+
+---
+
+### J.4 Pipeline Failure Alert System
+
+**Goal**: When any daily pipeline task fails, send an immediate push notification so failures are caught before the trading day starts, not discovered hours later by checking logs.
+
+**Current state**: Failures are logged to `pipeline_scheduler.log` only. No proactive notification.
+
+**Implementation options (pick one):**
+
+| Option | Description | Effort |
+|--------|-------------|--------|
+| Email alert | `smtplib` sends email on task failure | 0.5 days |
+| Slack webhook | `POST` to Slack incoming webhook URL | 0.5 days |
+| MongoDB + UI poll | Task writes `{status: "failed"}` to `pipeline_alerts`; quant_ui polls | 1 day |
+| macOS notification | `osascript -e 'display notification...'` | 0.5 days |
+
+**Recommended**: Slack webhook (works remotely; zero setup on client side; free).
+
+**What to alert on:**
+- Any `run_script_once` returns non-zero exit code
+- `data_quality_check` overall status is "warn" or "fail"
+- `track_positions` triggers a stop-loss exit
+- `gdelt_backfill` exits with `/Volumes/Data4T` mount error (the known failure mode)
+- `score_daily_signals` produces 0 LONG signals
+
+**In Airflow**: `on_failure_callback` + `on_success_callback` for key tasks (no code change to pipeline scripts).
+
+**In task.py (before Airflow migration)**: Wrap `run_script_once` to check `result.returncode` and call `send_alert(job_name, stderr)` on failure.
+
+- Status: [ ] Pending (0.5 days; high impact, low effort)
+
+---
+
+### J.5 Intraday Position Stop-Loss Monitor
+
+**Goal**: Check live prices during market hours (09:30–16:00 ET) every 5 minutes for held positions, and trigger a stop-loss alert instantly when price falls through the stop level — instead of waiting for the 08:40 `track_positions` next morning.
+
+**Current behavior**: `track_positions.py` runs once at 08:40 and looks at yesterday's closing price. If a position drops 8% intraday, the stop-loss is not detected until next morning's close.
+
+**Target**: Real-time intraday monitoring using Alpaca WebSocket streaming (the same WebSocket planned for live trading).
+
+```
+scheduler/intraday_monitor.py   (long-running process during market hours)
+  │
+  ├─ On startup: load current positions from MongoDB (track_positions.py output)
+  │              load stop-loss levels (entry_price × (1 - stop_pct))
+  │
+  ├─ Connect to Alpaca WebSocket: subscribe to live quotes for held symbols
+  │
+  ├─ On each price tick:
+  │    if current_price < stop_loss_level:
+  │        → send Slack/email alert: "STOP-LOSS TRIGGERED: {symbol} @ {price}"
+  │        → write to MongoDB: {event: "stop_loss_breach", symbol, price, timestamp}
+  │        → if live trading enabled: submit sell order via Alpaca REST API
+  │
+  └─ 16:00 ET: close WebSocket, write daily EOD position summary
+```
+
+**Scheduler integration:**
+- Add `ENABLE_INTRADAY_MONITOR_JOB = true` in `.env`
+- `ensure_long_running("intraday_monitor", ...)` at 09:28 ET daily
+- Kill/restart handled by process poll loop (already in `task.py`)
+
+**Prerequisites:** Alpaca API key (needed for G.1 live trading anyway); no new models needed.
+
+- Status: [ ] Pending (2 days; do after G.1 Alpaca integration)
+
+---
+
+### J.6 Weekly Performance Summary Report
+
+**Goal**: Every Sunday after `inst_13f` completes, auto-generate a weekly summary: signal IC for the past week, positions opened/closed, P&L vs SPY, top/worst performers, factor attribution.
+
+**Implementation:**
+1. Write `research/weekly_summary.py` that reads last-7d `daily_signals` + `portfolio_positions` + `portfolio_performance` (1 day)
+2. Format as JSON → quant_api `GET /api/weekly-report` → quant_ui weekly report tab (0.5 days)
+3. Optional: send as Slack message or email attachment
+
+- Status: [ ] Pending (1.5 days; do after J.4 alert system)
+
+---
+
+### J. Priority Summary
+
+| Priority | Item | Effort | Depends on |
+|----------|------|--------|-----------|
+| ⭐⭐⭐ | **J.2 Daily SLM company match** (fills critical pipeline gap; realtime news → features) | 1.5 days | LM Studio qwen3.5-4b |
+| ⭐⭐⭐ | **J.4 Pipeline failure alerts** (Slack webhook on task failure) | 0.5 days | None |
+| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (daily Gemma+Qwen on new articles) | 1.5 days | J.2, LM Studio gemma3+qwen |
+| ⭐⭐ | **J.1 Airflow DAG migration** (dependency-based DAG; replaces time-gap scheduling) | 3.5 days | Stage 7.2.2 |
+| ⭐⭐ | **J.5 Intraday stop-loss monitor** (Alpaca WebSocket real-time) | 2 days | G.1 Alpaca |
+| ⭐ | **J.6 Weekly performance summary** | 1.5 days | J.4 |
+
+---
+
+## K. Architecture & Language Decisions
+
+Technology choices that were evaluated and deliberately ruled out, recorded so they are not
+re-argued later.
+
+### K.1 No Go / C / C++ (decided 2026-07-16)
+
+**Decision**: no existing service needs to be rewritten in Go, C or C++, now or in the
+foreseeable future.
+
+**Reasons:**
+
+| Possible use | Actual bottleneck | Verdict |
+|---------|---------|------|
+| GDELT download / news collection | Network I/O, bandwidth | Python is enough; another language gains nothing |
+| LLM inference (Gemma / Qwen) | GPU/CPU inference kernels | LM Studio is already C++ underneath; nothing to rewrite |
+| Feature engineering (pandas) | In-memory work, 100 symbols × 189K rows | Python + numpy is enough; better algorithms beat a language switch |
+| REST API (quant_api) | Internal service, low concurrency | Java Spring Boot is fully adequate |
+| Signal scoring / backtests | One run a day, seconds long | No latency requirement |
+
+**The core reason**: positions are held 5–60 days and signals are computed once a day at
+08:30, so the latency requirement is **minutes**, not milliseconds. C/C++ belongs to HFT
+(microsecond order routing, tick-level order books), three orders of magnitude away from
+this project.
+
+**The one exception**: if the platform ever moves to high-frequency / intraday strategies that
+process thousands of ticks per second, a **Go** tick processor is worth considering (goroutines
+suit WebSocket stream processing). For J.5's intraday stop-loss monitor, Python asyncio is
+enough.
+
+**Why the current stack stays:**
+- Python: no substitute for the data/ML ecosystem (pandas / LightGBM / LM Studio SDK)
+- Java Spring Boot: production-grade REST API, and the code already exists
+- React/TypeScript: no alternative needed on the front end
+
+---
+
+## L. Multi-Frequency Strategy Layer
+
+### L.0 Background: how the IC of news signals decays
+
+The IC of a news-driven signal is not the same at every horizon; research and practice both
+show:
+
+```
+Signal strength (IC) by holding period, schematic:
+
+    IC
+  0.15 │▓▓
+  0.12 │▓▓▓
+  0.09 │▓▓▓▓▓
+  0.06 │▓▓▓▓▓▓▓▓       ← where the current system sits (5-60d, IC≈0.059)
+  0.03 │▓▓▓▓▓▓▓▓▓▓▓▓
+  0.00 └──────────────────────────────────
+       overnight 1d 2d 5d 10d 20d 60d
+```
+
+**Key insight**: the price impact of news is concentrated in the hours after publication and
+overnight, and is then absorbed. The current system only captures the 5–60 day "tail"; the
+strongest short-term reaction is thrown away.
+
+**Two short-horizon strategies that could extend it:**
+
+| Strategy | Holding period | New infrastructure | Difficulty |
+|------|---------|--------------|------|
+| L.1 Overnight news momentum | Buy at the close → sell at the next open | Alpaca order placement only | Low |
+| L.2 Intraday fast signal | 1–4 hours | Hourly bars + Alpaca WebSocket | High |
+
+---
+
+### L.1 Overnight News Momentum
+
+**Idea**: strong positive news during the afternoon session is often not fully priced by the
+close, so the overnight gap up is a predictable source of excess return.
+
+**Strategy logic:**
+
+```
+Every day at 15:30 ET (30 minutes before the close)
+  │
+  ├─ scan every company-matched article from the last 4 hours
+  │    condition: publishedAt >= 11:30 AND symbol IS NOT NULL
+  │
+  ├─ compute a "news shock score":
+  │    sentiment_spike = avg_llm_sentiment (today) - avg_llm_sentiment (5-day mean)
+  │    news_burst     = today's article count / 20-day mean
+  │    overnight_score = sentiment_spike × news_burst × analyst_surprise_weight
+  │
+  ├─ take the top 3 stocks by overnight_score (score must also clear a threshold)
+  │
+  └─ execute:
+       15:55 ET: market buy (5 minutes before the close, near the closing price)
+       next day 09:35 ET: market sell (5 minutes after the open, locks in the overnight gap)
+```
+
+**Why the existing infrastructure is enough:**
+- News collection: Finnhub/NewsAPI/Yahoo every 30 minutes already covers intraday news ✅
+- Sentiment: once J.3 is done, new articles carry `llm_sentiment_final` ✅
+- Execution: after G.1's Alpaca integration a market order is one SDK call ✅
+- No hourly bars and no new data infrastructure needed ✅
+
+**New pipeline tasks:**
+
+```
+added to scheduler/task.py:
+  15:30 ET  overnight_signal_scan   # scan today's news shock
+  09:35 ET  overnight_exit          # exit the overnight positions
+```
+
+**Factor validation (first, before going live):**
+1. Compute the historical overnight return (close → next open) as a new label
+2. Run single-factor IC on the existing `llm_sentiment_final` + `news_burst` (target: IC > 0.08)
+3. Backtest: the overnight strategy should show a higher Sharpe than the 20d one, with more volatility
+4. Capacity: overnight positions must stay small (≤ 2% of equity per trade), since liquidity thins before the close
+
+**Relation to the current mid-frequency strategy:**
+- The two strategies **run fully independently** and do not share a position budget
+- Mid-frequency (5–60d): top-5 holdings, 80% of capital
+- Overnight: top-3 holdings, ≤ 10% of capital (high turnover, small positions)
+- Both can run in the same Alpaca account, distinguished by a `strategy_type` field on the MongoDB position records
+
+- Status: [ ] Pending (4 days; do after G.1 Alpaca + J.3 LLM enrichment)
+
+---
+
+### L.2 Intraday Fast Signal
+
+**Idea**: after major news, price momentum often persists for the first 30–120 minutes and then
+mean-reverts. Capture that initial shock window.
+
+**New infrastructure needed:**
+- **Hourly bar history**: Alpaca bars API (`timeframe=1Hour`), for intraday realised volatility and a momentum baseline
+- **Alpaca WebSocket live quotes**: already planned for J.5's intraday monitor, reusable
+- **Faster news handling**: collection runs every 30 minutes today; an intraday strategy needs under 5 minutes (Finnhub WebSocket news push)
+
+**Strategy logic (simplified):**
+
+```
+Finnhub live news push (WebSocket)
+  │
+  ├─ new article arrives → live SLM company match → sentiment
+  │
+  ├─ if sentiment_spike > threshold AND time is between 09:45 and 15:00 ET:
+  │    → query Alpaca's live quote (bid/ask spread) at once
+  │    → if spread < 0.1% AND it is a buy signal:
+  │         → market buy, 2% stop-loss + 60-minute time stop
+  │
+  └─ while held: every 5 minutes check whether momentum is fading → dynamic exit
+```
+
+**Why it is harder:**
+- Needs Finnhub WebSocket live news (replacing the 30-minute polling)
+- Hourly bar backfill (103 stocks × 2 years × 6.5h)
+- Intraday position management is more complex (intraday stop plus time stop)
+- Slippage and fees weigh far more on intraday trades (round-trip cost matters 10× more on a 1–4h hold than on a 20d one)
+
+**Precondition**: only after L.1 is validated and Alpaca live trading runs stably.
+
+- Status: [ ] Pending (2 weeks; do after L.1 is validated live)
+
+---
+
+### L.3 5-Minute Bar Data Infrastructure
+
+**Goal**: collect and maintain 5-minute OHLCV bars for the 103 stocks, as the data base for the
+L.2 intraday strategy and J.5's intraday stop-loss monitor.
+
+**Why 5 minutes and not 1:**
+
+| Granularity | Rows per year (103 stocks) | News-reaction window | Noise | Pick |
+|------|----------------|----------------|------|------|
+| 1 minute | ~12M rows | Too fine, dominated by the bid-ask spread | Very high | ❌ |
+| **5 minutes** | **~2.4M rows** | **Covers the 30–90 minute reaction window** | **Manageable** | **✅** |
+| 1 hour | ~200K rows | Too coarse, misses the entry | Low | ❌ |
+
+**Source**: Alpaca Markets bars API (`/v2/stocks/{symbol}/bars?timeframe=5Min`)
+- The free tier gives 2 years of 5-minute history
+- Rate limit: 200 req/min (backfilling 103 stocks takes about 20 minutes)
+
+**Storage design**:
+
+```
+MongoDB collection: stock_prices_5min
+{
+  "symbol":    "AAPL",
+  "timestamp": ISODate("2026-07-16T14:30:00Z"),   // UTC, 5min bar open time
+  "open":      220.15,
+  "high":      220.48,
+  "low":       220.02,
+  "close":     220.35,
+  "volume":    125430,
+  "vwap":      220.28
+}
+Index: { symbol: 1, timestamp: -1 }  (unique compound)
+```
+
+Estimated storage: 2.4M rows/year × ~100 bytes ≈ **240MB/year**, about 500MB for two years of
+history — acceptable.
+
+**Steps:**
+
+1. **Backfill script** `stock_collector/price_collector/5min_history_collector.py` (1.5 days)
+   - call the Alpaca bars API for each of the 103 stocks, pulling 2 years of 5-minute bars
+   - write to `stock_prices_5min` with a unique `{symbol, timestamp}` index
+   - resumable: skip what exists and continue from the latest timestamp
+
+2. **Daily increment** (0.5 days)
+   - add `ENABLE_5MIN_PRICE_JOB=true` to `.env`
+   - trigger daily at `16:35 ET` in `task.py` (5 minutes after the close)
+   - pull only that day's 09:30–16:00 bars (78 bars × 103 stocks = 8,034 rows/day)
+
+3. **Reusable new features** (in daily_symbol_features.py or a new intraday_features.py)
+
+   | Feature | Computation | Use |
+   |------|---------|------|
+   | `realized_vol_1d` | std of the day's 78 five-minute returns × √78 | Better intraday volatility estimate |
+   | `intraday_momentum_1h` | (14:30 close - 13:30 close) / 13:30 close | Late-session momentum factor |
+   | `vwap_deviation` | (close - VWAP) / VWAP | Distance from VWAP |
+   | `open_gap_fill_ratio` | Share of the opening gap filled within the first hour | Trend vs mean reversion |
+   | `volume_concentration_close` | Last-30-minute volume / full-day volume | Institutional end-of-day activity |
+
+4. **Data for the L.2 intraday strategy**: 5-minute bars provide the intraday momentum baseline and realised vol, standing in for Alpaca's WebSocket quotes in backtests
+
+**Relation to the existing daily prices**:
+- `stock_prices_history` (daily bars) stays as is, for mid-frequency features and backtests
+- `stock_prices_5min` (5-minute bars) is an addition, used only for intraday features and L.2
+
+- Status: [ ] Pending (2 days total: 1.5d backfill + 0.5d scheduler integration; do before L.2)
+
+---
+
+### L. Priority Summary
+
+| Priority | Item | Prerequisites | Effort |
+|--------|------|---------|------|
+| ⭐⭐ | **L.1 Overnight news momentum** (15:30 sentiment scan → buy at the close → sell at the next open, no 5-minute bars needed) | G.1 Alpaca + J.3 LLM enrichment | 4 days |
+| ⭐⭐ | **L.3 5-minute bar infrastructure** (Alpaca API backfill + daily increment + 5 intraday features) | G.1 Alpaca API key | 2 days |
+| ⭐ | **L.2 Intraday fast signal** (5-minute bars + Finnhub WebSocket live news → intraday momentum) | L.1 validated + L.3 data ready | 2 weeks |
+
+---
+
+## M. Signal Research Rigor
+
+Hardens the signal research so its claims survive a quant-researcher-style interrogation
+(IC significance? out-of-sample? survivorship bias? why not overfit?).
+
+**This section was previously marked low priority. M.7 changes that.** The rest of the
+series is about strengthening claims that are broadly sound; M.7 is a confirmed defect
+that makes the headline factor invalid, and M.1 is selection bias built into the universe
+before any model runs. Those two are blockers — for G.1 live execution, and for quoting
+any Sharpe figure without a caveat. M.2–M.6 remain optional polish aimed at QR roles.
+
+Accepted risk, stated plainly: rigorous treatment will probably show the signal is weaker
+than the current numbers. That outcome is itself a defensible research finding when written
+up honestly, and it is strictly better than discovering it after committing capital.
+
+### M.1 Point-in-Time Universe (kill survivorship & selection bias) ✅ Done 2026-11-03
+Replace the hand-picked 103-stock tech universe with point-in-time S&P 500 membership
+including delisted names. The current universe is the single most attackable weakness:
+almost any signal "works" on a winners-only mega-cap list.
+- Source historical index membership (incl. delistings), rebuild features/backtests on it
+- Keep the 103-stock universe as a separate "tech sleeve" study
+- Effort: 1–2 weeks (data sourcing is the hard part) — Status: [ ] Pending
+
+### M.2 Point-in-Time Data Hygiene Audit
+- Purge corrupt future-dated articles (2034/2037 timestamps in `news_articles.date`)
+- Full-lineage check: for every feature, verify signal-available-time vs data-creation-time
+  (news collected_at vs published_at, 13F filing lag, analyst revision lag)
+- Effort: 3 days — Status: [ ] Pending
+
+### M.3 IC Statistical Significance
+- Rank IC with Newey-West adjusted t-stats (overlapping horizons inflate naive t-stats)
+- IC decay curve / half-life per factor; per-year and per-regime IC stability tables
+- Effort: 3 days — Status: [ ] Pending
+
+### M.4 Factor Orthogonalization (the core question)
+Does news sentiment contain information not already in price? Residualize sentiment
+factors against momentum / short-term reversal / size / sector, then measure residual IC.
+If residual IC ≈ 0, the "news signal" is repackaged momentum — better to know.
+- Effort: 1 week — Status: [ ] Pending
+
+### M.5 Overfitting Defenses
+- Reserve a never-touched final holdout window (e.g. last 6 months) for one-shot evaluation
+- Experiment registry: log every parameter combination tried (honest denominator for
+  deflated Sharpe); report deflated Sharpe alongside raw
+- Effort: 2 days — Status: [ ] Pending
+
+### M.6 Research Report Writeup
+Paper-style writeup: hypothesis → data → methodology → results → failure cases →
+limitations. An honest "post-cost alpha is marginal, but sentiment shows orthogonal
+incremental IC in earnings windows" is worth more than a flashy Sharpe 3.0 backtest.
+- Effort: 3 days — Status: [ ] Pending
+
+---
+
+### M.7 13F look-ahead leak — **blocker**
+
+**The defect.** `inst_13f_holdings` contains exactly 100 documents, one per symbol, with
+fields `{_id, symbol, collectedAt, inst_holding_pct, inst_holding_pct_chg, total_shares}`
+— **no date, no quarter, no filing date**. `attach_inst13f_features()` in
+`research/features/daily_symbol_features.py` left-joins on symbol alone, and its own
+docstring states the intent: *"These values are quarterly; broadcast to all trade_dates for
+each symbol."* A feature row dated 2018-03-15 therefore carries institutional holdings
+collected in 2026.
+
+**Why it matters more than a normal PIT slip.** `inst_holding_pct_chg` was reported as the
+best single factor at **IC +0.198**, the strongest number in the Key Results table. It
+scores that well *because* it leaks. Institutions accumulate what has already risen, so
+projecting today's holdings backwards across eight years manufactures precisely the
+correlation the IC is measuring. The factor is not merely unproven — it is measuring the
+future, and it carries weight in `score_daily_signals.py` (0.5–0.6 depending on regime),
+so the contamination reaches the live signal, not just the backtest.
+
+**What makes this diagnosable rather than diffuse**: every other alt-data source in the
+same file handles time correctly, which is what makes 13F an oversight rather than a design
+philosophy.
+
+| Source | Join | Verdict |
+|---|---|---|
+| analyst | on `YYYY-MM`; docstring says *"avoids lookahead"* | correct |
+| retail | symbol + date, 1,365 rows | correct |
+| macro | dated, 16,369 rows | correct |
+| **13F** | **symbol only, 100 rows, broadcast** | **leaking** |
+
+**Fix.** Source historical 13F with **filing dates** — SEC EDGAR exposes them, and the
+45-day statutory reporting lag is the entire point: a Q1 position becomes public in mid-May,
+so it may only enter a feature row dated on or after its filing date, never its reporting
+period. Join as-of filing date, forward-fill until the next filing.
+
+**If point-in-time 13F cannot be obtained, remove the factor.** Keeping a factor known to
+read the future, with a caveat in a footnote, is worse than dropping it: the number stays in
+circulation and the weight stays in the scorer. Then re-run the backtest and publish
+whatever Sharpe survives — the drop is the finding.
+
+- Effort: 2 days (1 if the decision is removal) — Status: [ ] **Pending — blocks G.1**
+
+---
+
+### M.8 Turnover and capacity reporting
+
+H.1 prices a round trip per position — commission 5bps plus liquidity-tiered slippage
+10/30bps, charged on entry and exit, with a filter excluding symbol-dates too thin to
+execute. That model is sound per trade. What is missing is **how many trades there are**.
+
+At a 5-day horizon fed by daily signals, turnover may be high enough that a per-trade cost
+model which is honest in isolation understates total drag substantially. Report:
+
+- annualised turnover
+- transaction cost as a share of gross return
+- the capital level at which the liquidity filter begins to bind
+
+The last one converts "this strategy works" into a claim with a size attached. A result
+that holds at $50k and not at $5m is a different result, and the difference is the first
+thing a professional will ask about.
+
+- Effort: 1 day — Status: [ ] Pending
+
+---
+
+### M.9 Short-side borrow costs
+
+The long-short Sharpe of 0.85 charges commission and slippage on both legs but nothing for
+**carrying** the short: no borrow fee, no hard-to-borrow screen, no recall risk. On exactly
+the names a negative news-sentiment signal would select, borrow is where it is most
+expensive — the correlation between "bad news" and "expensive to short" is not incidental.
+
+Until this is modelled the long-short figure is optimistic by an unmeasured amount, and the
+**long-only results are the more defensible ones to quote**.
+
+- Effort: 1 day (a flat borrow-rate assumption is a legitimate first pass, provided the
+  assumption is stated) — Status: [ ] Pending
+
+---
+
+### M.12 News syndication inflates the volume features
+
+**Found 2026-07-30, while deduplicating the corpus for R.1** — the 121,970 rows dropped at
+index time turned out not to be noise.
+
+**The mechanism.** GDELT ingests each site of a syndication network as a separate article.
+One McDonald's story on 2025-11-03 appears **402 times**: byte-identical body (767 chars),
+identical sentiment, 402 distinct `*.iheart.com` subdomains. That symbol-day holds **412
+rows and 11 distinct titles** — the news-volume features read 412 where the real number of
+stories is 11.
+
+`unique_url_count` exists to catch exactly this and cannot: 402 subdomains are 402 distinct
+URLs. `unique_source_count` cannot either — `source.name` is absent on GDELT rows so it
+falls back to the platform, and its mean is 1.0139. Both dedupe guards were structurally
+blind to the dominant duplication mode.
+
+**Measured** (`research/features/measure_syndication_impact.py` — loads the real frames and
+runs the production aggregators twice, once on raw input and once deduplicated on
+`(symbol, date, title)`; reusing the pipeline's own functions rather than reimplementing
+them is the point):
+
+| collection | rows | unique | duplicate |
+|---|---|---|---|
+| `news_articles` (volume features) | 1,750,295 | 1,494,636 | **14.6%** |
+| `news_articles_company_matched_v2` (sentiment) | 851,071 | 729,101 | **14.3%** |
+
+| feature | mean raw | mean deduped | % symbol-days differing | max abs diff |
+|---|---|---|---|---|
+| `article_count` | 9.104 | 7.650 | 26.4% | 664 |
+| `unique_url_count` | 9.104 | 7.650 | 26.4% | 664 |
+| `news_count_20d` | 181.65 | 152.65 | **93.2%** | 4019 |
+| `news_burst_20d` | 1.101 | 1.059 | **93.6%** | 599 |
+| `sent_wavg` | 0.3221 | 0.3224 | 15.1% | 1.253 |
+| `sent_std` | 0.3019 | 0.3063 | 15.0% | 1.414 |
+| `negative_n` | 1.521 | 1.228 | 5.8% | 363 |
+
+**The damage is in the volume features, not sentiment.** `sent_wavg` barely moves in
+aggregate (0.3221 → 0.3224) because a syndicated copy usually carries a sentiment close to
+the day's mean anyway. `news_burst_20d` differs on **93.6% of symbol-days** — it is a
+rolling ratio, so one contaminated day propagates through the following twenty.
+
+**Why it is a cross-sectional problem rather than a level shift.** Per-symbol duplicate
+share runs **2.3% to 52.4%** — a 23× spread, concentrated in consumer brands that local
+radio and lifestyle networks syndicate:
+
+    MCD 52.4  SBUX 38.3  MRNA 37.3  TGT 36.6  SPOT 36.4  BA 36.1
+    UNH 33.5  PFE 32.8  LLY 32.2  DIS 31.4  NFLX 29.9   (corpus 16.0)
+
+A uniform inflation would cancel in a cross-sectional rank. This does not: it lifts some
+names by half and others by nothing, and the lift correlates with sector.
+
+**It reaches the signal.** `news_burst_20d` carries regime weights **0.9 / 0.8 / 0.5 / 0.2**
+(RISK_ON / NEUTRAL / STRESSED / RISK_OFF) in `score_daily_signals.py`, and appears in
+`train_baseline_models.py` alongside `article_count` and `news_burst_20d_sector_rel`. The
+sector-relative variant does not neutralise this — the bias is itself sector-correlated, so
+normalising against a contaminated sector mean penalises the cleanest names in a dirty
+sector. **This is the M.7 shape again**: a hand-weighted factor in the regime scorer given
+high weight on top of an input nobody had validated.
+
+#### M.12 step 2 — measured impact (2026-07-30)
+
+Two shadow feature sets built from the same code at the same moment, differing only in
+`NEWS_DEDUPE_SYNDICATION`: `daily_symbol_features_m12_off` and `_m12_on`, 191,467 rows each.
+The off build was verified a genuine no-op first — 4,000 sampled symbol-days across
+`article_count`, `news_burst_20d`, `news_count_20d`, `sent_wavg`, `unique_url_count`
+differed from production on **0 rows**. Dedupe removed 278,327 news rows (16.0%) and
+133,169 sentiment rows (15.8%).
+
+**The ML walk-forward barely notices** (rank IC, aggregate):
+
+| target | model | IC off | IC on | delta |
+|---|---|---|---|---|
+| 60d | Ensemble | 0.0572 | 0.0549 | −0.0023 |
+| 60d | Ridge | 0.0491 | 0.0465 | −0.0026 |
+| 60d | LightGBM | 0.0413 | 0.0413 | ±0.0000 |
+| 20d | Ensemble | 0.0225 | 0.0202 | −0.0023 |
+
+Every cell moves by less than 0.005 and the signs are not consistent — the LightGBM Ranker
+gains +0.0051 at 20d and loses −0.0066 at 45d. Without error bars none of this is
+distinguishable from noise, and it is **not** being claimed as an effect.
+
+**The regime scorer does notice** (`backtest_portfolio.py`, which imports `compute_score`
+and `_WEIGHTS_BY_REGIME` directly — the same path the live signal takes; 132 rebalances,
+20d hold, costs on):
+
+| | off (duplicates in) | on (deduped) |
+|---|---|---|
+| **net Sharpe** | 0.654 | **0.580** |
+| net annualised | 19.64% | 16.76% |
+| total return | 5.54× | 4.07× |
+| gross Sharpe | 0.794 | 0.729 |
+| max drawdown | −42.08% | **−39.56%** |
+| win rate | 63.64% | **65.15%** |
+
+**This is the M.7 pattern repeating exactly.** The ML models shrug (−0.0023 IC) because a
+tree or a ridge treats `news_burst_20d` as one column among a hundred and learns its actual
+predictive weight from data. The hand-weighted scorer assigned it **0.9 by fiat** and lost
+**0.074 Sharpe** when the input was cleaned. Twice now, the damage from a contaminated
+factor has landed almost entirely on the hand-calibrated weights rather than the fitted
+ones — **the models at least look at the data before deciding how much to trust a column.**
+
+Note the deduped run has a *better* drawdown (−39.56% vs −42.08%) and a *better* win rate
+(65.15% vs 63.64%). It is a lower-return, lower-risk profile, not a uniformly worse one.
+
+**The counter-argument worth stating**: a story syndicated to 402 stations genuinely does
+have unusual reach, and reach may carry information. That does not rescue the current
+feature — `article_count` claims to count distinct news and does not. If reach is the
+signal, it belongs in a named feature that measures reach deliberately and can be tested on
+its own, not smuggled in through a broken count.
+
+**Conclusion**: the 0.074 Sharpe was being earned from an artifact of how GDELT ingests
+syndication networks. Removing it is correct for the same reason M.7 was correct, and the
+published number should come down again.
+
+**Fix, once the impact is known**: deduplicate on `(symbol, date, title)` inside
+`load_news_frame()` and `load_llm_sentiment_frame()` rather than at aggregation time, so
+every downstream feature inherits it. The collectors should also stop ingesting syndicated
+copies, but the feature layer must not depend on that being true.
+
+#### M.12 step 3 — shipped (2026-07-30)
+
+`NEWS_DEDUPE_SYNDICATION` now defaults to **true**; production features rebuilt (191,467
+rows, 278,327 news and 133,169 sentiment duplicates dropped). Final published numbers:
+
+| | before M.12 | after |
+|---|---|---|
+| 20d net Sharpe | 0.69 | **0.58** (gross 0.73) |
+| 20d net annualised | 20.9% | **16.8%** |
+| 20d max drawdown | −42.1% | **−39.6%** |
+| 20d win rate | 63.6% | **65.2%** |
+| 60d net Sharpe | 0.73 *(stale)* | **0.60** (gross 0.65) |
+| 60d Ensemble rank IC | 0.0563 | **0.0523** |
+
+Per-year 60d Ensemble IC after the fix — still negative in 4 of 9 years, unchanged in shape:
+
+    2018 +0.021  2019 +0.135  2020 +0.220  2021 −0.030  2022 −0.128
+    2023 +0.226  2024 −0.037  2025 +0.017  2026 −0.129
+
+**Deployment note.** The Airflow DAGs run host code, not the container:
+`_host_common.py` sets `PYTHON = f"{ROOT}/.venv311/bin/python"` and issues
+`cd {ROOT} && {PYTHON} {ROOT}/{script}` against `/Users/xiz/Quant_trade/quant_data`. So this
+fix reached production the moment the default flipped, with no image rebuild needed — and
+the same was true of M.7. Worth recording because the deployed container is genuinely stale
+(compose pins `e650994`, the running container is `e165324` from nine days earlier, and
+`e650994` was never even pulled locally); that staleness is real but affects nothing on the
+daily path, since every `ENABLE_*` job in the container is disabled and the host scheduler
+owns the DAGs.
+
+- Status: [x] Done — flag default-on, production rebuilt, numbers republished.
+  **Remaining**: the collectors still ingest syndicated copies, so the raw collections keep
+  growing 16% faster than the information in them. Fixing it upstream is a separate item —
+  the feature layer must keep its own guard regardless, since it cannot depend on the
+  collectors being correct.
+
+---
+
+## N. News Propagation — events outside the universe
+
+**The problem.** ChangXin Memory listed and rose 471%; US memory names fell the same day.
+The platform saw nothing, because it matches articles to companies by name and no article
+about ChangXin mentions Micron. Generalised: any event whose *source* sits outside the
+100-symbol universe — a foreign competitor, an export-control ruling, a war, an OPEC
+decision — is invisible, however much it moves the portfolio.
+
+**What is not the problem.** The corpus already covers these entities: ChangXin appears in
+173 articles, 53 of them in 2026. The N.0 repair also revealed 5,688 recent articles that
+name no covered company at all — general and macro news, sitting unused. The raw material
+is there. What is missing is a propagation mechanism and, more importantly, evidence that
+propagation predicts anything.
+
+**The trap this series is designed around.** The motivating observation — "memory fell
+today, ChangXin listed today, therefore ChangXin caused it" — is a post-hoc narrative.
+Financial media supplies three plausible causes for every move. Building the capture
+without the validation produces a machine that always has an explanation and never has an
+edge. N.4 is therefore not a checkpoint at the end; it is the deliverable, and N.1–N.3
+exist to feed it.
+
+**How the industry does this**, for calibration:
+
+| Approach | Who | Mechanism |
+|---|---|---|
+| Entity relationship graphs | Bloomberg SPLC, FactSet Revere, LSEG | curated competitor / supplier / customer edges; news propagates N hops |
+| Thematic tagging | RavenPack, Accern | articles tagged by theme; themes mapped to exposure |
+| Statistical co-movement | Barra, PCA factor models | peer groups learned from returns rather than curated |
+| Event studies | standard academic method | distribution of abnormal returns after an event |
+
+That Bloomberg and RavenPack charge heavily for exactly this says both that it is valuable
+and that it is hard.
+
+---
+
+### N.0 Intraday collector schema repair — **done**
+
+The finnhub / newsapi / yahoo collectors wrote `{source, title, description, content, url,
+impact, publishedAt, collectedAt, language, meta}` — no `date`, no `symbol`. GDELT queries
+per company and therefore writes both. Since `slm_company_match_v2.build_query()` requires
+`{"symbol": {"$exists": True, "$ne": None}}`, everything the intraday collectors wrote from
+2026-04-13 onward was invisible to the matcher: 9,636 articles, never labeled, never
+featurised, never in a signal.
+
+The consequence is exactly the capability being asked for here — same-day alerting was
+impossible because same-day news never left the raw collection.
+
+`collectors/news/_canonical.py` derives `date` from `publishedAt` in GDELT's
+`YYYYMMDDHHMMSS` form and assigns a candidate symbol by keyword-matching the 100 company
+rule files. Design notes worth keeping:
+
+- **Candidate, not verdict.** The SLM validator downstream is where match accuracy is
+  already engineered; this layer only has to get an article *into* that queue.
+- **Conservative by construction.** AAPL's primary keyword is `Apple Inc.`, not bare
+  `Apple`, so "Apple to pay Italy 318 million euros" gets no symbol. That is the right
+  trade: a wrong symbol pollutes a ticker's sentiment aggregate permanently, a missing one
+  costs a single article, and the validator can reject a bad candidate but never sees an
+  article that has none.
+- **One symbol per article**, because `url` is UNIQUE on `news_articles` — the same
+  one-article-one-company shape GDELT produces.
+- **Unmatched articles are kept.** 5,688 of the backfilled set name no covered company;
+  they are macro and general-market news, which is the input N.1–N.3 need.
+
+- Status: [x] Done — collectors patched, `tools/backfill_intraday_canonical.py` written and
+  dry-run verified (41% match rate)
+
+---
+
+### N.1 Influencer entity registry
+
+**Goal**: name the entities that move the portfolio without being in it.
+
+A dictionary parallel to `company_rules`: foundries and memory makers (ChangXin, TSMC,
+Samsung, SK Hynix, ASML), macro actors (OPEC, the Fed, export-control bodies), named
+conflicts and their commodity exposure.
+
+Each entry maps to affected symbols **with a direction**, because direction is not
+derivable from the entity. A competitor's successful IPO is bearish for incumbents; rising
+DRAM prices are bullish for the same names; the entity is identical in both.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+### N.2 Theme labels in the labeling pipeline
+
+**Goal**: cover what an entity list cannot enumerate in advance.
+
+The dual-LLM pass already reads every article, so a theme tag costs almost nothing at the
+margin. Themes: memory cycle, AI capex, export controls, energy, conflict, rates, supply
+chain.
+
+Entity registry and themes are complementary — the registry is precise about known actors,
+themes catch the ones nobody listed.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+### N.3 Theme → symbol exposure matrix
+
+**Goal**: which of the 100 are exposed to "DRAM oversupply", and how much.
+
+Seeded from the `sector` field already in `daily_symbol_features`, extended by LLM proposal
+under human review. Expressed as an exposure weight rather than a boolean: MU is not
+exposed to the memory cycle in the same degree as AAPL is.
+
+- Status: [ ] Pending (1.5 days)
+
+---
+
+### N.4 Event-study validation — **the deliverable**
+
+**Goal**: decide whether any of this predicts, or merely explains.
+
+For each theme and influencer event: the distribution of **excess** returns for exposed
+symbols over 1 / 5 / 20 days. Excess, not absolute — `excess_ret_*` already exists in the
+feature store, and reporting absolute returns would let "memory fell on a day the whole
+market fell" masquerade as a finding.
+
+Two failure modes get measured rather than assumed away:
+
+- **Hindsight bias** — the event list is fixed before returns are examined. Starting from a
+  move and hunting for its cause reliably finds one.
+- **Statistical power** — report the count of *independent* events per theme. A theme
+  firing five times a year cannot support a factor whatever its point estimate; that is a
+  result to publish in the report, not a reason to suppress the theme.
+
+A negative result here is a successful outcome for this stage. It redirects N.5 rather than
+blocking it.
+
+- Status: [ ] Pending (2 days)
+
+---
+
+### N.5 Holdings alerting on validated themes
+
+Extends F.16 from symbol-scoped to theme-scoped, gated on N.4: only themes shown to predict
+generate an alert.
+
+Themes that explain without predicting stay available as a research tool through the MCP
+surface. Telling the user *why* a position moved today is genuinely useful and is a
+different claim from telling them what to buy tomorrow. Keeping the two apart is the
+discipline the series is built around, and conflating them is how a news feature becomes a
+losing strategy.
+
+- Status: [ ] Pending (1 day)
+
+---
+
+## P. Portfolio Holdings
+
+> **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
+> (`quant_ai/markets/`, SQLite), moved there from a separate personal dashboard together with global
+> markets and the daily briefs — see **Q.0**, **Q.8** (3-layer upcoming catalysts modal),
+> **Q.9** (per-stock order status & swing lot allocation manager), and **Q.10** (ATR dip-spacing & swing-lot exit advisor). The `quant_api` / MySQL holdings below are
+> deprecated; `get_my_holdings` / `get_my_transactions` read quant_ai first and fall back to them.
+
+### P.1 Manual holdings tracker
+
+**Goal**: Record what is actually held. Everything the platform currently calls a "position" is synthetic — `track_positions.py` mechanically opens the day's top-5 signals and closes on rule triggers. That is a strategy simulation, not a portfolio, and there is nowhere to say "I own 10 NVDA from 2026-05-12".
+
+**Data**: a `portfolio_holdings` collection — symbol, quantity, entry price, entry date, note, open/closed — plus an optional cash balance, so a weight is a share of total capital rather than a share of whatever happens to be invested.
+
+**Surface**:
+- `quant_api` — CRUD endpoints under `/api/portfolio/holdings`
+- `quant_ui` — a holdings page with a table and free-form add / edit / close
+- `mcp_server.py` — a read-only `get_my_holdings` tool, which makes the portfolio visible to Claude Desktop, Codex, and quant_ai's agent at once
+
+**Why first**: both F.17 and G.1 depend on it. Neither position sizing nor a "≤5% per position" guardrail means anything measured against a portfolio nobody owns.
+
+**Handling**: holdings are personal financial data. They stay in the local database and must never reach a seed file, a test fixture, or a commit.
+
+**Delivered (2026-07-26)**
+
+- `HoldingService.replay()` is a pure fold over the trade log, extracted specifically so
+  the money maths is testable without a database or a quote provider. 10 unit tests:
+  weighted average across mixed buys, realised P&L priced against the average *at the
+  time of the sale* (folding from the end state gets this wrong), sell leaving the average
+  untouched, full exit then re-entry starting fresh, overselling capped and flagged rather
+  than producing a negative position.
+- `QuoteService` caches Finnhub quotes for 20s. The free tier is 60 requests/minute and
+  serves one symbol per call, so a page polling 20 symbols every 5s would be rate-limited
+  immediately; the UI polls the cache instead and only a miss reaches Finnhub. Off-hours
+  the TTL stretches to 15 minutes since prices are not moving. On failure or a missing
+  token it serves the last `stock_prices_history` close tagged `source: daily-close`, and
+  the UI labels it — a stale number presented as live is worse than an honest close.
+- `IllegalArgumentException` now maps to 400/404 in `ApiExceptionHandler`; without it the
+  hand-rolled input checks surfaced as 500s with no actionable message.
+- MCP gained `get_my_holdings` and `get_my_transactions` (8 tools total). Because the
+  server is the tool contract, Claude Desktop, Codex and quant_ai's agent all gained the
+  portfolio at once with no client changes.
+
+- Status: [x] Done — API + UI + MCP; F.17 is unblocked
+
+---
+
+## Q. Market Briefs and Event-Driven Decisions (2026-10-22)
+
+**Why this series.** On 2026-10-21 Lam Research guided below hopes after the US close; the next
+day Tokyo Electron fell 7%, SK hynix 5%, ASML 3% and the user's semiconductor holdings 3-5% in
+pre-market, alongside Brent at $112 on Middle East escalation. The question asked: *does the
+platform capture events like this — an earnings miss, a war, an oil shock — and do they drive
+decisions?* The audit below says: per-company news sentiment, yes; propagation, macro and
+geopolitics, no; and right now nothing at all, because the pipeline is down.
+
+### Q.0 Done on 2026-10-22 (quant_ai, quant_ui, quant_docker)
+
+- **Portfolio moved into quant_ai** (`markets/portfolio.py`, from a separate personal dashboard): trades,
+  average cost and FIFO, Nasdaq quotes incl. pre-market / after hours, watchlist, charts. Host
+  process, SQLite under `~/Library/Application Support/quant_ai`, Drive backup; launchd keeps
+  it alive.
+- **Global markets**: 16 Asian / European exchanges by region -> country -> exchange (CNBC,
+  Korean stocks via Naver) and a macro board (Brent/WTI, gold, US indices and futures, VIX,
+  yields, FX).
+- **Briefs** written by `claude -p` on the user's subscription, Chinese + English, from a
+  snapshot of the numbers plus cited web search:
+  - summaries: Asia & Europe 14:00 Dublin; US after 20:05 New York;
+  - **week ahead** 13:30 Dublin: earnings of holdings / watchlist / 17 sector bellwethers over
+    5 trading days (Nasdaq calendar, consensus EPS, implied move from the ATM straddle), main
+    economic releases, beat / miss scenarios per holding;
+  - **flash**: a bellwether moving >=5% pre-market / after hours triggers a transmission
+    analysis (Asia, Europe, the holdings at the next open). Once per company per day, cap 4.
+- **Scored predictions**: every brief ends with checkable calls ("8035.T closes <= -3% on
+  10/23", stated confidence). Only symbols the brief was shown, only sessions not yet open when
+  it was written (a flash at 14:43 Dublin predicting that day's US close was half known — fixed
+  the same day). Scored from CNBC daily bars after the close; scorecard = hit rate, Brier score,
+  calibration by confidence bucket, per brief kind.
+- quant_ui: My Holdings rebuilt on these routes; Market Briefs tab with the scorecard.
+  quant_docker: `ui_only.sh` (since replaced by `scripts/core.sh`) starts just the login chain (mysql, mongodb, keycloak, kafka,
+  quant_api, quant_ui); everything else `unless-stopped`.
+
+### Q.1 Audit: what the signal pipeline does with events today
+
+| Capability | State |
+|---|---|
+| Per-company news: sentiment, 7 event types, signal strength (Gemma + Qwen labels, ~868K matched articles) | ✅ features `avg_sentiment_5d`, `sentiment_shift_5d`, `news_burst_20d`, `earnings_beat/miss_signal`, `ah_gap` |
+| Market regime | ✅ VIX, 10y, DXY, SPY -> RISK_ON / NEUTRAL / STRESSED / RISK_OFF reweighting |
+| **Propagation** (Lam's guidance -> Tokyo Electron, ASML, SK hynix) | ❌ news only moves the symbol it names; `sector` is used only for sector-relative ranks in training. Planned as the **N series** (N.1-N.5 pending) |
+| **Macro / geopolitical news** (war, OPEC, oil) | ❌ `event_type = macro` is labelled but feeds no feature; no oil series anywhere in quant_data; GDELT is a news source only, its tone / conflict fields unused. Only indirect, via VIX, and only as down-weighting, never direction |
+| **Earnings vs expectations** | ⚠️ "beat" is inferred from news sentiment, not actual vs consensus; no forward calendar (F.14 pending) |
+| **Coverage** | ❌ US universe only; no Asian / European listings |
+| **Latency** | ❌ one batch at 07:30: an after-hours report enters features the next morning, after Asia has traded it |
+| **Pipeline running** | ❌ signals stop at 2026-07-17, features 2026-10-09, macro 2026-10-14. The host Airflow scheduler (`com.quant.airflow-scheduler`) crash-loops on `connection refused 127.0.0.1:25432`: its metadata DB is the `airflow-postgres` container, so whenever Docker is off nothing is collected |
+
+### Q.2 Revive the pipeline — prerequisite for everything below (🔴, 1 day)
+
+- [x] ~~Move the Airflow metadata DB off Docker~~ — not enough on its own: the data itself
+      (MongoDB, MySQL batch queue, Qdrant) lives in Docker too. Decision (2026-10-22): Docker stays
+      up with `quant_docker/scripts/core.sh` (login chain + airflow-postgres, qdrant, mlflow; restart always).
+- [x] **Root cause of the stale signals found**: not only Docker. Since the 2026-07-21 reorganisation
+      the price and analyst collectors loaded a non-existent `.env` path, failed every run, and blocked
+      `score_signals`. Fixed (f97dc75); `daily_signal_pipeline` ran green end to end on 2026-10-22 and
+      signals moved from 2026-07-17 to 2026-10-22.
+- [x] Catch-up started 2026-10-22: GDELT backfill of 2026-10-08 → today, then match / enrich / features.
+- [x] Alerts: per-task failure notification (`notify_failure`) + freshness watchdog in quant_ai
+      (`/api/markets/pipeline/health`, widget line, one notification a day while stale).
+- [x] LM Studio kept (verified that mlx-lm reproduces gemma but not qwen3.5, and that llama.cpp
+      embeddings drift enough to need a reindex — see below); its server is kept up headless by
+      launchd `com.quant.lmstudio-server` so the 03:00 news chain does not depend on the app being open.
+- [x] Caught up 2026-10-24 after the disk-full pause of 10-22 (backfill DAGs paused, a hung orphan
+      collector killed): company match 10-11 → 10-24, enrich passes A/B (3,005 articles, 0 errors),
+      features and the Qdrant index; `/api/markets/pipeline/health` all green.
+- [x] **One LM Studio task at a time, sized to the machine** (`quant_data/tools/lm_session.py`).
+      Two LLM tasks at once made LM Studio swap models on every request (10-23: 69/76 judge calls
+      from another host LLM client failed; 10-24: ~70 Channel Errors when backfill_1 and backfill_2 overlapped), and every
+      model ran with one parallel slot, so 8 client workers queued behind one prediction (0.8 art/s).
+      Each LLM task now goes through a shared flock (every other host LLM client honours the
+      same lock), unloads the LLMs it does not need, loads its model with the slot count measured on
+      this machine, sets its worker variable to match and unloads afterwards unless a queued task needs
+      the model. Measured on the M5 Pro 48 GB (generated tok/s at 1/2/4/8 slots):
+      gemma-4-e4b 50 / 86 / 137 / 155 → 8 slots; qwen3.5-9b 52 / 80 / 113 / 120 → 4 slots;
+      two qwen3.5-9b instances × 2 slots 82, below one × 4 — one instance with more slots wins on one GPU.
+- [ ] Confirm one fully automatic night (02:00 UTC backfill chain + 07:30 signals) with no alert,
+      the first one through `lm_session` (qwen3.5-4b calibrates itself at the start of gdelt_collect).
+
+**LM Studio replacement, evaluated 2026-10-22 (not done, kept as an option).** Python MLX can load
+every model without LM Studio (mlx-lm 0.32 supports qwen3_5 and gemma4). Against LM Studio on the
+same files and the pipeline's own `call_llm`: gemma pass A matches (event type 99%, sentiment
+corr 0.988 vs stored labels); qwen3.5-9b pass B does **not** (corr 0.78-0.80 vs LM Studio, whose
+own repeat is 0.999; four prompt renderings and mlx-vlm tried) — LM Studio's MLX engine is its own
+native build. nomic embeddings via llama.cpp on the same GGUF: cosine 0.9965, top-10 overlap 8.9/10.
+Switching would need a reindex, R.4 re-run, pass-B re-labelling with an IC check, and the qwen27
+judge's kappa re-measured.
+
+### Q.3 Events as structured features (🟡, ~6 days; feeds N.4)
+
+- [ ] **Peer / supply-chain graph** (= N.1 + N.3, extended): curated edges for the semiconductor
+      chain first (equipment -> foundry / memory -> chip designers -> hyperscalers), including
+      non-US names (Tokyo Electron, ASML, Samsung, SK hynix). A company event propagates one hop
+      with a signed weight. Cross-check curated edges against return co-movement.
+- [ ] **Oil and geopolitical risk index** from the GDELT GKG columnar store (Stage 6B): daily
+      tone and conflict-theme intensity for the Middle East / Russia-Ukraine / Taiwan Strait, plus
+      Brent and WTI added to `macro_indicators`. Features: level, 5-day change, shock flag.
+- [ ] **Earnings surprise, measured**: actual EPS / revenue vs consensus and the post-report gap
+      (Nasdaq calendar gives the consensus; F.14 covers the pre-report probability).
+- [ ] **Intraday path for after-hours events**: a small evening job (or the flash trigger) that
+      writes the event and the propagated scores the same night, so Asia-session decisions can use it.
+- [ ] Optional: Asian / European symbols in the feature universe (prices are already collected
+      for the briefs).
+
+### Q.4 Promote LLM event calls to a factor only after they earn it (🟡, gate, then 2 days)
+
+The briefs' predictions are a running out-of-sample test of "can an LLM read an event's impact".
+Wire them into `score_daily_signals` only when the scorecard says so:
+- [ ] at least 60 scored calls, spread over at least 4 weeks and several event types;
+- [ ] hit rate above the base rate of the same claims (e.g. how often `|move| >= 2%` happens anyway);
+- [ ] Brier score below 0.22 and calibration within +-10 points per confidence bucket;
+- [ ] then a walk-forward backtest with the call as one factor (H.1 realism rules), compared
+      with the same model without it. If any step fails, the calls stay a reading aid.
+
+### Q.5 Holdings advisor — event-driven advice on the user's own positions (🔴, ~3 days)
+
+**Goal (user, 2026-10-25).** The user's priority is profit: get the losing positions back and grow. The system watches the holdings and, when something worth reacting to happens,
+writes a report with concrete actions: what to do, at what limit price, how much, until when, and
+what happens if it is wrong — e.g. trim into strength before a holding's earnings and buy back
+lower after. Advice only: nothing is ever traded automatically.
+
+**Data (all already in the platform).** Holdings, cost and weights (quant_ai), live quotes with
+pre/post (Nasdaq, 5 s), daily bars (support / resistance / ATR), earnings calendar with consensus
+EPS and the options-implied move (Nasdaq), news per company with LLM sentiment and event type
+(quant_data, intraday every 30 min, labels overnight), the quant model's ranks and LONG list
+(daily), the macro board. New: **available cash**, entered by hand in My Holdings (starts at 0).
+
+**Monitoring — every 15 minutes, code only, no model.**
+- Price move beyond the stock's own threshold: **2x its median absolute daily move over the last six
+  months**, recomputed daily. A fixed 3% was measured first and rejected: the semiconductor and memory names watched
+  moved more than 3% on 50-57% of days; at 2x median (~6% for the most volatile, ~3% for the least) each name
+  triggers about once a week.
+- Price reaching a limit from an open recommendation.
+- Earnings: a holding reports tomorrow (prepare a plan), or has just reported (read it, adjust).
+- Important news on a holding: earnings / guidance / rating or target change / M&A / buyback /
+  regulation / litigation / export controls / management change (keyword rules first; a local
+  model to rank intraday headlines only if the rules prove too coarse), or a burst of news.
+- A sector bellwether moving 5%+ outside regular hours (the existing flash trigger).
+Cooldown: one trigger per holding and event type per 2 hours; at most ~6 updates a day.
+
+**Flow.** trigger → snapshot built by code (position, break-even, % needed to get back to cost,
+support / resistance, ATR, earnings and implied move, 7 days of news, quant rank, buy candidates
+from the LONG list, cash) with **candidate limit prices computed by code** (implied move when a
+report is near, else 2x ATR), so the model quotes numbers rather than inventing them → Claude
+(`claude -p`, subscription, web search) writes the report in Chinese and English → a structured
+ORDERS block (symbol, side, % of position or shares, limit, valid until, reasons), validated by code
+(held or candidate symbol, limit within range of the price, validity at most 30 days) → stored and
+shown in My Holdings → scored by code: filled or not from daily bars, and at expiry whether acting
+beat not acting.
+
+**Reports.** A full report every weekday at 13:00 Dublin (in the US pre-market, 1.5 h before the
+open); focused updates when a trigger fires. Sections: bottom line (the 2-3 actions today, or why
+nothing); each holding (status, drivers with sources, orders, the failure case); earnings plays
+(pre/post plan from the implied move, partial size, the gap risk of selling before a jump); new
+ideas (1-3 from the LONG list, preferring names that reduce the chip / memory concentration, sized
+to the cash or as a switch when cash is 0); risks and rules (concentration; the wash rule on a loss
+sale bought back within four weeks).
+
+**Alerts.** Two levels. Urgent — results just out, a recommended limit reached, a move beyond 1.5x
+the threshold, major news (M&A, regulator, profit warning): a macOS notification and a red banner
+in My Holdings. Normal — everything else: a "new advice" mark in My Holdings only. No widget lines
+and no phone push for now.
+
+**Models.** Monitoring, levels, validation and scoring: code. Analysis and writing: Claude, because
+it needs reasoning and fresh news (the local qwen agreed with Claude at kappa 0.43 in R.11 and is
+slow with thinking). Quota: ~1 report on a quiet day, 3-6 on an earnings day, 3-5 min each.
+
+- [x] Cash in My Holdings (stored with the portfolio, editable, starts at 0)
+- [x] `markets/advisor.py`: snapshot, thresholds, levels, triggers, orders, scoring
+- [x] `advisor` brief kind: schedule 13:00 Dublin, focused updates, ORDERS block, urgent alerts
+- [x] My Holdings: latest report, open orders with fill status, history and scorecard
+- [x] Tests; one live report end to end (v1, 2026-10-25)
+
+**v2: plans generated and tested by code, chosen by the model (2026-10-25).** The user's verdict on
+v1: "not smart at all" (user, translated). Its first report proposed trimming a holding before earnings and buying it back
+lower, which was the user's own idea read back from the conversation, sized in fractional
+shares a broker cannot fill, with no evidence that it beats holding. In v2:
+
+- *Candidates in code* (`markets/strategy.py`), whole shares: hold; one T (sell part at +a, buy the
+  same shares back at -b, the buy-back active only once the sale filled) at three widths; a two-step
+  ladder; trims; a sale at the average cost when within reach; an add when there is cash. Widths are
+  in units of the move scale: the options-implied move when the stock reports within the horizon,
+  else 2 x ATR(14).
+- *Tested on the stock's own past*: around each of its last 16 reports (daily bars from 5 sessions
+  before to 10 after, `earnings_reactions` in Mongo, refreshed weekly by `weekly_model_training`;
+  SK hynix from its Seoul listing 000660.KS, the ADR having listed on 2026-07-10), entered as many
+  sessions before the reaction as today is, limits scaled to that history's typical move; else
+  rolling 15-session windows of the last year. Result: gain against holding, win rate, P10, fill
+  rate per leg, regret (sold, never bought back, ended higher).
+- *Simulated for this time*: 3,000 paths with the stock's daily volatility and, on the reaction
+  day, a past reaction (centred) scaled to the implied move: how likely each limit fills.
+- *Profit first, enforced in code*: a plan is offered only when it beat holding on that history
+  (n >= 8, mean > +0.05% of the position, wins >= losses) and never sells below the average cost
+  without a buy-back. The model picks a candidate id per holding in a PLANS block (or none) and
+  explains it; code turns the plan into its orders. The ORDERS block is left for new buys only,
+  rounded down to whole shares.
+- *Conditional orders*: `advice_orders.parent_id`; a buy-back is `waiting` until its sale fills,
+  counts only from the next session, and is `void` if the sale never fills.
+
+First result (2026-10-25, last 16 reports each): every pre-earnings sale or T on INTC, SKHY and STX
+trailed holding (-0.3% to -1.3% of the position on average); holding through the report returned
++4.6% to +7.2% on average, up 56-75% of the time, and the 10 sessions after the reaction drifted up
+after both up and down reactions (INTC +8.3% / +1.1%). So the advice for this week's reports is to
+hold, with the numbers. TSM (no report in the horizon) has small eligible T plans (+0.12 to +0.16%).
+
+- [x] `strategy.py`, `earnings_reactions.py`, PLANS block, conditional orders, UI ("after #X fills")
+- [ ] After the reports: compare the advice with what happened (scorecard) and widen the candidate
+      set if a family keeps winning (post-reaction entries, adds after a drop once there is cash)
+
+**v3: an earnings-day trading policy learned from data, not written by hand (user, 2026-10-25).**
+The user's idea: sell into the earnings-day pulse and buy back lower. A hand test on daily bars
+(sell at the open after a gap up, buy back 2% lower or at the close) said +1%/share for INTC
+(7/9) and -1.4% for STX (shares keep running after a gap up), but daily bars cannot tell whether
+the high came before the low, and a rule per stock is exactly what the user does not want: "I want ML or AI to learn this
+strategy by itself" (translated).
+- *Data*: hourly bars with pre/after-hours (yfinance, back to 2023-11) around every report of the
+  whole universe (~100 stocks, ~11 reports each), EPS estimate / reported / surprise, daily bars.
+  Minute bars (Alpaca, from 2016) when a key is available.
+- *Actions*, enumerated by code: hold; sell at the open or at +a% and buy back at -b% or at the
+  close of day 1 / day 3; buy at the open or -b% (when there is cash). Label = what each action
+  made per share against holding.
+- *Features*, all known at the open of the reaction day: gap, the pre-market path, EPS surprise,
+  run-up, volatility, gap relative to the stock's typical reaction, the stock's own past fades
+  (earlier reports only), the market's gap, report timing.
+- *Model*: LightGBM over (event, action) rows; policy = the action with the highest predicted gain
+  when it clears a margin, else hold. Walk-forward by quarter; offered only if it beats holding
+  and a static rule out of sample.
+- [x] Data and labels  - [x] Walk-forward model and report  - [ ] Live (only once it beats holding)
+
+*First result (2026-10-25): no learnable edge.* 1,120 reports of 101 stocks (2023-11 .. 2026-10),
+30 actions, walk-forward by quarter over 806 out-of-sample reports
+(`research/models/earnings_policy.py`):
+
+| Decision point and features | rank IC (pred vs outcome, per action) | Policy when it acts |
+|---|---|---|
+| Open: gap, pre-market path, EPS surprise, run-up, volatility, the stock's past fades, market | -0.001 to +0.019 | -0.3% to -0.5% per share, win 59-66%, P10 -7.5% |
+| + the platform's news sentiment published between the report and the open | +0.002 / +0.014 | -0.3% to -0.7% |
+| 10:30, + the first hour's path | +0.007 | -0.1% to +0.2% (noise) |
+
+High win rates with a negative mean: small gains on fades, wiped out by the reports where the stock
+keeps running and the shares are bought back higher. Post-report news sentiment correlates with the
+gap (Spearman 0.34) but not with the open-to-close move (0.008): it is priced in at the open. The
+"INTC fades +1%/share" seen on daily bars (9 reports) does not survive 1,120. Hindsight-best would
+make +4% per report: the money is there, nothing available at the open predicts which way.
+Next levers, in order: minute bars from 2016 (Alpaca, ~3x the reports); the call transcript read by
+an LLM (guidance, tone) as a feature. Until a version beats holding out of sample the advisor keeps
+holding through reports.
+
+*Second round (2026-10-25 evening): more data and the release read by an LLM.* Alpaca 5-minute bars
+incl. pre/after-hours from 2016: 3,866 reports. The press release behind each (EDGAR 8-K item 2.02 /
+6-K, accepted before the open: 3,747 found, 97%) read by local qwen3.5-9b (`earnings_releases.py`):
+full-year outlook raised / kept / lowered, margin direction, tone, revenue against the last outlook,
+next quarter's outlook against this quarter, capital return, restructuring. Walk-forward over 3,030
+out-of-sample reports: rank IC rose from ~0 to +0.05 with the larger sample and to +0.056/+0.059 with
+the release features (27 of 30 actions positive), still too weak for a policy that makes money
+(mean about 0 per share when it acts). The release is mostly priced in at the open: its fields
+correlate with the gap (0.13-0.25) and hardly with the open-to-close move (-0.08..+0.03).
+One pattern worth following: after a full-year outlook cut the stock gaps down (-2.7% on average)
+and then recovers. Buying at the open and holding three sessions: +0.30% (n=77, not significant) in
+2016-2020, +2.46% (n=67, 4 standard errors) in 2021-2026; selling at the open the same day lost
+-1.39% in 2021-2026. Not stable across periods and one of many looks, so not a rule yet; for a
+holder it argues against selling into the open after a guidance cut. Next: a 1D-CNN on the 5-minute
+pre-market / first-hour path as a challenger to LightGBM; earnings spillover (a peer's report as the
+event for the holdings, more bets per year); an LLM proposing hypotheses for the same event engine,
+with a multiple-testing correction.
+
+**v4: the after-the-close pulse, from 1-minute bars (2026-10-25 night).** The user's actual idea was
+not the next day: right after an after-the-close release the stock spikes for minutes and often
+fades before or during the call; sell a ladder into the spike, buy the shares back lower. INTC
+2026-07-23: +8.6% at 16:00, +11.8% at 16:20-16:25, +4.1% by 17:15 (2026-04-23: +16.7% and kept
+rising). `research/models/earnings_pulse.py`: Alpaca 1-minute bars 15:30 .. next day 10:30 for 2,491
+after-the-close reports since 2016; the release minute found in the bars (the wire beats the SEC
+acceptance by minutes: INTC moved at 16:00-16:01, accepted 16:09), the call time read from the
+release (82%). 224 plans enumerated: when the ladder goes in (before the release; 1/3/5/10/20/30
+minutes after it; 5 minutes before the call) x levels (+1/2/3 .. +5/8/12%) x buy-back (5 or 30
+minutes into the call, end of after-hours, next open, or 1/2/3% under each sale).
+
+| Walk-forward 2019-2026 (each year trained on the earlier ones) | Acted | Mean when acting | Win | P10 |
+|---|---|---|---|---|
+| Per stock, the plan that did best in its earlier years | 96% | +0.05% (se 0.08) | 44% | -2.0% |
+| Conditional LightGBM (move since the close at placement, its range and volume, run-up, the stock's own past on the plan, EPS surprise and the LLM-read outlook after the release), 0.10%/side | 42% | +0.49% (se 0.12) | 66% | -1.9% |
+| Same, 0.25%/side and limits must trade through by 0.05% | 30% | +0.66% (se 0.13) | 59% | -1.15% |
+
+Every year >= 0 in the strict run (2019 -0.02% .. 2024 +0.67%). INTC: 14 of 30 reports, +1.33% per
+share of the ladder, 79% wins; STX negative (7 reports, -1.29%: it keeps running), so mostly
+left alone. Worst single case -15%: a ladder on part of the position, never all of it.
+Pre-release plans get no post-release features (the first run leaked them: +0.54% -> +0.49%).
+- [x] Live for the holdings (2026-10-26): `quant_ai/markets/pulse.py`. Price-only features (the
+      release and volume features added nothing: +0.64% vs +0.66% per acted report), 5-second quotes,
+      the release minute from a 0.5% move, placements as in training, the first plan that clears the
+      0.3% margin on a stock whose walk-forward record is positive becomes whole-share orders
+      (30% of the position over three steps, PULSE_FRACTION), an urgent macOS notification; no
+      report is written first. Replay of INTC evenings: 2026-01-22 acted at 16:02 (sold into the
+      bounce, bought back lower), 2026-04-23 stayed out (predicted -0.5%; holding was right: +20%),
+      2026-07-23 stayed out (predicted +0.2%, under the margin; the fade would have paid). First
+      live evenings: STX 10-27, INTC 10-29. The broker must accept extended-hours limit orders.
+- [x] Final model on all data, refreshed weekly (`refresh_earnings_pulse.sh` in weekly_model_training,
+      replaced only while its walk-forward stays positive); each evening's orders scored the next
+      morning on 1-minute bars (`pulse.score_due`)
+
+*v4.2 (2026-10-26): the algorithm sets the steps, levels and sizes.* The user: the number of steps
+and their levels must not be fixed either. Labels became single steps: 12 levels (+0.5 .. +12%) x 7
+buy-back rules x 8 placements, 1.65M rows; any ladder is a weighted sum of them. LightGBM predicts
+each step's gain (huber) and its 10th percentile (quantile); the plan at a placement is the steps
+above the margin under the best buy-back rule (at most 4), weighted by gain over downside. The
+walk-forward now replays the live decision strictly in time order (v1's evaluation took the best
+placement of the evening, which a live watch cannot know). Bake-off 2019-2026:
+
+| Policy | Acted | Mean | P10 | Worst | Sum |
+|---|---|---|---|---|---|
+| A greedy (first placement that clears) | 772 | +0.45% | -2.70% | -30% | +346% |
+| B optimal stopping (fitted value iteration over the placements: act only when the plan beats the predicted value of waiting) | 732 | +0.49% | -2.61% | -24% | +360% |
+| C = B, weights by gain over downside | 732 | +0.51% | -2.48% | -24% | +375% |
+
+The gains sat in 2023-2026 (C: +0.09% per acted report in 2019-2022, +0.83% after). Risk controls
+were then chosen on 2019-2022 only (160 variants) and checked on 2023-2026: the 10th-percentile
+model is what matters; dropping steps whose predicted P10 is below -1.5% lifted 2019-2022 from
++29% to +208% and kept 2023-2026 (395 acted, +0.86%, P10 -0.16%). Chosen and live: margin 0.3%, no
+orders before the release, P10 filter -1.5%, risk weights, greedy (stopping adds nothing once the
+filter is on). Whole period: 660 of 1,906 acted, +0.83%, P10 -0.23%, worst -15.3%, every year
+positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far above the price
+(INTC 2026-07: +4/5/6% at 16:20; 2026-01: +8/10/12%): near levels fill more but get run over.
+- [x] Pre-market reports (2026-10-26): the same engine on 1,345 before-the-open reports (53 stocks):
+      the window runs from the previous close to the reaction day's 10:30, the release minute found
+      against the pre-market's own volume around the SEC time (72% from the price), the session's
+      end 09:25, the open the same day; a `bmo` flag in the features. 3,835 reports in all.
+- [x] 1D-CNN challenger (`earnings_pulse_cnn.py`: the last 90 one-minute bars before each placement
+      plus the state, all 84 steps' gain and P10 at once). Judged the same way, it passed no risk
+      limit on 2019-2022 and made +0.40% per acted report under LightGBM's policy (P10 -2.72%, three
+      negative years). The average of the two was attractive on 2023-2026 (+2.01%, worst -11%) but
+      lost on the selection years, so it is noted, not used.
+- [x] Policy re-chosen on 2019-2022 with both sessions: margin 0.5%, P10 filter -2.0%. 2023-2026:
+      407 acted, +1.40% per acted report, P10 -0.09%. Whole period 589 acted, +1.36%, every year
+      positive; after the close +1.15% (434), before the open +1.95% (155); INTC 10 of 30, +3.43%.
+      The live watch now also runs the pre-market (04:00-09:35 ET) for holdings reporting before
+      the open.
+- [ ] Survival (first-passage) model for the fill and buy-back probabilities; hierarchical shrinkage
+      for the per-stock gate; MiniRocket as a cheap sequence challenger
+
+### Q.6 Event strategy lab — many algorithms, many actions, every result kept (🔴, ongoing)
+
+**Goal (user, 2026-10-26).** Try many algorithms and keep every backtest in MLflow; let the system
+find more actions than sell / buy back / hold, including buying stocks not held. Long only (no
+shorting, no options); cash may be used to buy first; the holding period is not fixed but part of
+what is learned; events: earnings and peer-earnings spillover. The user trades by hand, so there is
+no deadline: the bar is evidence.
+
+1. **Lab.** `quant_data/research/lab/`: MLflow experiment `earnings_pulse`, one run per (model,
+   policy); one evaluation for all: walk-forward by year, selection on 2019-2022 and the report on
+   2023-2026, by session and stock, and the deflated Sharpe ratio over all trials so far (the more
+   variants tried, the higher the bar).
+2. **Algorithm zoo** on the same steps: LightGBM seed/feature ensembles, CatBoost, XGBoost,
+   MiniRocket, a first-passage (survival) model for fills, hierarchical shrinkage for the per-stock
+   gate; the LightGBM + CNN average in shadow.
+3. **Action grammar.** Entries: limit sell above, limit buy below (cash), breakout buy, market at a
+   time. Exits: limit back, trailing stop, stop loss, bracket (OCO), time (session end, next open,
+   day k close). Any stock with a report, held or not (buys only for the ones not held). Searched
+   by evolution / Bayesian optimisation over the grammar, then a state-conditional choice.
+4. **Peer spillover.** A bellwether's report as the event for its peers and the holdings.
+
+*Lab, first results (2026-10-26).* MLflow experiment `earnings_pulse` (id 2): eight models x 80
+policy variants = 640 trials. Each model's variant is chosen on 2019-2022 (highest total within
+worst > -10%, P10 > -2%) and reported on 2023-2026; the deflated Sharpe ratio (DSR) is computed
+against every trial logged so far.
+
+| Model | 2023-2026 acted | Mean | P10 / worst | DSR |
+|---|---|---|---|---|
+| CatBoost | 257 | +2.03% | 0.00% / -10.5% | 0.992 |
+| 5 LightGBMs averaged (seeds, feature subsets) | 252 | +1.97% | 0.00% / -10.0% | 0.979 |
+| LightGBM + CNN average | 281 | +2.01% | 0.00% / -11.3% | 0.950 |
+| single LightGBM (live until today) | 407 | +1.40% | -0.09% / -24.0% | 0.247 |
+| average of all four | 467 | +1.31% | 0.00% / -21.4% | 0.338 |
+| average of the three GBDTs | 623 | +1.04% | -1.00% / -19.6% | 0.001 |
+| XGBoost, 1D-CNN | no variant within the risk limits on 2019-2022 | | | |
+
+The single LightGBM's record did not survive the deflation (its per-trade Sharpe 0.335 is below the
+0.366 that 240 trials reach by luck); the ensembles and CatBoost did. Champion rule fixed from now
+on: DSR >= 0.95, highest wins. Live since 2026-10-26: CatBoost champion (acts, announces), the
+LightGBM ensemble as shadow (saved with status `shadow`, scored the next morning, compared at
+`/api/markets/pulse/scorecard`). Next: choose a model's variant by its per-trade Sharpe within the
+risk limits rather than by its total (the total favours loose margins: the GBDT average picked 0.3
+and failed); then the action grammar.
+
+*Lab, second round — SIP extended-hours phantom-wick audit, two-stage Hurdle models & `sharpe_trade` selection (2026-10-30, `quant_data` `f607022`, `quant_ai` `a82430a`).*
+Scoring `INTC`'s live `2026-10-29` report evening (`advice_orders` `#28–#39`) uncovered a systemic
+contamination in Alpaca SIP 1-minute extended-hours bars: late-reported regular-session `16:00`
+closing-cross / TRF benchmark prints appear after `16:02` ET (e.g. `INTC` `16:15/16:16` `high = $92.07`
+while trading at `$75` on a `-30%` crash, and `AAPL` `2024-05-02` `16:53` `low = $173.03` while at
+`$185` on a `+7%` rally), creating fake limit fills on both crash sells and runaway buy-backs.
+- **Scrubber (`scrub_extended_bars` in `earnings_pulse.py`, `rl/build_events.py`, and `quant_ai/markets/pulse.py`):**
+  clamps extreme extended-hours `high`/`low` needles after `16:02` ET whose excursion from the bar's
+  `open`/`close` body exceeds `max(1.5%, 2.5×body)` and matches `regular_close` within `0.35%`. Across
+  `3,835` earnings reports (`2,539,584` step rows), **`1,319` phantom bars across `844` reports** were
+  scrubbed; live `INTC` `#28–#39` orders were re-scored from bogus `+14.35%..+18.35%` to accurate
+  `expired` / `void` (`0.0%`).
+- **Two-stage Hurdle Bandit (`hurdle_lgbm`, `hurdle_catboost`) & `sharpe_trade` selection (`zoo.py`):**
+  decomposes unconditional expected step value into $\hat{P}(	ext{fill}) \cdot \hat{\mathbb{E}}[	ext{gain} \mid 	ext{fill}]$
+  while keeping the tail gate on conditional downside $\hat{Q}_{10}[	ext{gain} \mid 	ext{fill}]$ (multiplying
+  $Q_{10}$ by small $P(	ext{fill})$ shrinks `-15%` adverse-selection fills below `-1%` and breaks tail gating),
+  with variants chosen on `2019–2022` by `select_sharpe_trade` within `worst > -10%`, `P10 > -2%`.
+- **MLflow experiment `earnings_pulse_scrubbed` (`400` clean variant runs across `5` models):**
+
+| Scrubbed Model (`2019–2022` `sharpe_trade` choice) | Passing `/80` | `2023–2026` OOS acted | OOS Mean | OOS `P10` / Worst | OOS `SR/trade` | Status (2026-10-30) |
+|---|---|---|---|---|---|---|
+| **5-seed LightGBM (`lgbm_seeds`)** | 26 / 80 | 116 | **+1.40%** | `0.00%` / **`-3.18%`** | **0.454** | **Champion** (`margin=0.5, q10>=-1.5, risk`) |
+| **5-seed LGBM + Hurdle LGBM (`avg_lgbm_hurdle`)** | 6 / 80 | 122 | **+1.38%** | `0.00%` / `-5.05%` | **0.463** | Ensemble (`DSR_80 = 0.973`) |
+| **Two-stage Hurdle LGBM (`hurdle_lgbm`)** | 20 / 80 | 163 | **+1.06%** | `0.00%` / `-5.08%` | 0.342 | **Shadow** (`margin=0.5, q10>=-1.0, risk`, `DSR_80 = 0.961`) |
+| **CatBoost + 5-seed LGBM (`avg_cb_lgbm`)** | 20 / 80 | 61 | **+1.56%** | `0.00%` / `-5.57%` | 0.438 | `87` total trades (`<100` live floor) |
+| **CatBoost (`catboost`, prior champion)** | **0 / 80** | (141) | (+0.96%) | (`0.00%` / `-7.00%`) | (0.348) | **Retired** (`2019–2022` worst `-12.02%` once phantom fills removed) |
+
+  Removing SIP phantom fills exposed that roughly half of standalone CatBoost's prior `+2.03%` headline
+  relied on unfillable `close16` late prints, whereas `lgbm_seeds` retained `+1.40%` OOS mean (`t = +4.89`)
+  with a `-3.18%` worst loss across 4 OOS years. Refreshed `/Volumes/Data4T/earnings_policy/pulse_model/`
+  on `2026-10-30` with `lgbm_seeds` as live champion and `hurdle_lgbm` as live shadow.
+
+### Q.7 Action RL — the system chooses among actions it can compose (🔴, started 2026-10-26)
+
+**Goal (user, 2026-10-26).** "design the actions, and let RL choose the most reasonable one" (translated): the advisor kept proposing the
+same two-step TSM ladder (+0.36% on 47 heavily overlapping windows), because its candidates are a
+fixed list of eight. Replace the list with a grammar the policy composes from, and let only what
+survives the lab's statistics through.
+
+- **Decision points**: report evenings and pre-markets (minute placements), peer reports, the
+  daily 13:00 check and event triggers.
+- **State**: position (shares, cost, unrealised, weight, cash), the price path (minute and daily),
+  volatility, event context (days to report, implied move, release read, peers), news sentiment,
+  the ranking model, regime; constraints (whole shares, the Irish four-week rule).
+- **Actions = entry x exit x size**, distances in units of the stock's daily volatility: reduce
+  then buy back, reduce, add with cash, buy a stock not held, exit; entries at market, limit
+  above/below, breakout; exits by limit, trailing stop, stop loss, bracket (OCO), or time (session
+  end, next open, day 1/3/5/10/20); sizes as fractions of the position or the cash, in whole shares.
+  Single legs are scored; ladders are composed from them (as in Q.5 v4.2).
+- **Reward**: against doing nothing, net of costs; a CVaR penalty; a penalty for a loss sale bought
+  back within four weeks. Hard constraints, not rewards: no sale below cost without a buy-back, no
+  sale beyond the shares held, no buy beyond the cash.
+- **Learning**: offline (no money spent exploring). The orders are too small to move prices, so
+  every action's outcome is computed exactly on the bars: a full-information contextual bandit at
+  each decision point, fitted Q iteration for when to act and how long to hold, distributional Q
+  (mean and P10) from the lab's champion (CatBoost); composition and size under a CVaR limit.
+  Default action: hold; anything else must clear the margin and the lab's deflated Sharpe gate.
+- **New actions**: evolutionary / Bayesian search over the grammar and LLM-proposed hypotheses
+  enter the library only through the same out-of-sample gate.
+- **Rollout**: walk-forward (select on 2019-2022, report on 2023-2026), shadow, champion, a
+  per-stock hierarchical gate, live drift monitoring.
+
+- [x] 1. Grammar and simulator (`quant_data/research/rl/`): 576 report actions, paths stitched from
+      1-minute, 5-minute and daily bars (daily put on the raw minute scale: yfinance is
+      split-adjusted), conservative fills, numba (8.8M outcomes in 20 s), 9 tests. First policies
+      on 15,356 report decision points: a single LightGBM picking the best of 576 (winner's curse)
+      DSR 0.62; an ensemble scoring mean - spread, composed: 26 trades in 2023-2026, +2.52%, none
+      negative, DSR 0.98, but 49 trades in eight years against the pulse champion's 370: a
+      candidate, not live.
+- [x] 2. Daily decision points (`build_daily`, `learn_daily`): 48,645 (every fifth session of 101
+      stocks since 2016) x 256 actions, regular-session cost 0.05% a side, one plan per stock at
+      a time, CVaR limits. Chosen on 2019-2022 (56 trades, +0.71%); 2023-2026: 110 trades, -1.79%,
+      DSR 0. Selling and buying back on daily bars does not beat holding these rising names (a
+      reduce held 20 days averages -2.44%; MRNA +177% on 2026-08-19 shows the uncapped side). The
+      advisor got the significance gate instead (quant_ai `strategy.py`, t >= 2 on the overlap-
+      adjusted sample): TSM's ladder (+0.36%, t 1.0 on ~16 independent windows) is withdrawn and
+      every holding is a hold today; the report-evening pulse is unaffected.
+- [ ] 3. Holding period by fitted Q iteration; CVaR sizing
+- [ ] 4. Stocks not held; peer spillover events
+- [ ] 5. Grammar search and LLM-proposed actions
+
+### Q.8 Three-layer upcoming catalysts, per-stock event modal & AI query (✅ Done 2026-10-30 — `quant_ai` `74741a9`..`52b50e9`, `quant_ui` `da1a8f9`..`8d33dc4`)
+
+**Goal (user, 2026-10-30).** Every stock in **My Holdings** and **Watchlist** needs forward-looking
+visibility into upcoming binary catalysts — not just earnings dates, but conferences, product/node
+launches, policy/tariff/antitrust milestones, and supply-chain spillover — presented cleanly without
+bloating the Holdings page, plus an AI search bar to ask targeted forward-risk questions.
+
+**Architecture (`quant_ai/markets/events.py`, `quant_ai/markets/catalysts.py`, `quant_ui/src/components/markets/CatalystsPanel.tsx`):**
+
+1. **Layer 1 (`L1_calendar` — deterministic structured schedules):**
+   - Nasdaq + Finnhub earnings calendars (including ADR underlying tickers `000660.KS`, `2330.TW`,
+     `ASML.AS`) enriched with ATM-straddle options implied moves (`±%`).
+   - Nasdaq cash dividend ex-dates / pay-dates (with estimated USD payout on held shares) and stock splits.
+   - Authoritative macro & market-structure dates (`OFFICIAL_MACRO_SCHEDULE`: US Midterm Elections,
+     BLS Nonfarm Payrolls & CPI, FOMC & SEP dot plots, SEC 13F deadlines, monthly OpEx / Quad Witching),
+     deduplicated against Nasdaq's economic calendar with secondary ISM sub-indices filtered out.
+   - TSMC 10th-of-month consolidated revenue releases (`_tsm_monthly_revenue_dates`) and verified
+     semiconductor / cloud / investor conferences (`OFFICIAL_INDUSTRY_CONFERENCES`: SC26, Microsoft
+     Ignite, AWS re:Invent, UBS Global Tech & AI Conference, Barclays Global Tech Conference, IEEE
+     IEDM 2026, CES 2027).
+2. **Layer 2 (`L2_extracted` — automated forward-event extraction every 6h in `markets/background.py`):**
+   - Pulls forward-filtered Google News RSS (excluding post-earnings price-recap noise), SEC EDGAR
+     recent `8-K` / `6-K` material filings, and MongoDB `news_articles`, extracting structured dated
+     catalysts via the local LLM into SQLite (`collected_catalysts`).
+3. **Layer 3 (`L3_web` — web catalyst discovery with resilient fallback):**
+   - Daily / on-demand Claude CLI `WebSearch` sweep for non-earnings catalysts, with automatic
+     graceful fallback (`_collect_l3_thematic_web_fallback`) to targeted thematic RSS + local LLM
+     extraction whenever Claude CLI is unavailable or hits weekly quota.
+4. **Per-stock pop-up modal & compact 1-line AI search bar (`CatalystsPanel.tsx`):**
+   - Default 90-day horizon covering full quarterly conference + next-earnings cycle; per-row
+     `🔭 Events` button on every Holding and Watchlist row opens a closable modal (`✕`, `Esc`, backdrop)
+     grouped into **Direct**, **Supply-Chain & Peer Spillover**, and **High-Impact Macro** events.
+   - Interactive AI query endpoint (`POST /api/markets/catalysts/query`, modes `fast` and `web`) with
+     persisted history (`catalyst_queries`) and one-click deletion.
+
+### Q.9 Per-stock order status & swing lot allocation manager (✅ Done 2026-10-30 — `quant_ai` `52b50e9`, `quant_ui` `8d33dc4`)
+
+**Goal (user, 2026-10-30).** While brokers settle disposals FIFO,
+swing-trading tranches bought on dips (a tranche bought well below the overall average cost and
+sold at a profit) require per-order lifecycle visibility and explicit lot
+matching — **without** mutating the portfolio's headline average cost (`Mine`) or the `FIFO`
+cost basis on the main Holdings table.
+
+**Architecture (`quant_ai/markets/portfolio.py`, `quant_ui/src/components/markets/LotManagerModal.tsx`, `Holdings.tsx`):**
+
+1. **Single-ledger atomic storage (`transactions.lot_allocations`):**
+   - Added nullable JSON column `lot_allocations` (`[{"buy_id": <int>, "quantity": <float>}, ...]`)
+     on `transactions` rows (`side == "sell"`). Buy/sell entries inside the modal write directly to
+     `transactions` inside `_write_conn` (`BEGIN IMMEDIATE`), preserving a single source of truth.
+   - Validation in `compute_holdings`: rejects over-allocating beyond any buy lot's `open_qty`,
+     rejects deleting a buy order explicitly referenced by a subsequent sale (rolling back atomically),
+     absorbs 8-decimal Revolut fractional-share precision cleanly (`SNAP_EPS = 5e-9`), preserves
+     custom allocations when editing a sale's note via the legacy trade form, and falls back to FIFO
+     for any unallocated shares.
+2. **Per-order statuses & three-way accounting conservation:**
+   - Every buy order carries an explicit status (`"open"` 🟢 held, `"partial"` 🟡 partly closed,
+     `"closed"` ⚪ fully closed), live independent unrealized P&L (`open_pnl`, `open_pnl_pct`), realized
+     swing P&L, matched sale slices, and parallel strict-FIFO status (`fifo_status`, `fifo_open_qty`)
+     for one-click side-by-side comparison.
+   - Headline `avg_cost` (`Mine`) and `fifo_avg_cost` (`FIFO`) remain bit-for-bit unchanged; the
+     modal additionally reports `swing_realized`, `open_lots_avg`, and true net-cash `breakeven_price`
+     (`(cycle_buys - cycle_sells - dividends + fees) / held_qty`), satisfying the exact conservation
+     identity `open_lots_unrealized + swing_realized == fifo_unrealized + fifo_realized == unrealized + realized`.
+3. **Interactive UI (`StockLotButton` + `LotManagerModal.tsx`):**
+   - Every row in **My Holdings** displays a `📦 Lots` button highlighting any currently profitable
+     open tranches (e.g. `🟢 3 lots in profit +$xx.xx`) or the lowest-cost open lot when underwater.
+   - Inside the modal, users can filter/sort buy orders by status or cost, record new buys (by shares
+     or USD amount), or sell by checking specific open buy orders and entering partial/full share
+     counts (with quick `✨ All profitable lots` / `Lowest cost first` / `LIFO` / `FIFO` helpers, live hypothetical
+     sell-price profit simulation, and one-click re-allocation `🎯 Reassign lots` on historical sales).
+   - Verified by 123 unit tests across `quant_ai/tests/test_markets_*.py` and clean strict TypeScript
+     build in `quant_ui`.
+
+### Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor (✅ Done 2026-10-30 — `quant_ai` `a82430a`, `quant_ui` `51ce6e8`)
+
+**Goal (user, 2026-10-30).** Bridge empirical multi-day swing research directly into the user's manual
+tranche workflow (`📦 Lots`) without black-box daily RL overfitting (where `learn_daily` scored
+`-1.79%` OOS, `DSR = 0.000`, and `learn_peers` scored `+0.01%..+0.13%` OOS, `DSR = 0.000`): prevent
+clustered knife-catching (e.g. two lots spaced only `0.29×ATR` apart)
+and give every open lot concrete volatility-calibrated profit targets (`TP1` / `TP2`) so underwater
+positions can rotate capital profitably without waiting for an anchored overall average cost.
+
+1. **Out-of-sample empirical calibration (`102` US stocks, `2023–2026`, `703` `≥2×ATR` single-day drops):**
+   - After a `≥2×ATR` single-day drop, there is a **`42.8%`** probability of dropping another `≥1.0×ATR`
+     within 3 sessions (`24.9%` for `≥1.5×ATR`).
+   - Immediate Day-1 dip entry (`+1.5×ATR` 15-day take-profit) yields `+0.97%` mean per trade (`54.8%`
+     TP hit rate), whereas spacing limit tranches **`-1.5×ATR`** below yields **`+2.50%` mean per trade**
+     (`33.6%` fill rate, `54.2%` `+2.0×ATR` TP hit rate — **2.6×** higher expectancy per trade).
+2. **Backend engine (`quant_ai/markets/lot_advisor.py` + `GET /api/markets/portfolio/lot-advice`):**
+   - Computes 14-day Wilder `ATR(14)`, `RSI(14)`, `SMA(20)`, 1-day/3-day drop in `%` and `×ATR`, and
+     post-drop stabilization (`close >= prev_close && close >= open` once crash velocity subsides).
+   - Integrates **7-day binary catalyst risk** from `Q.8` (`catalysts.upcoming_feed`, escalating minimum
+     tranche spacing from `1.5×ATR` to `2.0×ATR` when earnings/policy/macro high-impact events are due
+     within 7 days or when a crash has not yet stabilized) and **semiconductor/memory cluster weight**
+     across `My Holdings`.
+   - Retrospectively flags tight historical lot pairs (`gap < 0.75×ATR`) and computes exact suggested limit entry prices
+     (`anchor_lowest_lot - min_spacing×ATR`).
+   - Generates per-lot exit plans for every active buy tranche: `TP1 = unit_cost + 1.5×ATR`,
+     `TP2 = unit_cost + 2.0×ATR`, and `1.0×ATR` trailing protection once a lot reaches `+1.0×ATR`.
+3. **Interactive UI (`LotManagerModal.tsx`):**
+   - Top **⚡ Swing risk engine** strip displaying `ATR(14)`, `RSI(14)`, stabilization badge, 7-day catalyst
+     alert pill, and semiconductor cluster weight.
+   - Live debounced **🛡️ Dip levels and risk checks** card inside the Buy tab (`green` / `amber` / `red`) with
+     one-click **`🎯 Fill suggested limit price`** button and OOS benchmark summary.
+   - Per-lot `TP1` / `TP2` column and **`🎯 Target calculator`** button on the Orders list & Sell tabs to pre-fill
+     any lot's `+1.5×ATR` target directly into the swing settlement simulator.
+   - Verified by 126 unit tests across `quant_ai/tests/test_markets_*.py` (`test_markets_lot_advisor.py`
+     included) and zero-error `eslint` + `tsc -b && vite build` in `quant_ui`.
+
+### Q.11 Unified Task & Schedule Monitor Dashboard (✅ Done 2026-10-30 — `quant_ai` `a4baa2f`, `quant_ui` `ab54717`, `quant_docker` `2cf687a`)
+
+**Goal (user, 2026-10-30).** Unified system observability dashboard in personal quant UI displaying
+progress, logs, running tasks, upcoming schedules, and health across all background automation on
+the machine — bridging:
+1. **Airflow Pipelines**: All active DAGs (`daily_signal_pipeline`, `backfill_1_collect_and_match`,
+   `quant_intraday_news`, `price_history_backfill`, `quant_retail_sentiment`, `weekly_model_training`),
+   running tasks, execution durations, next schedules, step-by-step progress bars, and live task logs.
+2. **Core System Daemons**: `com.quant.ai` (:18000), `com.quant.airflow-scheduler`, `com.quant.lmstudio-server`
+   (:1234), `com.quant.disk-watch`, and Docker infrastructure containers.
+
+- **Backend API (`quant_ai/markets/task_monitor.py` + `api.py`)**:
+  - `GET /api/markets/tasks/monitor`: queries Airflow PostgreSQL metadata directly, checks port health
+    & process status, parses `launchctl list`.
+  - `GET /api/markets/tasks/log`: tails live execution logs across Airflow task instances, Airflow
+    scheduler, and `quant_ai.log`.
+- **Frontend Dashboard (`quant_ui/src/components/TaskMonitorPanel.tsx` + `Dashboard.tsx`)**:
+  - Dedicated `⏱️ Task Monitor` tab with auto-polling (10s), running status strip, pipeline breakdown cards,
+    step instance expandable views, and a full-featured dark monospace terminal modal with refresh and copy.
+
+### Q.12 Review of the 2026-10-30 suggestions, and the portfolio risk gate (🟡 started 2026-10-31)
+
+**Why (user, 2026-10-31).** A losing position was sold into strength and bought back lower two
+hours later, then added to twice while the stock was still falling: two lots 0.29 x ATR apart, one stock
+far above any sensible share of the portfolio, the chip / memory cluster almost all of it, and no cash.
+The sale realised a loss; against holding, the round trip still lost less than not trading would have:
+a smaller loss, not a gain. The adds afterwards were the problem.
+The lesson for every model here: a trade is judged against not doing it, never against the average
+cost.
+
+**Review of the suggestions made on the other machine (2026-10-30).**
+
+| Suggestion | Verdict |
+|---|---|
+| Stop daily buy-low/sell-high RL (`learn_daily`) | Agree: 2023-2026 -1.79%, DSR 0 |
+| Stop peer-spillover RL (`learn_peers`) | Pause, not refuted: the evening catch-up signal is there (IC about 0.11, top-bottom quintile about 0.65% gross); it is the assumed 0.5% round trip that eats it, and the spreads below say that is about twice the real cost on liquid names |
+| No larger action spaces, no PPO / DQN | Agree (the single LightGBM over 576 actions showed the winner's curse) |
+| Three layers: signal / position-and-risk / execution | Agree; the missing piece is layer 2 as one gate every module passes (below) |
+| "Pulse model +2.03%, DSR 0.992" | Out of date: that was CatBoost before the phantom-bar scrub; live is the 5-seed LightGBM (+1.40%, 116 trades, worst -3.18%), hurdle LightGBM in shadow. The pulse sells into the spike and buys back; it does not "catch the knife" |
+| Dip-entry spacing model | As a rule yes, as a trained model no: the per-fill figures overstate it (re-run below) |
+| Swing-lot exit model | Display only: lots are fungible (selling the cheapest lot or the dearest sells the same shares), so "take profit on the cheap lot" is "reduce after a rebound", which `learn_daily` found loses to holding on these names |
+
+**Checks run on 2026-10-31.**
+
+1. *Pulse release minute (fixed, `quant_ai` `markets/pulse.py`).* STX 2026-10-27: the closing cross
+   moved the quote +0.6% at 16:00:22 and the watch took that as the release; the wire came at
+   16:05 (-3.5%), so the r+1 / r+3 / r+5 placements were five minutes early. In the first three
+   minutes after 16:00 a release now needs 2% (INTC 2026-07-23 moved 4.8% at 16:00: still caught).
+2. *Dip entry re-run (daily bars, 102 stocks; script kept in the session scratchpad).* Drops of
+   >= 2 x ATR: 2,593 since 2016, 899 in 2023-2026; another >= 1 x ATR within three sessions 47%
+   (2023-2026). A buy at the close or a limit k x ATR lower (five sessions to fill), out at
+   +tp x ATR or after 15 sessions, 0.05% a side; chosen on 2016-2022, reported on 2023-2026:
+
+   | k (limit below the close) | fill | per fill | **per signal** | same rule on random days |
+   |---|---|---|---|---|
+   | 0 (buy at the close), tp 3 | 100% | +1.34% | **+1.34%** | +1.30% |
+   | 0.5, tp 3 (best on 2016-2022) | 75% | +2.18% | **+1.64%** (t 3.1 by date) | +0.98% |
+   | 1.5, tp 2 (Q.10's rule) | 39% | +1.89% | **+0.74%** | +0.49% |
+
+   Spacing raises the gain per fill, as Q.10 said, but lowers it per signal (most limits never
+   fill); buying right after a drop is no better than buying on any day of a rising market. The
+   spacing rule stays, for risk (no clustered adds), not as a source of return. After such drops
+   the high reached +1.5 x ATR within 15 sessions in 61% of cases and +2 x ATR in 50%.
+3. *After-hours spreads (Alpaca SIP quotes, 60 random report evenings since 2025).* Median full
+   spread: 0.05% at 15:00, 0.25% five minutes after the release, 0.22% at +20 min, 0.19% at
+   +60 min, 0.15% at 19:30 (75th percentile 0.43% at +5 min); INTC 0.10% at +5 min, then 0.05%.
+   A market order pays about half the spread, so the 0.25% a side assumed in the pulse and the RL
+   is conservative (roughly 2x) for liquid names. Next: per-stock measured costs, then re-judge the
+   peer-spillover policy with them.
+
+**The gate (`quant_ai/markets/risk_rules.py`).** Fixed rules, not learned, checked on every order
+before it is shown: a sale within the whole shares held; a buy within the cash; no stock above
+`RISK_MAX_SYMBOL_PCT` (30%, placeholder) of holdings + cash and no chips / memory cluster above
+`RISK_MAX_CLUSTER_PCT` (70%, placeholder); no buy before a >= 2 x ATR drop has stabilised; a buy at
+least 1.5 x ATR below the cheapest open lot (2 x with a high-impact event within 7 days). Each block
+says why. Wired into today's action (Q.13); the pulse (sales and buy-backs only) and the advisor's
+add orders are next.
+
+- [x] Pulse release fix, dip re-run, spread measurement, the gate with tests (2026-10-31)
+- [x] Targets set with the user (2026-10-31): cash at least 10% (`RISK_MIN_CASH_PCT`; a buy must
+      leave it, and it is listed as a breach), chips / memory at most 70%, one stock at most 30%.
+      With no cash the dip rules could never act; the measured edge of the pulse (+1.4% a trade, a
+      few trades a year) is far smaller than what concentration costs (a 10%-ATR stock carrying a large share of
+      the portfolio moves the whole of it several percent on an ordinary day)
+- [x] The user's own trades scored against not making them (below)
+- [ ] Advisor add orders through the gate; pulse orders annotated with it
+- [ ] Per-stock measured after-hours costs; re-judge `learn_peers` with them
+- [x] Quick PEAD test on daily bars (2026-10-31, below)
+- [x] Sell the rebound, buy back lower, against holding (2026-10-31, below)
+- [x] `learn_peers` rebuilt with the measured costs (0.125% a side after hours, 0.025% regular;
+      EP_DIR `/Volumes/Data4T/earnings_policy_realcost`, MLflow `action_rl_peers_realcost`,
+      2026-10-31): still nothing. No cash: 125 trades on 2023-26 at +0.03% (se 0.19), DSR 0.000;
+      with cash: 2 trades on 2023-26. Halving the cost did not make the peer spillover pay; dropped
+
+**Agreed order (user, 2026-10-31).** 1) the user reviews the pilot holding's Action column and the targets above;
+2) score the user's own trades; 3) re-judge `learn_peers`, quick PEAD test; 4) everything else
+(call-transcript features, volume-based stabilisation, an execution bandit for daily orders) waits
+until `daily_actions` holds one to two months that can be compared with doing nothing. Not pursued:
+
+**The user's own trades against not making them (2026-10-31).** Every trade recorded since the
+holdings were entered (11 trades in ten days), each marked at the 10-30 close: a sale gains
+`q x (sale - now)`, a buy `q x (now - buy)`; the sum is exactly the difference from having done
+nothing. In total the trades came out ahead of doing nothing (losses avoided, not profits). Eleven
+trades in ten days decide nothing about skill. What can be read: the sales into strength cut the
+losses, the adds while falling gave some of that back. The large losses came earlier, from repeated
+adds while prices fell, and those lots were entered without their dates, so they cannot be scored
+until the broker statement is.
+
+**PEAD, quick test (2026-10-31).** 3,865 reports, 100 stocks, 2016-2026; entry at the reaction
+day's close; returns in excess of SPY and then of the same stocks' random days (control, 3,967 days;
+the control itself beats SPY by +1.1% over 20 sessions in 2023-26 — the universe is today's large
+caps), t clustered by week:
+
+| 2023-26 | n | 5 sessions | 20 sessions | 60 sessions |
+|---|---|---|---|---|
+| Hold after a gap <= -5% | 355 | -0.65% (t -1.8) | **-1.15% (t -2.2)** | -1.62% (t -0.6) |
+| Hold after a gap <= -10% | 144 | -0.46% | -1.10% (t -2.1) | -0.72% |
+| Buy after a gap >= +5% | 379 | +0.04% | +1.21% (t 0.7) | +0.53% |
+| Buy after a gap >= +10% | 181 | +0.34% | +2.85% (t 1.8) | +2.23% (t 1.3) |
+
+The same signs in 2016-22 (gaps -5..-2%: -1.71% over 20 sessions, t -2.8; above +10%: +0.62%, t
+1.3). Read: after a bad report a stock lags for about a month, by about 1% — real but small next to
+INTC's 10.6% daily ATR, and gone by 60 sessions; after a very good one the drift is larger but not
+significant. It supports reducing after a gap down rather than adding, nothing stronger. Per stock
+the samples are too small (INTC: 17 gaps <= -5%).
+
+**Sell the rebound, buy back lower (2026-10-31).** The user's round trip (sell into a rebound, buy back
+lower) avoided some loss; is it repeatable? After the 2,534 drops of >= 2 x ATR (876 in 2023-26, 711 on report days): a
+sell limit at close + s x ATR (15 sessions), then a buy-back at the sale - b x ATR until session T,
+else T's close; 40 variants (s 0.5-2, b 0.5-3, T 20 / 40). Chosen on 2016-22 (s 1, b 0.5, T 20,
++0.12% a signal) it gave **-0.10% on 2023-26 (t -0.0)**; the best in hindsight +0.11%; report-day
+drops -0.15%. Larger b and longer T lose more (the stock is not there to buy back). On random days
+the same orders lose -0.9% to -1.9% a signal (t -3.6 to -4.5), what `learn_daily` found. The 10-29
+trade was the stock carrying on down after its report, not a repeatable rule: the Action column
+keeps trims as reductions and adds no buy-back. `scratchpad q10/swing_back.py`, `pead/pead.py`.
+
+**Infrastructure, 2026-10-31 evening.**
+*Data4T incident.* Between 19:17 and 19:26 every container whose data lives on the external disk
+(`/Volumes/Data4T/docker-volumes`) lost it at once: mysql8 crashed, airflow-postgres PANICked ("Not a
+directory"), mongo6 aborted, mlflow could not open its sqlite file; the host walk-forward writing to
+the same disk died at 19:35 without a traceback. The files were intact on the host; Docker Desktop's
+share of the disk had gone stale (`mkdir /host_mnt/Volumes/Data4T: file exists` on every start).
+Restarting containers does not help; restarting Docker Desktop does, and the databases recovered on
+their own (InnoDB / WAL crash recovery). Likely the disk hiccuped under the heavy parquet I/O.
+
+*MySQL retired.* Three databases were one too many. mysql8 held only Keycloak (realm re-imported
+from `quant-realm.json` on every start anyway) and the GDELT batch queue (`workflow`: two tables,
+~6,000 rows); quant_api had the MySQL driver and a datasource but no SQL at all. Now:
+- Keycloak on PostgreSQL (`keycloak` DB and role in airflow-postgres). The image's entrypoint sources
+  a baked-in `.env` with `KC_DB=mysql`, so compose overrides the entrypoint with the same two steps.
+- The batch queue in PostgreSQL (`workflow` DB and role): the two tables copied (counts match),
+  `historical_collector.py` ported (`ON CONFLICT DO NOTHING`, `make_interval`, `RealDictCursor`,
+  psycopg2 lock errors); `TASKDB_*` / `USE_DB_BATCH_QUEUE` / `TASK_TABLE`, the old `MYSQL_*` names
+  still read. Exercised end to end on a scratch table. Note: a batch now turns `failed` on its third
+  failure, as `retries+1 >= 3` reads; MySQL's left-to-right `SET` made it the second.
+- quant_api: JDBC starter, MySQL driver and datasource removed (10 tests pass).
+- quant_api `POST /api/auth/refresh`: tokens are issued by `http://quant_keycloak:8080`, and Keycloak
+  refuses a refresh on any other address, so the browser's refresh on :18082 had always failed
+  (the 5-minute access token simply lapsed); quant_ui now refreshes through quant_api.
+- mysql8 stopped and removed from compose; its data stays at `docker-volumes/mysql_data`, dumps in
+  `docker-volumes/backup/mysql-2026-10-31` and `~/Quant_trade_db_backups/mysql-2026-10-31`.
+
+### Q.13 Today's action per holding and watchlist stock (🟡 pilot on one holding, 2026-10-31)
+
+**Goal (user, 2026-10-31).** Every holding and watchlist stock gets one action for the day. First
+one holding only; the user judges the result before it goes wider.
+
+**Design (`quant_ai/markets/daily_action.py`, `GET /api/markets/portfolio/daily-action`; `quant_ui`
+column "Action" in My Holdings).** The three layers in one line: a tested signal or a rule makes an
+action, the gate sizes it, the limits come from ATR. The first that applies:
+
+| Action | When | Basis |
+|---|---|---|
+| Earnings | the stock reports tonight or before the next open: the pulse watch runs, no buys | tested (pulse champion) |
+| Trim | above the symbol cap: the excess in two limits at +1.5 and +2 x ATR, good 15 sessions | rule + the rebound statistics above |
+| Add | a buy every rule allows | rule |
+| Hold | otherwise; what blocks a buy is listed | default |
+
+Each day's answer is kept (`daily_actions` in markets.db) to be scored against doing nothing.
+
+*First answer (2026-10-31):* trim into a rebound in two limits at +1.5 and +2 x ATR, since the
+holding was above the 30% cap; buys blocked (not stabilised, spacing, no cash, the chip / memory
+cluster above its limit).
+
+- [x] Backend, tests, the column for the pilot holding (2026-10-31)
+- [ ] Score the kept answers against doing nothing
+- [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
+
+### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1, 2, 4, 6, tests A1-A4 and the action's risk plan done 2026-11-02; 3 partly; 7 needs live months)
+
+The 2026-11-01 review of every model (factor ranking, earnings pulse, lab, action RL, risk gate,
+RAG) gave these next steps. They are ranked by what they can change per day of work. The
+strength to keep is the evaluation layer: walk-forward, DSR, bootstrap CIs and t-tests on
+overlap-adjusted samples, with the negative results kept. The weak point is evidence: small
+samples, assumed costs, and a survivor universe.
+
+- [x] 1. **Re-run the pulse champion at the measured cost.** ✅ 2026-11-02: already stricter than measured — the weekly refresh trains at `PULSE_COST_PCT=0.25` a side plus 0.05% fill-through (`_strict`), twice the 0.125% spread; the note below predates it. New finding: the champion `lgbm_seeds` has DSR 0.712 (< 0.95), the shadow `hurdle_lgbm` 0.961 — the shadow is the one that survives the multiple-testing deflation.
+      Original note: training assumes `PULSE_COST_PCT`
+      0.10% a side after hours; the measured spread is 0.125% (Q.12). The peer spillover died of
+      cost alone. Re-judge `lgbm_seeds` (+1.40%, 116 OOS trades, t 4.89, worst -3.18%) and
+      `hurdle_lgbm` at 0.125% before trusting the headline. One parameter; largest possible change.
+- [x] 2. **Fitted weights for the factor scorer.** ✅ 2026-11-02 (`quant_data/research/backtest/factor_lab.py`,
+      top 5 every 20 sessions, the backtest's costs, selection 2019-01..2025-10 = 86 rebalances). The hand
+      weights ranked no better than chance: mean 20-day rank IC -0.0005 (NEUTRAL) / -0.007 (regime), Sharpe
+      0.79 / 0.83 against 0.88 for buying the whole universe equally. A ridge refitted at each rebalance on
+      past sessions reached IC 0.049 (t 2.62), Sharpe 0.97, +7.8%/yr over the universe (t 1.52, not
+      significant), DSR 0.989 (0.847 on the excess). Live since 2026-11-02: `score_daily_signals.py` reads
+      `research/signals/fitted_weights.json` (`SIGNAL_WEIGHTS=hand` restores the old dicts). Only features
+      filled on >= 30% of rows and half the sessions are weighted: retail_sent_score (from 2025-12),
+      analyst_buy_ratio (2026-03) and ah_gap (2026-05) had taken the largest weights from a few months of
+      data. Also found: `backtest_portfolio.py` never switched regime (it did not load the macro columns), so
+      the 0.58 reference was NEUTRAL weights throughout.
+      Original note: The hand-weighted regime scorer lost 0.074 net
+      Sharpe when syndicated news was deduplicated (M.12), while the fitted models moved by less
+      than 0.005 IC. Fit each regime's weights walk-forward (ridge or constrained regression)
+      instead of fixed weights such as `news_burst_20d` 0.9; compare net Sharpe and drawdown
+      against today's 0.58 / -39.6% (20d).
+- [~] 3. **Overfitting defences (M.5) and survivorship.** 🟡 2026-11-02, partly: an untouched final holdout
+      (2025-11..2026-10, 12 rebalances) is reported once in factor_lab.py and chose nothing; DSR counts the
+      four scored variants. In it no variant beat the universe (fitted -9.8%/yr, fitted by regime -0.4%, hand
+      -22% / -37%; 12 periods, t within +/-1.6). Survivorship is now measured rather than assumed: today's
+      102 names bought equally made Sharpe 0.88 against SPY's 0.66 in 2019-2025, so every factor result is
+      reported as excess over that universe. A point-in-time universe is not built: it needs historical
+      index membership and the prices of delisted names, which yfinance does not carry.
+      Original note: Keep an untouched final holdout; report
+      DSR for the factor model as the lab does. Build the universe point in time: today's large caps
+      bias every test (in the PEAD test even the random-day control beat SPY by +1.1% over 20
+      sessions in 2023-26).
+- [x] 4. **Fill-probability (first-passage / survival) model.** ✅ 2026-11-02 for the trim limits
+      (`quant_data/research/models/drop_rebound.py`, 2,455 drops of >= 2 x ATR, 102 stocks, 2016-2026,
+      walk-forward 2019-2026). LightGBM on 17 features (AUC 0.58-0.60) was over-confident and lost to the
+      pooled rate on Brier; logistic and an earnings x size x market table did no better. What wins at
+      every level, in 5-7 of 8 years: the rate split by cause. +1.5 / +2 x ATR reached in 15 sessions:
+      earnings drops >= 4 x ATR 39% / 28% (193), other earnings drops 50% / 36% (509), no report 65% / 54%
+      (1,753) — the action quoted 61% / 50% for all. Unfilled, the close 15 sessions later averaged
+      -4.3 to -6.3% vs selling at the next open. Picking the limit per drop by model lost 0.16% vs the
+      fixed pair (CI crosses 0), so the pair stays. Live in `daily_action.REBOUND` (cause from the
+      Nasdaq calendar; `lot_advisor._last_big_drop`).
+      Tests from the 11-01 reading list, same script: **A2** overnight vs intraday: +0.051% vs +0.049% a
+      day, after drops +0.05% vs -0.01% (CIs cross 0) — no reason to prefer the open or the close.
+      **A3** session before an after-the-close report: +0.149% vs +0.099% other sessions (CI crosses) —
+      no pre-report run-up in this universe. **A4** volatility-managed exposure per stock (1/sigma,
+      1/sigma^2): median Sharpe 0.578 / 0.546 vs 0.602 held, t -1.59; max drawdown -55.5% vs -60.6% —
+      no return gain, only a little less drawdown, so the fixed caps stay.
+      Original note: the phantom-bar scrub (Q.6, round
+      two) showed about half of CatBoost's +2.03% came from fills that could not have happened.
+      Estimate "does it fill" apart from "what it makes if filled". This feeds the hurdle models.
+- [ ] 5. **No more neural networks for now.** With ~2,490-3,835 reports, gradient-boosted trees
+      are the right tool: the 1D-CNN found no variant within the risk limits on its own, and PPO /
+      DQN were rejected (winner's curse over 576 actions). If tried later: MiniRocket (planned,
+      not implemented), or self-supervised pre-training on all 1-minute bars, then fine-tuning.
+- [x] 6. **RAG.** ✅ 2026-11-02, measured before spending the 20 hours (`quant_ai/eval/chunk_ablation.py`):
+      the 60 evaluation queries' judged pools (2,487 pairs, qwen3.8-27b rubric v3) re-ranked by the
+      query's cosine to title + lede (the index today) or to the best ~400-token chunk of the whole body.
+      nDCG@10 0.760 -> 0.773 (+0.013, 95% CI -0.010..+0.036, t 1.11; 25 queries better, 16 worse),
+      strict P@10 0.710 -> 0.723. Paraphrase queries gained (0.461 -> 0.531), temporal lost (0.807 ->
+      0.755). Not significant, and a third of the reranker's +0.076, which already reads the bodies; the
+      title + lede index stays and the 20-hour chunked re-index is not run. (A re-ranking of judged
+      documents: it cannot show first-stage recall of articles whose relevant part is deep in the body.)
+      Original note: Only 30.2% of articles fit 512 tokens, and the index holds title + lede.
+      Chunk and index long bodies; try query rewriting. Keep Claude as the judge, since the local
+      judges are not reliable (R.11).
+- [x] **Action: risk plan (2026-11-02).** The daily action had no return forecast that earned a place
+      (the factor score ranked the user's holdings no better than chance, item 2), so it now uses a
+      risk model the way a desk's optimiser does with zero alpha: `quant_ai/markets/optimizer.py` sells
+      each stock's excess over 30%, then takes what the chip cluster is over 70% and cash under 10% in
+      $50 steps from the holding with the largest marginal variance (6-month covariance, 20% shrinkage).
+      On 2026-11-02 the plan cut the portfolio's volatility by about a third, two holdings carrying
+      almost all of the risk; trims are sized by the plan.
+- [ ] 7. **Live evidence first.** Once `daily_actions` holds one to two months, score it against
+      doing nothing (Q.13). That is the only test of the advice itself and outranks any new model.
+
+### Q.15 Exit a losing concentrated holding, and the rules that would have kept it small (🔴 recorded 2026-11-02, user's request)
+
+**The case.** A large holding fell about 30% after a results beat with a weak outlook. Causes in the
+news store: a scare about the company's foundry role, a sector sell-off ahead of the report, then the
+guidance. The user added twelve times on the way down, three of them after the report. Replayed on the
+daily bars, the add rules now in `risk_rules.gate` would have allowed only the first: seven were
+0.1-0.8 x ATR apart (the rule wants >= 1.5, 2.0 within 7 days of a report), two came while the stock
+fell 1.9 x ATR in 3 sessions, and the three after the report broke the falling, report-day and
+guidance rules together. After 193 earnings drops of >= 4 x ATR (102 stocks, 2016-2026) the price was
+back above the pre-drop close within 60 / 120 / 250 sessions in 29% / 49% / 73% of cases, and 46%
+above the drop-day close within 250 sessions in 37%.
+
+- [ ] Q.15.1 **Why it fell, on the action.** For a holding down >= 2 x ATR or 5% in a day, retrieve the
+      news (hybrid search_news) and state the cause with sources, classified: guidance / results,
+      sector sell-off, macro, company news, none found. The cause feeds the reach rates (A1) and the
+      add rules below.
+- [ ] Q.15.2 **Add planner (averaging down): when, at what price, how many.** Allowed only when stabilised, >= 1.5
+      x ATR below the lowest lot (2.0 within 7 days of a report), not in the week before a report, not
+      for N sessions after a guidance cut (N to be measured on the post-earnings drift), and sized so
+      the stock stays under 30% and the portfolio's bad day under the loss budget. Show the next
+      allowed price and size, or why none.
+- [ ] Q.15.3 **Recovery plan (getting back to break-even) per losing holding.** Together, with each part's odds:
+      (a) rebound tranche sells (in the action since 11-02: 39% / 28% reach after such a drop);
+      (b) **profit offset (the user's idea)**: when another holding is sold at a gain G, sell the losing
+      one so its realised loss is X% of G (X = 30% proposed). Measured on the position at the time it is slow:
+      clearing the whole loss needs gains far larger than any single sale is likely to produce, and the
+      other holdings were below cost, so it had nothing to work with yet;
+      (c) optional swing of the recent cheap lots on rebounds — no tested plan has beaten
+      holding (Q.5 advisor), so labelled as such; (d) the base rates above, so "wait for breakeven" is a
+      known 1-in-3 bet over a year, not a plan. Decisions are on the position's risk from today, not
+      on its cost.
+- [ ] Q.15.4 **Profit-offset engine**: watch the other holdings; when one gains (above cost + a
+      threshold), propose the paired orders (sell part of the winner, sell the loser for X% of the gain) in
+      the action, and score them against doing nothing (daily_actions).
+
+### Q.16 What to do with each name: enter, take profit, stop loss, hold (🟡 recorded 2026-11-02, user's request)
+
+The user wants, per holding and watchlist name: which can be entered now, which to take profit on,
+which to cut, which to hold, and whatever news and events can add. Every rule is tested on the
+102-stock history (walk-forward, net of cost, against doing nothing and against the universe) before it
+shows; a rule that does not beat holding is shown as such or not at all. What the 11-02 work found
+sets the expectation: direction forecasts did not beat simple averages (Q.14), risk and fill rates did.
+
+- [ ] Q.16.1 **Take profit**: trailing exits (give back X% of the peak gain, or k x ATR from the high) and
+      partial profit-locking — would have fired on SKHY at +$450 (10-28) and STX at $718 (10-29).
+- [ ] Q.16.2 **Stop loss / cut**: k x ATR below cost or the entry, time stops, and "cause = guidance cut"
+      exits; measured against holding on the drop events (drop_rebound.py).
+- [ ] Q.16.3 **Entry**: watchlist names that pass the add rules (stabilised, spacing, no report within 7
+      days) with the fitted factor score (IC 0.049) as a tie-break, not as a forecast.
+- [ ] Q.16.4 **Hold**: the default, with the loss budget and the next event shown.
+- [ ] Q.16.5 **News and events as features**: cause of each move (Q.15.1), event calendars (Q.8), the
+      sentiment store; tested as features in the drop / fill models rather than read as signals.
+- [ ] Q.16.6 Real-time alerts (phone) when one of the above fires.
+
+**2026-11-02 first build and the plan after it.** `daily_advice.py` (LightGBM quantiles + P(up), MLP
+challenger, 102 stocks x 2016-2026, 5 / 20 / 60 days) found no direction skill (20-day IC 0.004, t 0.5;
+"reduce" days did better than "hold" in 2023-2026; excess-return targets no better), so the action
+shows hold, calibrated odds and ranges, the news causes and the add rule. What the literature and
+practice suggest instead (sources in the 11-02 session notes): ML return prediction is weak per stock
+(Gu-Kelly-Xiu: monthly R2 ~0.4%) and pays through breadth; LLM scores of individual headlines predict
+the next days' returns (Lopez-Lira-Tang; Chen-Kelly-Xiu); drift continues after bad earnings / guidance
+as analysts revise (PEAD); option skew and put-call volume (Xing-Zhang-Zhao; Pan-Poteshman) and short
+interest / days-to-cover (Boehmer et al.) carry informed trading; stops add value only when losses have
+momentum (Kaminski-Lo); pre-set limit orders curb the disposition effect (Odean). Order of work:
+
+- [x] Q.16.7 ✅ 2026-11-02 (`quant_data/research/models/barrier_model.py`, live in the action as "Getting out"):
+      walk-forward multiclass LightGBM per barrier set. 5 sessions (+1 / -1.5 x ATR): beats the base rate
+      (Brier 0.6287 vs 0.6326; P(lower first) sorts 21% -> 30% across fifths), calibrated and shown. 20 and
+      60 sessions: worse than the base rate, so the situation rates are shown instead. Managing with both
+      barriers against holding to the time limit, out of sample: 20 sessions, 30%+ under the high after
+      bad news (4,758 cases) +0.6% vs +2.1% mean, worst 5% -14% vs -18%; 60 sessions +3.0% vs +6.8%, -23% vs
+      -37% (holding flattered by a survivor universe). The action sizes the position so the worst 5% with
+      the stop fits the loss budget.
+      Original note: Ask which
+      comes first from today: a rebound to +u x ATR (a sell level), a fall to -l x ATR (a stop), or the
+      time limit; P(each) per horizon, walk-forward, judged against the pooled and grouped base rates
+      (which beat ML on the 11-02 fill test) and on deep-drawdown days.
+- [x] Q.16.8 ✅ 2026-11-02 (`news_events.py`): 880k articles placed on the first tradable session; excess
+      returns vs all days (t clustered by date): guidance cut 20d -1.61% (t -4.4), 60d -2.35% (t -3.6);
+      bad earnings news 20d -0.76% (t -5.0); high-impact bad news 20d -0.50% (t -3.4); upgrade 20d +0.46%
+      (t 2.9); a 5%+ fall without bad news 20d +1.11% (t 3.0), 60d +3.12% (t 4.2); bad news on a 5%+ fall
+      20d -0.66% (t -1.2). The title rule for "guidance raise" misfires (it trails too) and is not used.
+      Features for Q.16.7; the guidance-cut line is on the action.
+      Original note: Each article of the 880k store scored by its
+      own sentiment / event type and time; forward returns from the next session by type (guidance cut,
+      downgrade, results, sector, macro); features for Q.16.7 and a line on the action ("after news like
+      this, stocks went on X% over 20 days").
+- [x] Q.16.12 ✅ 2026-11-02 **Scheduled events ahead** (`calendar_events.py`; FOMC dates from the Fed's calendars
+      2016-2027): SPY 2016-2026 — options-expiration week -0.09% a day vs others (t -2.2); with an FOMC
+      decision within 5 sessions SPY made +0.05% over 5 days vs +0.32% otherwise; FOMC day / eve, jobs day,
+      turn of month, pre-holiday not significant (the pre-FOMC drift has faded since its 2012 publication);
+      stocks the session before their report +0.16% over SPY (t 3.2). As model features: the 5-day barrier
+      model's Brier 0.6287 -> 0.6271 (kept), the 5-day direction model unchanged (IC 0.004 -> 0.003). On the
+      action as "Coming up", with these figures.
+- [~] Q.16.9 🟡 2026-11-02 collection started (`collectors/market/options_analyst_snapshot.py`, DAG
+      `market_snapshots` weekdays 21:15 UTC): per stock (102 + holdings) the option chain's ATM / 10%-OTM
+      implied vols (Black-Scholes from the mid), skew, straddle %, put / call volume and open interest for
+      the first expiries >= 5 and >= 25 days, and Finnhub's monthly rating counts and surprises (price
+      targets, rating changes and estimates are paid tiers). To be tested once months have accumulated.
+      Original note: **Institutional data**: analyst estimate / rating revisions (Finnhub), short interest and
+      days-to-cover (FINRA / Nasdaq), option skew and put-call volume (Nasdaq chain; no free history, so
+      a daily snapshot starts now).
+- [ ] Q.16.10 **Breadth**: rank all 100+ names daily for entry / rotation ("what to own instead of a weak holding"),
+      rather than timing one stock.
+- [ ] Q.16.11 **Pre-set take-profit / stop orders** at entry from the barriers, against the disposition
+      effect (gains that were not taken; a holding averaged down eleven times).
+
+---
+
 ## R. AI at Scale — RAG depth and MCP depth
 
 **Why this section exists, and why it outranks most of what is below it.**
 
-Interview feedback, 2026-07-28 (eBay, "AI/ML Agent Engineer, backend focus"). The
-recruiter's summary: positive attitude, but the interviewers "expected more knowledge of
-relevant concepts and technical depth", and specifically "more experience with AI at
-scale, particularly using tools like RAG and MCP". The language chosen for the technical
-round was Java.
-
-Checked against what is actually built, that feedback is precise and largely fair. It
-splits into two very different problems:
+An audit on 2026-07-28 asked how deep the platform's RAG and MCP really go — at scale, not
+as a demo. Checked against what is actually built, the answer splits into two very different
+problems:
 
 **MCP has breadth without depth.** `quant_ai/mcp_server.py` is 318 lines: ten read-only
 tools, three independent clients (Claude Desktop, Codex, quant_ai's own agent). The
@@ -1922,16 +3624,15 @@ Meanwhile **845K company-matched news articles sit in MongoDB with zero embeddin
 F.2's claim that "Qdrant already deployed" is stale — there is no `qdrant` service in
 `docker-compose.yml` and never has been.
 
-So the gap is not ignorance of RAG. It is that the single rarest asset in a RAG
-interview — a large, real, domain-specific corpus with timestamps and entity labels — has
-been sitting here unindexed while the demo ran on four README-sized files. "I built RAG"
-survives one follow-up question and then collapses.
+So the gap is not ignorance of RAG. It is that the single rarest asset for RAG work — a
+large, real, domain-specific corpus with timestamps and entity labels — has been sitting here
+unindexed while the demo ran on four README-sized files. A RAG layer built that way does not
+survive the first question about scale.
 
 **One existing asset makes this cheaper than it looks.** The MongoDB text indexes with
 field weights, built for I.6 `search_news`, are already a working sparse retriever. Adding
 a dense leg turns them into genuine hybrid retrieval with reciprocal-rank fusion — which
-is both the better architecture and the more interesting answer, since most candidates can
-only describe pure vector search.
+is both the better architecture and a step past the common pure-vector-search default.
 
 ---
 
@@ -2122,7 +3823,7 @@ sweep against a labelled set.
 
 ---
 
-### R.3 Reranking
+### R.3 Reranking ✅ Done 2026-10-13
 
 **Goal**: retrieve top-100 by fusion, rerank to top-10 with a cross-encoder, serve the
 reranked set to the LLM.
@@ -2184,7 +3885,7 @@ enabled/candidates/max_len/ms. A reranker that cannot load falls back to the fus
 
 ---
 
-### R.4 Retrieval evaluation harness — the item that actually answers the feedback
+### R.4 Retrieval evaluation harness ✅ Done
 
 **Goal**: numbers. `recall@k`, `MRR`, `nDCG@10` on a held-out labelled query set, reported
 per retrieval configuration: sparse only, dense only, hybrid, hybrid + rerank.
@@ -2269,7 +3970,7 @@ v2 spells out the 1/2 boundary: the opposite outcome (strong guidance for a "wea
 query) is 1; word overlap, market-research reports and stock promotion are 0; a bare name query
 is answered by a document mainly about it. It was chosen over fact extraction because its
 distribution matches the reference while extraction over-awards grade 2. The same day,
-extraction *won* for the job-matching judge (job_agent) — which judge works is a measurement
+extraction *won* for a different document-matching judge — which judge works is a measurement
 per task, not a rule. The production re-judge (`judge_pool.py --llm`, 4 workers, no response
 prefill) reached **kappa 0.67**; its errors are one grade low, never a 0 graded relevant.
 
@@ -2341,6 +4042,64 @@ Still owed: human labels for judge-vs-human kappa (`judge_pool.py --human --samp
 
 ---
 
+### R.5 Authentication and authorization, phases 1 and 2 (2026-08-03)
+
+**The finding.** `SecurityConfig` ended with `.anyRequest().permitAll()`. Three path
+patterns required a token; everything else was open, including
+`/api/portfolio/holdings`, which served personal financial data unauthenticated. The JWT
+infrastructure was configured and enforcing almost nothing — the worst of the two states,
+because it reads as protected. Measured before: `GET /api/portfolio/holdings` with no
+token returned **200**. After: **401**.
+
+**The order of work is the design.** quant_ai sent no credential at all and six of eight
+UI modules sent none either, so tightening the server first would have broken every page
+and every MCP tool simultaneously. Phase 1 made both carry a token while the server still
+permitted everything; phase 2 flipped the default. Adding the credential before requiring
+it is the only sequence with no broken window in the middle.
+
+| principal | read | write |
+|---|---|---|
+| no token | 401 | 401 |
+| `quant-ai` service account | 200 | **403** |
+| `user` / `admin` | 200 | 200 |
+
+**Why read and write are split.** quant_ai holds a service-account credential broader than
+any single user's — the confused deputy. It cannot be removed until on-behalf-of exchange
+lands (R.5c), but its blast radius can be: the service account has `quant-read` and not
+`quant-write`, so an injected agent can read the platform and **cannot record a trade**.
+
+**`KeycloakRealmRoleConverter` is not boilerplate.** Spring's default converter reads
+`scope`; Keycloak puts realm roles under `realm_access.roles`. Without the converter the
+roles are in the token, invisible to the rules, and every `hasRole` fails closed — which
+looks exactly like a permissions bug.
+
+#### Three mistakes worth keeping, because each was caught by a different kind of evidence
+
+1. **Granting write to the service account.** The first role assignment put `quant-write`
+   into `default-roles-quant`, which service accounts also hold — handing the agent the
+   exact capability the split exists to deny. The admin API returned `204` three times.
+   Caught by **decoding the issued token**. *Role assignment is not confirmed by the API
+   accepting it; it is confirmed by the claim appearing in a token.*
+
+2. **Shipping a UI that could not authenticate.** The phase 1 UI change was committed and
+   never built into an image, so the browser ran a bundle with no `Authorization` header
+   against an API that had just started requiring one. Every page failed. This is the
+   drift documented one section below, repeated on the next service within the hour.
+   Caught by **the error text**: `Failed to fetch signals` is the pre-migration string, so
+   the message itself proved the old bundle was running.
+
+3. **Read granted to no human.** `quant-read` lived only in `default-roles-quant`, and the
+   `admin` user was never assigned that composite — only the `admin` role. Service
+   accounts get the default composite automatically, so quant_ai worked and every human
+   got 403. API-level testing missed it entirely because the one principal it exercised
+   was the only unaffected one. Caught by **the user opening the browser**. The listing
+   `admin -> ['quant-write']` had already been printed and read past.
+
+The through-line: each layer needs evidence from that layer. A 204 is not a token, a
+commit is not a deployment, and a passing API test is not a working UI.
+
+---
+
 ### R.6 MCP protocol depth — beyond tools
 
 **Goal**: exercise the parts of MCP that `@mcp.tool()` never touches.
@@ -2397,7 +4156,7 @@ answerable with a measured number from this platform rather than a general princ
 
 ---
 
-### R.9 What to be able to answer
+### R.9 Acceptance checklist — what the R-series must be able to explain
 
 Not a build item — the checklist R.1–R.8 exists to make answerable. If any line here still
 needs hedging after the work is done, the work is not done.
@@ -2807,1084 +4566,6 @@ Verified against the redeployed API and over the real MCP protocol. 26 tests in 
 
 ---
 
-## P. Portfolio Holdings
-
-> **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
-> (`quant_ai/markets/`, SQLite), moved there from job_agent's dashboard together with global
-> markets and the daily briefs — see **Q.0**, **Q.8** (3-layer upcoming catalysts modal),
-> **Q.9** (per-stock order status & swing lot allocation manager), and **Q.10** (ATR dip-spacing & swing-lot exit advisor). The `quant_api` / MySQL holdings below are
-> deprecated; `get_my_holdings` / `get_my_transactions` read quant_ai first and fall back to them.
-
-### P.1 Manual holdings tracker
-
-**Goal**: Record what is actually held. Everything the platform currently calls a "position" is synthetic — `track_positions.py` mechanically opens the day's top-5 signals and closes on rule triggers. That is a strategy simulation, not a portfolio, and there is nowhere to say "I own 10 NVDA from 2026-05-12".
-
-**Data**: a `portfolio_holdings` collection — symbol, quantity, entry price, entry date, note, open/closed — plus an optional cash balance, so a weight is a share of total capital rather than a share of whatever happens to be invested.
-
-**Surface**:
-- `quant_api` — CRUD endpoints under `/api/portfolio/holdings`
-- `quant_ui` — a holdings page with a table and free-form add / edit / close
-- `mcp_server.py` — a read-only `get_my_holdings` tool, which makes the portfolio visible to Claude Desktop, Codex, and quant_ai's agent at once
-
-**Why first**: both F.17 and G.1 depend on it. Neither position sizing nor a "≤5% per position" guardrail means anything measured against a portfolio nobody owns.
-
-**Handling**: holdings are personal financial data. They stay in the local database and must never reach a seed file, a test fixture, or a commit.
-
-**Delivered (2026-07-26)**
-
-- `HoldingService.replay()` is a pure fold over the trade log, extracted specifically so
-  the money maths is testable without a database or a quote provider. 10 unit tests:
-  weighted average across mixed buys, realised P&L priced against the average *at the
-  time of the sale* (folding from the end state gets this wrong), sell leaving the average
-  untouched, full exit then re-entry starting fresh, overselling capped and flagged rather
-  than producing a negative position.
-- `QuoteService` caches Finnhub quotes for 20s. The free tier is 60 requests/minute and
-  serves one symbol per call, so a page polling 20 symbols every 5s would be rate-limited
-  immediately; the UI polls the cache instead and only a miss reaches Finnhub. Off-hours
-  the TTL stretches to 15 minutes since prices are not moving. On failure or a missing
-  token it serves the last `stock_prices_history` close tagged `source: daily-close`, and
-  the UI labels it — a stale number presented as live is worse than an honest close.
-- `IllegalArgumentException` now maps to 400/404 in `ApiExceptionHandler`; without it the
-  hand-rolled input checks surfaced as 500s with no actionable message.
-- MCP gained `get_my_holdings` and `get_my_transactions` (8 tools total). Because the
-  server is the tool contract, Claude Desktop, Codex and quant_ai's agent all gained the
-  portfolio at once with no client changes.
-
-- Status: [x] Done — API + UI + MCP; F.17 is unblocked
-
----
-
-## N. News Propagation — events outside the universe
-
-**The problem.** ChangXin Memory listed and rose 471%; US memory names fell the same day.
-The platform saw nothing, because it matches articles to companies by name and no article
-about ChangXin mentions Micron. Generalised: any event whose *source* sits outside the
-100-symbol universe — a foreign competitor, an export-control ruling, a war, an OPEC
-decision — is invisible, however much it moves the portfolio.
-
-**What is not the problem.** The corpus already covers these entities: ChangXin appears in
-173 articles, 53 of them in 2026. The N.0 repair also revealed 5,688 recent articles that
-name no covered company at all — general and macro news, sitting unused. The raw material
-is there. What is missing is a propagation mechanism and, more importantly, evidence that
-propagation predicts anything.
-
-**The trap this series is designed around.** The motivating observation — "memory fell
-today, ChangXin listed today, therefore ChangXin caused it" — is a post-hoc narrative.
-Financial media supplies three plausible causes for every move. Building the capture
-without the validation produces a machine that always has an explanation and never has an
-edge. N.4 is therefore not a checkpoint at the end; it is the deliverable, and N.1–N.3
-exist to feed it.
-
-**How the industry does this**, for calibration:
-
-| Approach | Who | Mechanism |
-|---|---|---|
-| Entity relationship graphs | Bloomberg SPLC, FactSet Revere, LSEG | curated competitor / supplier / customer edges; news propagates N hops |
-| Thematic tagging | RavenPack, Accern | articles tagged by theme; themes mapped to exposure |
-| Statistical co-movement | Barra, PCA factor models | peer groups learned from returns rather than curated |
-| Event studies | standard academic method | distribution of abnormal returns after an event |
-
-That Bloomberg and RavenPack charge heavily for exactly this says both that it is valuable
-and that it is hard.
-
----
-
-### N.0 Intraday collector schema repair — **done**
-
-The finnhub / newsapi / yahoo collectors wrote `{source, title, description, content, url,
-impact, publishedAt, collectedAt, language, meta}` — no `date`, no `symbol`. GDELT queries
-per company and therefore writes both. Since `slm_company_match_v2.build_query()` requires
-`{"symbol": {"$exists": True, "$ne": None}}`, everything the intraday collectors wrote from
-2026-04-13 onward was invisible to the matcher: 9,636 articles, never labeled, never
-featurised, never in a signal.
-
-The consequence is exactly the capability being asked for here — same-day alerting was
-impossible because same-day news never left the raw collection.
-
-`collectors/news/_canonical.py` derives `date` from `publishedAt` in GDELT's
-`YYYYMMDDHHMMSS` form and assigns a candidate symbol by keyword-matching the 100 company
-rule files. Design notes worth keeping:
-
-- **Candidate, not verdict.** The SLM validator downstream is where match accuracy is
-  already engineered; this layer only has to get an article *into* that queue.
-- **Conservative by construction.** AAPL's primary keyword is `Apple Inc.`, not bare
-  `Apple`, so "Apple to pay Italy 318 million euros" gets no symbol. That is the right
-  trade: a wrong symbol pollutes a ticker's sentiment aggregate permanently, a missing one
-  costs a single article, and the validator can reject a bad candidate but never sees an
-  article that has none.
-- **One symbol per article**, because `url` is UNIQUE on `news_articles` — the same
-  one-article-one-company shape GDELT produces.
-- **Unmatched articles are kept.** 5,688 of the backfilled set name no covered company;
-  they are macro and general-market news, which is the input N.1–N.3 need.
-
-- Status: [x] Done — collectors patched, `tools/backfill_intraday_canonical.py` written and
-  dry-run verified (41% match rate)
-
----
-
-### N.1 Influencer entity registry
-
-**Goal**: name the entities that move the portfolio without being in it.
-
-A dictionary parallel to `company_rules`: foundries and memory makers (ChangXin, TSMC,
-Samsung, SK Hynix, ASML), macro actors (OPEC, the Fed, export-control bodies), named
-conflicts and their commodity exposure.
-
-Each entry maps to affected symbols **with a direction**, because direction is not
-derivable from the entity. A competitor's successful IPO is bearish for incumbents; rising
-DRAM prices are bullish for the same names; the entity is identical in both.
-
-- Status: [ ] Pending (1 day)
-
----
-
-### N.2 Theme labels in the labeling pipeline
-
-**Goal**: cover what an entity list cannot enumerate in advance.
-
-The dual-LLM pass already reads every article, so a theme tag costs almost nothing at the
-margin. Themes: memory cycle, AI capex, export controls, energy, conflict, rates, supply
-chain.
-
-Entity registry and themes are complementary — the registry is precise about known actors,
-themes catch the ones nobody listed.
-
-- Status: [ ] Pending (1 day)
-
----
-
-### N.3 Theme → symbol exposure matrix
-
-**Goal**: which of the 100 are exposed to "DRAM oversupply", and how much.
-
-Seeded from the `sector` field already in `daily_symbol_features`, extended by LLM proposal
-under human review. Expressed as an exposure weight rather than a boolean: MU is not
-exposed to the memory cycle in the same degree as AAPL is.
-
-- Status: [ ] Pending (1.5 days)
-
----
-
-### N.4 Event-study validation — **the deliverable**
-
-**Goal**: decide whether any of this predicts, or merely explains.
-
-For each theme and influencer event: the distribution of **excess** returns for exposed
-symbols over 1 / 5 / 20 days. Excess, not absolute — `excess_ret_*` already exists in the
-feature store, and reporting absolute returns would let "memory fell on a day the whole
-market fell" masquerade as a finding.
-
-Two failure modes get measured rather than assumed away:
-
-- **Hindsight bias** — the event list is fixed before returns are examined. Starting from a
-  move and hunting for its cause reliably finds one.
-- **Statistical power** — report the count of *independent* events per theme. A theme
-  firing five times a year cannot support a factor whatever its point estimate; that is a
-  result to publish in the report, not a reason to suppress the theme.
-
-A negative result here is a successful outcome for this stage. It redirects N.5 rather than
-blocking it.
-
-- Status: [ ] Pending (2 days)
-
----
-
-### N.5 Holdings alerting on validated themes
-
-Extends F.16 from symbol-scoped to theme-scoped, gated on N.4: only themes shown to predict
-generate an alert.
-
-Themes that explain without predicting stay available as a research tool through the MCP
-surface. Telling the user *why* a position moved today is genuinely useful and is a
-different claim from telling them what to buy tomorrow. Keeping the two apart is the
-discipline the series is built around, and conflating them is how a news feature becomes a
-losing strategy.
-
-- Status: [ ] Pending (1 day)
-
----
-
-## J. Pipeline Workflow Orchestration & Daily Enrichment
-
-### J.0 Current Pipeline Overview
-
-The daily pipeline is driven by `launchd → scheduler/task.py` using the Python `schedule` library with fixed clock times. All 14 daily tasks and their implicit dependencies:
-
-```
-05:15  gdelt_backfill ──────────────────────────────────────────────────────┐
-06:00  inst_13f (Sunday only) ──────────────────────────────────────────────┤
-*/30m  finnhub_news / newsapi_news / yahoo_news (continuous, all day) ──────┤
-                                                                             │
-07:30  daily_price_quotes ──────────────────────────────────────────────────┤
-07:45  premarket_signals ───────────────────────────────────────────────────┤
-07:48  analyst_consensus ───────────────────────────────────────────────────┤
-07:50  macro_indicators ────────────────────────────────────────────────────┤
-                                                                             │ all above
-                                                                             ▼
-08:00  daily_symbol_features ──────── (depends on all data collectors above)
-                                                                             │
-                                                                             ▼
-08:30  score_daily_signals ──────────────────── (depends on features)
-                                │
-              ┌─────────────────┴──────────────────┐
-              ▼                                     ▼
-08:40  track_positions                  08:45  backtest_portfolio
-              │
-              ▼
-09:00  data_quality_check
-20:30  retail_sentiment  (standalone, next-day feature input)
-```
-
-**Problem with pure time-based scheduling:**
-
-| Risk | Current behavior | Desired behavior |
-|------|-----------------|-----------------|
-| Price collector fails at 07:30 | Features still run at 08:00 with stale prices | Wait for price success; skip or alert if failed |
-| GDELT backfill runs >2.5 hours | Features use yesterday's GDELT news | Wait for backfill; or soft-dependency with timeout |
-| Any task fails | No notification; next task starts anyway | Alert + optionally skip downstream tasks |
-| Tasks have hard-coded time gaps | 30-min buffer between price (07:30) and features (08:00); fragile | Dependency → task B starts immediately when A succeeds |
-
----
-
-### J.1 Airflow DAG Migration (Dependency-Based Pipeline Orchestration)
-
-**Goal**: Replace the fixed-clock `schedule` library in `task.py` with proper Airflow DAGs that enforce task dependencies. Airflow is already deployed in Docker (`airflow-webserver:15060`); DAGs exist but haven't been validated end-to-end on the new machine.
-
-**Target DAG: `daily_pipeline_dag`**
-
-```
-gdelt_backfill (05:15 start)
-       │
-       │  [timeout 4h, soft dependency]
-       │
-daily_price_quotes ──► premarket_signals ──┐
-                         analyst_consensus ──┤
-                         macro_indicators  ──┤
-                                             │ all done
-                                             ▼
-                              daily_symbol_features
-                                             │
-                                             ▼
-                              score_daily_signals
-                                    │           │
-                                    ▼           ▼
-                              track_positions  backtest_portfolio
-                                    │
-                                    ▼
-                              data_quality_check
-```
-
-**Secondary DAGs (keep separate):**
-- `news_collection_dag`: finnhub/newsapi/yahoo every 30 min (TriggerRule.ALL_DONE, no upstream dep)
-- `weekly_dag`: inst_13f on Sunday 06:00
-- `evening_dag`: retail_sentiment at 20:30
-
-**Key Airflow advantages over current task.py:**
-1. Task failure stops downstream tasks automatically (no wasted compute on stale data)
-2. Visual DAG view in Airflow UI — see which step failed without log-diving
-3. Retry with backoff: `retries=2, retry_delay=timedelta(minutes=5)`
-4. Cross-task XComs: backfill task can pass "rows written" count to features task
-5. Backfill single DAG runs for missed dates without re-running everything
-
-**What needs to be built:**
-1. `airflow/dags/daily_pipeline_dag.py` — wire existing Python scripts as BashOperator tasks with dependencies (1 day)
-2. `airflow/dags/news_collection_dag.py` — 30-min news collectors with overlap detection (1 day)
-3. `airflow/dags/weekly_dag.py` — Sunday inst_13f + weekly performance summary (0.5 days)
-4. Alert hook: `on_failure_callback` → writes to MongoDB `pipeline_alerts` collection; quant_api polls and sends push notification (1 day)
-5. Disable corresponding jobs in `task.py` / launchd after each DAG is verified (migration, not big-bang switch)
-
-- Status: [ ] Pending (3.5 days; Stage 7.2.2 prerequisite)
-
----
-
-### J.2 Daily SLM Company Match for Realtime News (Critical Pipeline Gap)
-
-**Goal**: Run SLM company matching on new Finnhub/NewsAPI/Yahoo articles every morning so they contribute to daily sentiment features.
-
-**Current gap (critical):**
-
-```
-Finnhub/NewsAPI/Yahoo collectors write to news_articles
-   → articles have NO "symbol" field
-   → daily_symbol_features.py filters {"symbol": {"$exists": true}}
-   → realtime news is COMPLETELY excluded from sentiment features
-   → sentiment features only use GDELT-matched articles
-```
-
-This means `avg_sentiment_3d`, `news_burst_20d`, `high_signal_count`, and other news-based features ignore ~30–50% of available news coverage for most stocks.
-
-**Fix**: Add a daily `slm_company_match_daily` job at ~07:55, just before `daily_symbol_features`:
-
-```python
-# Pseudocode for slm_company_match_daily.py
-articles = db.news_articles.find({
-    "symbol": {"$exists": False},   # unmatched realtime articles
-    "publishedAt": {"$gte": three_days_ago}   # only recent articles
-})
-for article in articles:
-    matched_symbol = run_slm_match(article["title"] + " " + article.get("content", ""))
-    if matched_symbol:
-        db.news_articles.update_one(
-            {"_id": article["_id"]},
-            {"$set": {"symbol": matched_symbol, "match_source": "slm_daily"}}
-        )
-```
-
-**Implementation:**
-1. Write `research/slm_company_match_daily.py` that calls `slm_company_match_v2.py` matching logic on articles with `publishedAt >= 3 days ago AND symbol not exists` (1 day)
-2. Add `ENABLE_SLM_MATCH_JOB` in `task.py` scheduled at `07:55` (before `08:00` features) (0.5 days)
-3. In Airflow: add as a node between news collectors and `daily_symbol_features`
-
-**Expected impact:**
-- Finnhub articles (very company-specific) → high match precision; adds targeted earnings/analyst news to sentiment
-- NewsAPI/Yahoo → moderate precision; adds broad market context
-- `avg_sentiment_3d` and `high_signal_count` features become richer without any feature engineering changes
-
-**Prerequisite:** Requires LM Studio `qwen3.5-4b` loaded (same as GDELT SLM filter; no new model needed)
-
-- Status: [ ] Pending (1.5 days)
-
----
-
-### J.3 Daily LLM Sentiment Enrichment for New Articles
-
-**Goal**: Run Gemma 3B + Qwen 4B dual-pass labeling on new articles each morning so `llm_sentiment_final` stays current (currently only historical 845K articles have labels; new daily articles don't get scored).
-
-**Current gap**: Articles arriving via Finnhub/NewsAPI/Yahoo daily do not have `llm_sentiment_final` or `event_type` fields. The LLM labeling was a one-time batch job on historical data.
-
-**Daily enrichment job** (`research/llm_enrich_daily.py`):
-
-```
-07:56 (after J.2 company match, before 08:00 features)
-  1. Find articles: {symbol: {$exists: true}, llm_sentiment_final: {$exists: false}, publishedAt >= 3d}
-  2. Pass A: Gemma 3B → raw_sentiment, event_type
-  3. Pass B: Qwen 4B → cross-check; if agree → final label; if disagree → flag
-  4. Write llm_sentiment_final, event_type, llm_confidence to news_articles
-```
-
-**Volume estimate**: ~500–2,000 new company-matched articles per day (Finnhub + NewsAPI + Yahoo + new GDELT);
-at ~5 articles/sec (Gemma 3B), two-pass takes ~3–6 minutes → fits in the 07:56–08:00 window.
-
-**Implementation:**
-1. Write `research/llm_enrich_daily.py` using the same dual-pass logic as `llm_enrich_articles.py` but filtered to last-3d unscored articles (1 day)
-2. Add `ENABLE_LLM_ENRICH_JOB` in `task.py` at `07:56` (0.5 days)
-3. In Airflow DAG: `slm_company_match_daily` → `llm_enrich_daily` → `daily_symbol_features`
-
-**Prerequisite:** Requires LM Studio `gemma3:4b` + `qwen3:4b` loaded (or a single Qwen3.5-4b if using single-pass for speed)
-
-- Status: [ ] Pending (1.5 days; do after J.2)
-
----
-
-### J.4 Pipeline Failure Alert System
-
-**Goal**: When any daily pipeline task fails, send an immediate push notification so failures are caught before the trading day starts, not discovered hours later by checking logs.
-
-**Current state**: Failures are logged to `pipeline_scheduler.log` only. No proactive notification.
-
-**Implementation options (pick one):**
-
-| Option | Description | Effort |
-|--------|-------------|--------|
-| Email alert | `smtplib` sends email on task failure | 0.5 days |
-| Slack webhook | `POST` to Slack incoming webhook URL | 0.5 days |
-| MongoDB + UI poll | Task writes `{status: "failed"}` to `pipeline_alerts`; quant_ui polls | 1 day |
-| macOS notification | `osascript -e 'display notification...'` | 0.5 days |
-
-**Recommended**: Slack webhook (works remotely; zero setup on client side; free).
-
-**What to alert on:**
-- Any `run_script_once` returns non-zero exit code
-- `data_quality_check` overall status is "warn" or "fail"
-- `track_positions` triggers a stop-loss exit
-- `gdelt_backfill` exits with `/Volumes/Data4T` mount error (the known failure mode)
-- `score_daily_signals` produces 0 LONG signals
-
-**In Airflow**: `on_failure_callback` + `on_success_callback` for key tasks (no code change to pipeline scripts).
-
-**In task.py (before Airflow migration)**: Wrap `run_script_once` to check `result.returncode` and call `send_alert(job_name, stderr)` on failure.
-
-- Status: [ ] Pending (0.5 days; high impact, low effort)
-
----
-
-### J.5 Intraday Position Stop-Loss Monitor
-
-**Goal**: Check live prices during market hours (09:30–16:00 ET) every 5 minutes for held positions, and trigger a stop-loss alert instantly when price falls through the stop level — instead of waiting for the 08:40 `track_positions` next morning.
-
-**Current behavior**: `track_positions.py` runs once at 08:40 and looks at yesterday's closing price. If a position drops 8% intraday, the stop-loss is not detected until next morning's close.
-
-**Target**: Real-time intraday monitoring using Alpaca WebSocket streaming (the same WebSocket planned for live trading).
-
-```
-scheduler/intraday_monitor.py   (long-running process during market hours)
-  │
-  ├─ On startup: load current positions from MongoDB (track_positions.py output)
-  │              load stop-loss levels (entry_price × (1 - stop_pct))
-  │
-  ├─ Connect to Alpaca WebSocket: subscribe to live quotes for held symbols
-  │
-  ├─ On each price tick:
-  │    if current_price < stop_loss_level:
-  │        → send Slack/email alert: "STOP-LOSS TRIGGERED: {symbol} @ {price}"
-  │        → write to MongoDB: {event: "stop_loss_breach", symbol, price, timestamp}
-  │        → if live trading enabled: submit sell order via Alpaca REST API
-  │
-  └─ 16:00 ET: close WebSocket, write daily EOD position summary
-```
-
-**Scheduler integration:**
-- Add `ENABLE_INTRADAY_MONITOR_JOB = true` in `.env`
-- `ensure_long_running("intraday_monitor", ...)` at 09:28 ET daily
-- Kill/restart handled by process poll loop (already in `task.py`)
-
-**Prerequisites:** Alpaca API key (needed for G.1 live trading anyway); no new models needed.
-
-- Status: [ ] Pending (2 days; do after G.1 Alpaca integration)
-
----
-
-### J.6 Weekly Performance Summary Report
-
-**Goal**: Every Sunday after `inst_13f` completes, auto-generate a weekly summary: signal IC for the past week, positions opened/closed, P&L vs SPY, top/worst performers, factor attribution.
-
-**Implementation:**
-1. Write `research/weekly_summary.py` that reads last-7d `daily_signals` + `portfolio_positions` + `portfolio_performance` (1 day)
-2. Format as JSON → quant_api `GET /api/weekly-report` → quant_ui weekly report tab (0.5 days)
-3. Optional: send as Slack message or email attachment
-
-- Status: [ ] Pending (1.5 days; do after J.4 alert system)
-
----
-
-### J. Priority Summary
-
-| Priority | Item | Effort | Depends on |
-|----------|------|--------|-----------|
-| ⭐⭐⭐ | **J.2 Daily SLM company match** (fills critical pipeline gap; realtime news → features) | 1.5 days | LM Studio qwen3.5-4b |
-| ⭐⭐⭐ | **J.4 Pipeline failure alerts** (Slack webhook on task failure) | 0.5 days | None |
-| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (daily Gemma+Qwen on new articles) | 1.5 days | J.2, LM Studio gemma3+qwen |
-| ⭐⭐ | **J.1 Airflow DAG migration** (dependency-based DAG; replaces time-gap scheduling) | 3.5 days | Stage 7.2.2 |
-| ⭐⭐ | **J.5 Intraday stop-loss monitor** (Alpaca WebSocket real-time) | 2 days | G.1 Alpaca |
-| ⭐ | **J.6 Weekly performance summary** | 1.5 days | J.4 |
-
----
-
-### G.1 Live Trading Execution (Automated Trading)
-
-**Goal**: Connect the existing signal pipeline to a real broker API so that daily signals automatically place live orders, with position reconciliation and risk guardrails. This is the final step that turns the platform from a research/paper-trading system into a real execution system.
-
-**Three-stage progression:**
-
-```
-Stage 1 (paper → broker paper account)   ← safest starting point
-  track_positions.py signals
-      ↓
-  Alpaca Paper Trading API (free, no real money)
-      ↓
-  Real order book simulation with live market prices
-
-Stage 2 (live trading, small size)
-  Same signal pipeline
-      ↓
-  Alpaca Live API / Interactive Brokers TWS API
-      ↓
-  Real orders, real fills, real P&L
-
-Stage 3 (full automation)
-  launchd triggers score_daily_signals at 08:30
-      ↓
-  live_trader.py reads top-N signals → places market orders at open
-      ↓
-  Position monitor runs intraday → fires stop-loss orders if triggered
-      ↓
-  EOD reconciliation: compare expected vs actual fills
-```
-
-**What needs to be built:**
-
-| Component | Description | Effort |
-|-----------|-------------|--------|
-| `research/live_trader.py` | Read top-N LONG signals from MongoDB → submit buy orders via broker API | 2 days |
-| `research/order_manager.py` | Track open orders, handle partial fills, cancel stale orders | 2 days |
-| `research/position_reconciler.py` | Compare paper positions vs broker positions; alert on drift | 1 day |
-| Broker API integration | Alpaca REST API (simpler) or IBKR TWS API (more powerful) | 2-3 days |
-| Pre-trade risk checks | Max position size, daily loss limit, no-trade list, market hours check | 1 day |
-| Alert system | Kafka → Spring Boot → push notification on fill / stop-loss / error | 1 day |
-
-**Pre-trade risk guardrails (non-negotiable before going live):**
-- Max single position: 5% of portfolio
-- Max daily drawdown kill-switch: halt all trading if down >3% intraday
-- No trading in first/last 15 minutes of session (wide spreads)
-- Whitelist: only trade symbols already in the 100-stock universe
-- Position size = `kelly_fraction × account_equity / entry_price`, capped at 100 shares for initial testing
-
-**Broker options:**
-
-| Broker | API | Cost | Best for |
-|--------|-----|------|---------|
-| Alpaca | REST + WebSocket, Python SDK | Free (commission-free US stocks) | Starting point; easiest integration |
-| Interactive Brokers | TWS API (Python `ib_insync`) | Low commission | Professional; supports options/futures later |
-| Webull | Unofficial API | Free | Not recommended (unofficial) |
-
-**Recommended starting point**: Alpaca paper account → validate that orders match signal intent → switch to live with $1K–$5K test capital.
-
-**Key difference from paper trading:**
-- `track_positions.py` simulates fills at closing price → no slippage, no partial fills, no API errors
-- Live trading introduces: slippage, order rejection, partial fills, API downtime, margin calls
-- Need fill confirmation loop: place order → poll for fill → update position → log to MongoDB
-
-**Interview framing:**
-*"The platform currently runs paper trading — the full signal-to-position pipeline is live, with automated entry/exit and stop-loss monitoring. The next engineering step is wiring the existing signals to a broker API (Alpaca) with pre-trade risk guardrails: position sizing, daily loss limits, and a kill-switch. The architecture is already designed for this — it's an execution layer addition, not a redesign."*
-
-- Status: [ ] Pending (2–3 weeks for Stage 1 + Stage 2)
-
----
-
-### G.2 Stock Universe Expansion
-
-**Goal**: Grow the current 103-stock universe to cover a broader range of sectors and international names.
-
-**Current state (2026-07-15):**
-- 100 original stocks (US tech, SaaS, biotech, financials, consumer, industrials)
-- 3 just added (STX, WDC, HXSCL) → **103 total**
-- Storage sector is now complete: MU (DRAM), HXSCL (DRAM/NAND), STX (HDD), WDC (HDD/NAND)
-
-**Planned expansions:**
-
-| Phase | Symbols | Notes | Effort |
-|-------|---------|-------|--------|
-| Phase 1 (near-term) | STX, WDC, HXSCL | ✅ Done 2026-07-15 | 0 days |
-| Phase 2 (energy/materials) | XOM, CVX, NEE, LIN, APD | Complete sector diversification; no current energy/materials coverage | 2 days |
-| Phase 3 (international ADRs) | BABA, JD, PDD, BIDU, SE, GRAB | US-listed ADRs for China/SE Asia tech; significant news coverage available | 2 days |
-| Phase 4 (broader S&P) | SPG, PLD, AMT (REITs), BRK-B, BAC, WFC | Financials/REITs expansion; less news-driven, lower priority | 3 days |
-
-**What adding a new symbol requires:**
-1. Add to `COMPANY_UNIVERSE` in `slm_company_match_v2.py` (keywords for news matching)
-2. Collect price history: `stock_prices_history` via `daily_price_collector/collector.py`
-3. Collect news history: `news_articles` via GDELT backfill (already running, just needs symbol added)
-4. Run `company_match_rescore` to label historical articles for the new symbol
-5. Rebuild features: `daily_symbol_features.py --symbol NEW_SYMBOL` or full rebuild
-6. Re-run backtests to verify IC is stable with the expanded universe
-
-**Note on HXSCL (SK Hynix):** Listed on US OTC markets (Pink Sheet: HXSCL). yfinance can pull price data. News coverage available via GDELT (English-language coverage of Korean semiconductor industry is substantial due to global supply chain relevance).
-
-**Note on hourly/intraday data:** Not planned. Current strategy holds 5–60 days; daily + pre-market/after-hours gaps are sufficient. Intraday bars would only help with sub-day execution timing, which is not a priority until Stage 2 live trading is proven.
-
-- Status: Phase 1 ✅ Done; Phases 2–4 [ ] Pending (low priority, expand only after live trading is validated)
-
----
-
-## L. Multi-Frequency Strategy Layer (多周期策略扩展)
-
-### L.0 背景：新闻信号的 IC 衰减规律
-
-新闻驱动的信号 IC 并非在所有时间周期均等，学术研究和实践均表明：
-
-```
-信号强度（IC）随持仓周期变化示意：
-
-    IC
-  0.15 │▓▓
-  0.12 │▓▓▓
-  0.09 │▓▓▓▓▓
-  0.06 │▓▓▓▓▓▓▓▓       ← 当前系统在此区间 (5-60d, IC≈0.059)
-  0.03 │▓▓▓▓▓▓▓▓▓▓▓▓
-  0.00 └──────────────────────────────────
-       隔夜  1d  2d  5d  10d  20d  60d
-```
-
-**核心洞察**：新闻对价格的冲击在发布后数小时到隔夜最为集中，随后被市场消化。
-当前系统只捕捉了 5–60 天的"尾部效应"，最强的短期反应被丢弃了。
-
-**两类可扩展的短周期策略：**
-
-| 策略 | 持仓周期 | 需要新基础设施 | 难度 |
-|------|---------|--------------|------|
-| L.1 隔夜新闻动量 | 收盘买入 → 次日开盘卖出 | 仅需 Alpaca 下单 | 低 |
-| L.2 日内快速信号 | 1–4 小时 | 小时线 + Alpaca WebSocket | 高 |
-
----
-
-### L.1 隔夜新闻动量策略 (Overnight News Momentum)
-
-**原理**：下午盘中出现的重大正面新闻，往往在当日收盘价还未完全反映，隔夜 gap 上涨是可预测的超额收益来源。
-
-**策略逻辑：**
-
-```
-每日 15:30 ET (收盘前 30 分钟)
-  │
-  ├─ 扫描过去 4 小时内所有公司匹配的新闻文章
-  │    条件: publishedAt >= 11:30 AND symbol IS NOT NULL
-  │
-  ├─ 计算"新闻冲击分"：
-  │    sentiment_spike = avg_llm_sentiment (今日) - avg_llm_sentiment (过去5日均值)
-  │    news_burst     = 今日文章数 / 过去20日均值
-  │    overnight_score = sentiment_spike × news_burst × analyst_surprise_weight
-  │
-  ├─ 选取 overnight_score 排名前 3 只股票 (同时满足 score > 阈值)
-  │
-  └─ 执行:
-       15:55 ET: 市价买入 (收盘前 5 分钟，接近收盘价)
-       次日 09:35 ET: 市价卖出 (开盘后 5 分钟，锁定隔夜 gap)
-```
-
-**为什么这个策略用现有基础设施就能实现：**
-- 新闻采集：Finnhub/NewsAPI/Yahoo 每 30 分钟一次，已覆盖日内新闻 ✅
-- 情绪打分：完成 J.3 后，新文章有 `llm_sentiment_final` ✅
-- 下单执行：G.1 Alpaca 集成后，market order 只需一行 SDK 调用 ✅
-- 不需要小时线，不需要新的数据基础设施 ✅
-
-**新增的 pipeline 任务：**
-
-```
-scheduler/task.py 中新增:
-  15:30 ET  overnight_signal_scan   # 扫描当日新闻冲击
-  09:35 ET  overnight_exit          # 隔夜仓位出场
-```
-
-**因子验证（先做，再上线）：**
-1. 计算历史 overnight return (收盘价 → 次日开盘价) 作为新标签
-2. 用现有 `llm_sentiment_final` + `news_burst` 跑单因子 IC (目标: IC > 0.08)
-3. 回测：隔夜策略的 Sharpe 预期比 20d 策略更高但波动也更大
-4. 容量限制：隔夜策略仓位必须小（每笔 ≤ 2% 净值），因为流动性在收盘前变差
-
-**与当前中频策略的关系：**
-- 两套策略**完全独立运行**，不共享仓位预算
-- 中频策略 (5–60d)：持仓 top-5，占用 80% 资金
-- 隔夜策略：持仓 top-3，占用 ≤ 10% 资金（高换手，小仓位）
-- 可以在同一个 Alpaca 账户下并行运行，用 `strategy_type` 字段区分 MongoDB 持仓记录
-
-- Status: [ ] Pending (4 days; do after G.1 Alpaca + J.3 LLM enrichment)
-
----
-
-### L.2 日内快速信号 (Intraday Fast Signal)
-
-**原理**：重大新闻发布后，价格在最初 30–120 分钟内的动量往往持续，随后均值回归。捕捉这个初始冲击窗口。
-
-**需要的新基础设施：**
-- **小时线历史数据**：Alpaca bars API (`timeframe=1Hour`)，用于计算日内 realized volatility 和动量基准
-- **Alpaca WebSocket 实时行情**：J.5 盘中监控已规划，可复用
-- **更快的新闻处理**：目前 30 分钟一次采集；日内策略需要缩短到 5 分钟以内（Finnhub WebSocket 实时新闻推送）
-
-**策略逻辑（简化版）：**
-
-```
-Finnhub 实时新闻推送 (WebSocket)
-  │
-  ├─ 新文章到达 → 实时 SLM company match → 情绪打分
-  │
-  ├─ 若 sentiment_spike > 阈值 AND 当前时间在 09:45–15:00 ET 之间:
-  │    → 立即查询 Alpaca 实时报价 (bid/ask spread)
-  │    → 若 spread < 0.1% AND 买入信号:
-  │         → 市价买入，设置 2% 止损 + 60 分钟时间止损
-  │
-  └─ 持仓期间: 每 5 分钟检查动量是否衰减 → 动态出场
-```
-
-**难度较高，原因：**
-- 需要 Finnhub WebSocket 实时新闻（替换现有 30 分钟轮询）
-- 小时线 backfill（103 只股票 × 2 年 × 6.5h）
-- 日内仓位管理更复杂（需要盘中止损 + 时间止损双重逻辑）
-- 滑点和手续费对日内策略影响更大（round-trip cost 对 1–4h 持仓影响 > 对 20d 持仓 10 倍）
-
-**前置条件**：L.1 隔夜策略验证 + Alpaca live trading 稳定运行后再考虑。
-
-- Status: [ ] Pending (2 weeks; do after L.1 is validated live)
-
----
-
-### L.3 5-Minute Bar Data Infrastructure (5分钟线数据基础设施)
-
-**Goal**: 采集并维护 103 只股票的 5 分钟 OHLCV 数据，作为 L.2 日内策略和 J.5 盘中止损监控的数据基础。
-
-**为什么选 5 分钟而非 1 分钟：**
-
-| 粒度 | 年数据量 (103只) | 新闻反应窗口捕捉 | 噪声 | 推荐 |
-|------|----------------|----------------|------|------|
-| 1分钟 | ~1,200万行 | 过细，bid-ask spread 主导 | 极高 | ❌ |
-| **5分钟** | **~240万行** | **覆盖 30–90 分钟反应窗口** | **可控** | **✅** |
-| 1小时 | ~20万行 | 太粗，错过入场时机 | 低 | ❌ |
-
-**数据来源**: Alpaca Markets bars API (`/v2/stocks/{symbol}/bars?timeframe=5Min`)
-- 免费 tier 提供 2 年历史 5 分钟线
-- 速率限制: 200 req/min（103 只股票 backfill 约需 20 分钟）
-
-**存储设计**:
-
-```
-MongoDB collection: stock_prices_5min
-{
-  "symbol":    "AAPL",
-  "timestamp": ISODate("2026-07-16T14:30:00Z"),   // UTC, 5min bar open time
-  "open":      220.15,
-  "high":      220.48,
-  "low":       220.02,
-  "close":     220.35,
-  "volume":    125430,
-  "vwap":      220.28
-}
-Index: { symbol: 1, timestamp: -1 }  (unique compound)
-```
-
-预估存储：240万行/年 × 平均 100 bytes ≈ **240MB/年**，两年历史约 500MB，可接受。
-
-**实现步骤：**
-
-1. **Backfill 脚本** `stock_collector/price_collector/5min_history_collector.py` (1.5 days)
-   - 对 103 只股票依次调用 Alpaca bars API，拉取过去 2 年 5 分钟线
-   - 写入 `stock_prices_5min`，建立 `{symbol, timestamp}` 唯一索引
-   - 进度断点续传：已存在的数据跳过，从最新 timestamp 续拉
-
-2. **每日增量采集** (0.5 days)
-   - 新增 `ENABLE_5MIN_PRICE_JOB=true` 在 `.env`
-   - 在 `task.py` 中添加每日 `16:35 ET` 触发（收盘后 5 分钟）
-   - 只拉当天 09:30–16:00 的 5 分钟线（78 根 × 103 只 = 8034 条/天）
-
-3. **可复用的新特征** (加入 daily_symbol_features.py 或新建 intraday_features.py)
-
-   | 特征 | 计算方式 | 用途 |
-   |------|---------|------|
-   | `realized_vol_1d` | 当日 78 根 5min 收益率标准差 × √78 | 更准确的日内波动率估计 |
-   | `intraday_momentum_1h` | (14:30 收盘 - 13:30 收盘) / 13:30 收盘 | 尾盘动量因子 |
-   | `vwap_deviation` | (收盘价 - VWAP) / VWAP | 偏离 VWAP 程度 |
-   | `open_gap_fill_ratio` | 开盘 gap 在首小时内回填比例 | 趋势 vs 均值回归判断 |
-   | `volume_concentration_close` | 最后 30 分钟成交量 / 全天成交量 | 机构尾盘行为 |
-
-4. **L.2 日内策略数据支撑**：5 分钟线提供日内动量基准和 realized vol，替代 Alpaca WebSocket 实时行情在回测中的角色
-
-**与现有 daily price 的关系**：
-- `stock_prices_history`（日线）继续维护，用于中频特征和回测，不变
-- `stock_prices_5min`（5分钟线）是新增补充，仅用于日内特征和 L.2 策略
-
-- Status: [ ] Pending (2 days total: 1.5d backfill + 0.5d scheduler integration; do before L.2)
-
----
-
-### L. Priority Summary
-
-| 优先级 | 项目 | 前置条件 | 工期 |
-|--------|------|---------|------|
-| ⭐⭐ | **L.1 隔夜新闻动量策略** (15:30 情绪扫描→收盘买→次日开盘卖，无需5分钟线) | G.1 Alpaca + J.3 LLM enrichment | 4 days |
-| ⭐⭐ | **L.3 5分钟线数据基础设施** (Alpaca API backfill + 每日增量 + 5个日内特征) | G.1 Alpaca API key | 2 days |
-| ⭐ | **L.2 日内快速信号** (5分钟线 + Finnhub WebSocket实时新闻 → 日内动量) | L.1 验证通过 + L.3 数据就绪 | 2 weeks |
-
----
-
-## M. Signal Research Rigor
-
-Hardens the signal research so its claims survive a quant-researcher-style interrogation
-(IC significance? out-of-sample? survivorship bias? why not overfit?).
-
-**This section was previously marked low priority. M.7 changes that.** The rest of the
-series is about strengthening claims that are broadly sound; M.7 is a confirmed defect
-that makes the headline factor invalid, and M.1 is selection bias built into the universe
-before any model runs. Those two are blockers — for G.1 live execution, and for quoting
-any Sharpe figure without a caveat. M.2–M.6 remain optional polish aimed at QR roles.
-
-Accepted risk, stated plainly: rigorous treatment will probably show the signal is weaker
-than the current numbers. That outcome is itself a defensible research finding when written
-up honestly, and it is strictly better than discovering it after committing capital.
-
-### M.1 Point-in-Time Universe (kill survivorship & selection bias)
-Replace the hand-picked 103-stock tech universe with point-in-time S&P 500 membership
-including delisted names. The current universe is the single most attackable weakness:
-almost any signal "works" on a winners-only mega-cap list.
-- Source historical index membership (incl. delistings), rebuild features/backtests on it
-- Keep the 103-stock universe as a separate "tech sleeve" study
-- Effort: 1–2 weeks (data sourcing is the hard part) — Status: [ ] Pending
-
-### M.2 Point-in-Time Data Hygiene Audit
-- Purge corrupt future-dated articles (2034/2037 timestamps in `news_articles.date`)
-- Full-lineage check: for every feature, verify signal-available-time vs data-creation-time
-  (news collected_at vs published_at, 13F filing lag, analyst revision lag)
-- Effort: 3 days — Status: [ ] Pending
-
-### M.3 IC Statistical Significance
-- Rank IC with Newey-West adjusted t-stats (overlapping horizons inflate naive t-stats)
-- IC decay curve / half-life per factor; per-year and per-regime IC stability tables
-- Effort: 3 days — Status: [ ] Pending
-
-### M.4 Factor Orthogonalization (the core question)
-Does news sentiment contain information not already in price? Residualize sentiment
-factors against momentum / short-term reversal / size / sector, then measure residual IC.
-If residual IC ≈ 0, the "news signal" is repackaged momentum — better to know.
-- Effort: 1 week — Status: [ ] Pending
-
-### M.5 Overfitting Defenses
-- Reserve a never-touched final holdout window (e.g. last 6 months) for one-shot evaluation
-- Experiment registry: log every parameter combination tried (honest denominator for
-  deflated Sharpe); report deflated Sharpe alongside raw
-- Effort: 2 days — Status: [ ] Pending
-
-### M.6 Research Report Writeup
-Paper-style writeup: hypothesis → data → methodology → results → failure cases →
-limitations. An honest "post-cost alpha is marginal, but sentiment shows orthogonal
-incremental IC in earnings windows" beats a flashy Sharpe 3.0 backtest in any QR interview.
-- Effort: 3 days — Status: [ ] Pending
-
----
-
-### M.7 13F look-ahead leak — **blocker**
-
-**The defect.** `inst_13f_holdings` contains exactly 100 documents, one per symbol, with
-fields `{_id, symbol, collectedAt, inst_holding_pct, inst_holding_pct_chg, total_shares}`
-— **no date, no quarter, no filing date**. `attach_inst13f_features()` in
-`research/features/daily_symbol_features.py` left-joins on symbol alone, and its own
-docstring states the intent: *"These values are quarterly; broadcast to all trade_dates for
-each symbol."* A feature row dated 2018-03-15 therefore carries institutional holdings
-collected in 2026.
-
-**Why it matters more than a normal PIT slip.** `inst_holding_pct_chg` was reported as the
-best single factor at **IC +0.198**, the strongest number in the Key Results table. It
-scores that well *because* it leaks. Institutions accumulate what has already risen, so
-projecting today's holdings backwards across eight years manufactures precisely the
-correlation the IC is measuring. The factor is not merely unproven — it is measuring the
-future, and it carries weight in `score_daily_signals.py` (0.5–0.6 depending on regime),
-so the contamination reaches the live signal, not just the backtest.
-
-**What makes this diagnosable rather than diffuse**: every other alt-data source in the
-same file handles time correctly, which is what makes 13F an oversight rather than a design
-philosophy.
-
-| Source | Join | Verdict |
-|---|---|---|
-| analyst | on `YYYY-MM`; docstring says *"avoids lookahead"* | correct |
-| retail | symbol + date, 1,365 rows | correct |
-| macro | dated, 16,369 rows | correct |
-| **13F** | **symbol only, 100 rows, broadcast** | **leaking** |
-
-**Fix.** Source historical 13F with **filing dates** — SEC EDGAR exposes them, and the
-45-day statutory reporting lag is the entire point: a Q1 position becomes public in mid-May,
-so it may only enter a feature row dated on or after its filing date, never its reporting
-period. Join as-of filing date, forward-fill until the next filing.
-
-**If point-in-time 13F cannot be obtained, remove the factor.** Keeping a factor known to
-read the future, with a caveat in a footnote, is worse than dropping it: the number stays in
-circulation and the weight stays in the scorer. Then re-run the backtest and publish
-whatever Sharpe survives — the drop is the finding.
-
-- Effort: 2 days (1 if the decision is removal) — Status: [ ] **Pending — blocks G.1**
-
----
-
-### M.8 Turnover and capacity reporting
-
-H.1 prices a round trip per position — commission 5bps plus liquidity-tiered slippage
-10/30bps, charged on entry and exit, with a filter excluding symbol-dates too thin to
-execute. That model is sound per trade. What is missing is **how many trades there are**.
-
-At a 5-day horizon fed by daily signals, turnover may be high enough that a per-trade cost
-model which is honest in isolation understates total drag substantially. Report:
-
-- annualised turnover
-- transaction cost as a share of gross return
-- the capital level at which the liquidity filter begins to bind
-
-The last one converts "this strategy works" into a claim with a size attached. A result
-that holds at $50k and not at $5m is a different result, and the difference is the first
-thing a professional will ask about.
-
-- Effort: 1 day — Status: [ ] Pending
-
----
-
-### M.9 Short-side borrow costs
-
-The long-short Sharpe of 0.85 charges commission and slippage on both legs but nothing for
-**carrying** the short: no borrow fee, no hard-to-borrow screen, no recall risk. On exactly
-the names a negative news-sentiment signal would select, borrow is where it is most
-expensive — the correlation between "bad news" and "expensive to short" is not incidental.
-
-Until this is modelled the long-short figure is optimistic by an unmeasured amount, and the
-**long-only results are the more defensible ones to quote**.
-
-- Effort: 1 day (a flat borrow-rate assumption is a legitimate first pass, provided the
-  assumption is stated) — Status: [ ] Pending
-
----
-
-### M.12 News syndication inflates the volume features
-
-**Found 2026-07-30, while deduplicating the corpus for R.1** — the 121,970 rows dropped at
-index time turned out not to be noise.
-
-**The mechanism.** GDELT ingests each site of a syndication network as a separate article.
-One McDonald's story on 2025-11-03 appears **402 times**: byte-identical body (767 chars),
-identical sentiment, 402 distinct `*.iheart.com` subdomains. That symbol-day holds **412
-rows and 11 distinct titles** — the news-volume features read 412 where the real number of
-stories is 11.
-
-`unique_url_count` exists to catch exactly this and cannot: 402 subdomains are 402 distinct
-URLs. `unique_source_count` cannot either — `source.name` is absent on GDELT rows so it
-falls back to the platform, and its mean is 1.0139. Both dedupe guards were structurally
-blind to the dominant duplication mode.
-
-**Measured** (`research/features/measure_syndication_impact.py` — loads the real frames and
-runs the production aggregators twice, once on raw input and once deduplicated on
-`(symbol, date, title)`; reusing the pipeline's own functions rather than reimplementing
-them is the point):
-
-| collection | rows | unique | duplicate |
-|---|---|---|---|
-| `news_articles` (volume features) | 1,750,295 | 1,494,636 | **14.6%** |
-| `news_articles_company_matched_v2` (sentiment) | 851,071 | 729,101 | **14.3%** |
-
-| feature | mean raw | mean deduped | % symbol-days differing | max abs diff |
-|---|---|---|---|---|
-| `article_count` | 9.104 | 7.650 | 26.4% | 664 |
-| `unique_url_count` | 9.104 | 7.650 | 26.4% | 664 |
-| `news_count_20d` | 181.65 | 152.65 | **93.2%** | 4019 |
-| `news_burst_20d` | 1.101 | 1.059 | **93.6%** | 599 |
-| `sent_wavg` | 0.3221 | 0.3224 | 15.1% | 1.253 |
-| `sent_std` | 0.3019 | 0.3063 | 15.0% | 1.414 |
-| `negative_n` | 1.521 | 1.228 | 5.8% | 363 |
-
-**The damage is in the volume features, not sentiment.** `sent_wavg` barely moves in
-aggregate (0.3221 → 0.3224) because a syndicated copy usually carries a sentiment close to
-the day's mean anyway. `news_burst_20d` differs on **93.6% of symbol-days** — it is a
-rolling ratio, so one contaminated day propagates through the following twenty.
-
-**Why it is a cross-sectional problem rather than a level shift.** Per-symbol duplicate
-share runs **2.3% to 52.4%** — a 23× spread, concentrated in consumer brands that local
-radio and lifestyle networks syndicate:
-
-    MCD 52.4  SBUX 38.3  MRNA 37.3  TGT 36.6  SPOT 36.4  BA 36.1
-    UNH 33.5  PFE 32.8  LLY 32.2  DIS 31.4  NFLX 29.9   (corpus 16.0)
-
-A uniform inflation would cancel in a cross-sectional rank. This does not: it lifts some
-names by half and others by nothing, and the lift correlates with sector.
-
-**It reaches the signal.** `news_burst_20d` carries regime weights **0.9 / 0.8 / 0.5 / 0.2**
-(RISK_ON / NEUTRAL / STRESSED / RISK_OFF) in `score_daily_signals.py`, and appears in
-`train_baseline_models.py` alongside `article_count` and `news_burst_20d_sector_rel`. The
-sector-relative variant does not neutralise this — the bias is itself sector-correlated, so
-normalising against a contaminated sector mean penalises the cleanest names in a dirty
-sector. **This is the M.7 shape again**: a hand-weighted factor in the regime scorer given
-high weight on top of an input nobody had validated.
-
-#### M.12 step 2 — measured impact (2026-07-30)
-
-Two shadow feature sets built from the same code at the same moment, differing only in
-`NEWS_DEDUPE_SYNDICATION`: `daily_symbol_features_m12_off` and `_m12_on`, 191,467 rows each.
-The off build was verified a genuine no-op first — 4,000 sampled symbol-days across
-`article_count`, `news_burst_20d`, `news_count_20d`, `sent_wavg`, `unique_url_count`
-differed from production on **0 rows**. Dedupe removed 278,327 news rows (16.0%) and
-133,169 sentiment rows (15.8%).
-
-**The ML walk-forward barely notices** (rank IC, aggregate):
-
-| target | model | IC off | IC on | delta |
-|---|---|---|---|---|
-| 60d | Ensemble | 0.0572 | 0.0549 | −0.0023 |
-| 60d | Ridge | 0.0491 | 0.0465 | −0.0026 |
-| 60d | LightGBM | 0.0413 | 0.0413 | ±0.0000 |
-| 20d | Ensemble | 0.0225 | 0.0202 | −0.0023 |
-
-Every cell moves by less than 0.005 and the signs are not consistent — the LightGBM Ranker
-gains +0.0051 at 20d and loses −0.0066 at 45d. Without error bars none of this is
-distinguishable from noise, and it is **not** being claimed as an effect.
-
-**The regime scorer does notice** (`backtest_portfolio.py`, which imports `compute_score`
-and `_WEIGHTS_BY_REGIME` directly — the same path the live signal takes; 132 rebalances,
-20d hold, costs on):
-
-| | off (duplicates in) | on (deduped) |
-|---|---|---|
-| **net Sharpe** | 0.654 | **0.580** |
-| net annualised | 19.64% | 16.76% |
-| total return | 5.54× | 4.07× |
-| gross Sharpe | 0.794 | 0.729 |
-| max drawdown | −42.08% | **−39.56%** |
-| win rate | 63.64% | **65.15%** |
-
-**This is the M.7 pattern repeating exactly.** The ML models shrug (−0.0023 IC) because a
-tree or a ridge treats `news_burst_20d` as one column among a hundred and learns its actual
-predictive weight from data. The hand-weighted scorer assigned it **0.9 by fiat** and lost
-**0.074 Sharpe** when the input was cleaned. Twice now, the damage from a contaminated
-factor has landed almost entirely on the hand-calibrated weights rather than the fitted
-ones — **the models at least look at the data before deciding how much to trust a column.**
-
-Note the deduped run has a *better* drawdown (−39.56% vs −42.08%) and a *better* win rate
-(65.15% vs 63.64%). It is a lower-return, lower-risk profile, not a uniformly worse one.
-
-**The counter-argument worth stating**: a story syndicated to 402 stations genuinely does
-have unusual reach, and reach may carry information. That does not rescue the current
-feature — `article_count` claims to count distinct news and does not. If reach is the
-signal, it belongs in a named feature that measures reach deliberately and can be tested on
-its own, not smuggled in through a broken count.
-
-**Conclusion**: the 0.074 Sharpe was being earned from an artifact of how GDELT ingests
-syndication networks. Removing it is correct for the same reason M.7 was correct, and the
-published number should come down again.
-
-**Fix, once the impact is known**: deduplicate on `(symbol, date, title)` inside
-`load_news_frame()` and `load_llm_sentiment_frame()` rather than at aggregation time, so
-every downstream feature inherits it. The collectors should also stop ingesting syndicated
-copies, but the feature layer must not depend on that being true.
-
-#### M.12 step 3 — shipped (2026-07-30)
-
-`NEWS_DEDUPE_SYNDICATION` now defaults to **true**; production features rebuilt (191,467
-rows, 278,327 news and 133,169 sentiment duplicates dropped). Final published numbers:
-
-| | before M.12 | after |
-|---|---|---|
-| 20d net Sharpe | 0.69 | **0.58** (gross 0.73) |
-| 20d net annualised | 20.9% | **16.8%** |
-| 20d max drawdown | −42.1% | **−39.6%** |
-| 20d win rate | 63.6% | **65.2%** |
-| 60d net Sharpe | 0.73 *(stale)* | **0.60** (gross 0.65) |
-| 60d Ensemble rank IC | 0.0563 | **0.0523** |
-
-Per-year 60d Ensemble IC after the fix — still negative in 4 of 9 years, unchanged in shape:
-
-    2018 +0.021  2019 +0.135  2020 +0.220  2021 −0.030  2022 −0.128
-    2023 +0.226  2024 −0.037  2025 +0.017  2026 −0.129
-
-**Deployment note.** The Airflow DAGs run host code, not the container:
-`_host_common.py` sets `PYTHON = f"{ROOT}/.venv311/bin/python"` and issues
-`cd {ROOT} && {PYTHON} {ROOT}/{script}` against `/Users/xiz/Quant_trade/quant_data`. So this
-fix reached production the moment the default flipped, with no image rebuild needed — and
-the same was true of M.7. Worth recording because the deployed container is genuinely stale
-(compose pins `e650994`, the running container is `e165324` from nine days earlier, and
-`e650994` was never even pulled locally); that staleness is real but affects nothing on the
-daily path, since every `ENABLE_*` job in the container is disabled and the host scheduler
-owns the DAGs.
-
-- Status: [x] Done — flag default-on, production rebuilt, numbers republished.
-  **Remaining**: the collectors still ingest syndicated copies, so the raw collections keep
-  growing 16% faster than the information in them. Fixing it upstream is a separate item —
-  the feature layer must keep its own guard regardless, since it cannot depend on the
-  collectors being correct.
-
----
-
-### Deployment drift — verify against the running system, not the repository
-
-Twice now a container has been running an image older than the one `docker-compose.yml`
-declares, because CI updates the tag in the compose file and nothing restarts the
-container:
-
-| service | was running | declared | consequence |
-|---|---|---|---|
-| `quant_data` | `e165324` | `e650994` | **none** — the Airflow DAGs run host code (`_host_common.py`: `cd $ROOT && $ROOT/.venv311/bin/python $ROOT/$script`), so M.7 and M.12 reached production without an image build |
-| `quant_api` | `9307bbe` | `e70b3cb` | **real** — `/api/news/search` existed in the Java source but not in the running image, so the `search_news` MCP tool returned 404 for all three clients |
-
-The second one went unnoticed because I.6 was marked done on the evidence that the function
-existed in `mcp_server.py`. **A file in the repository is not a working feature.** Both were
-fixed on 2026-08-03 by `docker compose pull` and recreating the two containers; all ten
-platform MCP tools were then called against the deployed API and confirmed to return real
-data, rather than confirmed to exist.
-
-The rule this leaves: a status of "done" for anything with a deployed surface needs evidence
-from the deployed surface. `quant_airflow:local` will always fail `docker compose pull` —
-it is built locally and lives in no registry — which is expected, not a fault.
-
----
-
 ### S.3 Identity that is a principal, not a parameter (found 2026-08-07)
 
 **The observation.** `get_eval_batch(judge_id)` and `submit_judgment(judge_id, judgments)`
@@ -3931,1180 +4612,650 @@ authenticated principal once one exists. Until then, make the write **reject rat
 overwrite** when `(query_id, doc_key)` already carries a different judge — that preserves the
 retry-safety the overwrite was built for while removing the cross-judge destruction case.
 
-### R.5 Authentication and authorization, phases 1 and 2 (2026-08-03)
+# Part 4 · Research Foundations
 
-**The finding.** `SecurityConfig` ended with `.anyRequest().permitAll()`. Three path
-patterns required a token; everything else was open, including
-`/api/portfolio/holdings`, which served personal financial data unauthenticated. The JWT
-infrastructure was configured and enforcing almost nothing — the worst of the two states,
-because it reads as protected. Measured before: `GET /api/portfolio/holdings` with no
-token returned **200**. After: **401**.
+The research design the platform started from (2026-05): scope, data, collections, features,
+targets, workflow and principles. Kept as the reference the workstreams build on.
 
-**The order of work is the design.** quant_ai sent no credential at all and six of eight
-UI modules sent none either, so tightening the server first would have broken every page
-and every MCP tool simultaneously. Phase 1 made both carry a token while the server still
-permitted everything; phase 2 flipped the default. Adding the credential before requiring
-it is the only sequence with no broken window in the middle.
+## System Scope
 
-| principal | read | write |
-|---|---|---|
-| no token | 401 | 401 |
-| `quant-ai` service account | 200 | **403** |
-| `user` / `admin` | 200 | 200 |
+The system should support:
 
-**Why read and write are split.** quant_ai holds a service-account credential broader than
-any single user's — the confused deputy. It cannot be removed until on-behalf-of exchange
-lands (R.5c), but its blast radius can be: the service account has `quant-read` and not
-`quant-write`, so an injected agent can read the platform and **cannot record a trade**.
+- company/news relevance filtering
+- daily feature generation
+- mid-horizon return prediction
+- factor and model research
+- portfolio simulation
+- scheduled data refresh
+- production deployment later
 
-**`KeycloakRealmRoleConverter` is not boilerplate.** Spring's default converter reads
-`scope`; Keycloak puts realm roles under `realm_access.roles`. Without the converter the
-roles are in the token, invisible to the rules, and every `hasRole` fails closed — which
-looks exactly like a permissions bug.
+## Required Data
 
-#### Three mistakes worth keeping, because each was caught by a different kind of evidence
+### 1. News Data
+Already partially done.
 
-1. **Granting write to the service account.** The first role assignment put `quant-write`
-   into `default-roles-quant`, which service accounts also hold — handing the agent the
-   exact capability the split exists to deny. The admin API returned `204` three times.
-   Caught by **decoding the issued token**. *Role assignment is not confirmed by the API
-   accepting it; it is confirmed by the claim appearing in a token.*
+Needed:
 
-2. **Shipping a UI that could not authenticate.** The phase 1 UI change was committed and
-   never built into an image, so the browser ran a bundle with no `Authorization` header
-   against an API that had just started requiring one. Every page failed. This is the
-   drift documented one section below, repeated on the next service within the hour.
-   Caught by **the error text**: `Failed to fetch signals` is the pre-migration string, so
-   the message itself proved the old bundle was running.
+- raw news store
+- company-matched clean news store
+- source metadata
+- title
+- body/content
+- data quality tags
+- company relevance result
 
-3. **Read granted to no human.** `quant-read` lived only in `default-roles-quant`, and the
-   `admin` user was never assigned that composite — only the `admin` role. Service
-   accounts get the default composite automatically, so quant_ai worked and every human
-   got 403. API-level testing missed it entirely because the one principal it exercised
-   was the only unaffected one. Caught by **the user opening the browser**. The listing
-   `admin -> ['quant-write']` had already been printed and read past.
+Current collections:
 
-The through-line: each layer needs evidence from that layer. A 204 is not a token, a
-commit is not a deployment, and a passing API test is not a working UI.
+- `news_articles`
+- `news_articles_company_matched_v1`
+
+### 2. Price Data
+Needed:
+
+- daily OHLCV
+- adjusted close if possible
+- volume
+- trading date alignment
+
+Current collection:
+
+- `stock_prices_history`
+
+### 3. Benchmark and Market Data
+Still needed / should be added:
+
+- SPY / QQQ / sector ETF daily prices
+- benchmark forward returns
+- optional factor benchmarks:
+  - momentum
+  - size
+  - quality
+  - volatility
+
+### 4. Fundamental / Event Data
+Recommended next:
+
+- earnings dates
+- EPS / revenue / guidance
+- valuation metrics
+- analyst estimate revision data if available
+- corporate actions
+
+### 5. Metadata
+Needed:
+
+- sector / industry
+- market cap bucket
+- symbol universe definition
+- active/inactive date ranges
+
+## Core Collections / Tables
+
+### Raw Layer
+
+- `news_articles`
+- `stock_prices_history`
+
+### Clean Layer
+
+- `news_articles_company_matched_v1`
+
+### Feature Layer
+
+- `daily_symbol_features_company_matched_v1`
+
+### Planned Next Collections
+
+- `daily_symbol_features_research_v1`
+  - optional refined feature table after additional research-quality filtering
+- `backtest_results`
+  - optional persistent experiment tracking
+- `benchmark_prices`
+  - benchmark ETF / index data
+- `earnings_events`
+  - earnings calendar / event layer
+
+## Current Feature Set
+
+Already generated in daily features:
+
+- `article_count`
+- `full_count`
+- `title_only_count`
+- `url_only_count`
+- `full_ratio`
+- `title_only_ratio`
+- `avg_content_length`
+- `max_content_length`
+- `unique_url_count`
+- `unique_source_count`
+- `unique_platform_count`
+- `extraction_failed_count`
+- `timeout_fallback_count`
+- `news_count_3d`
+- `news_count_5d`
+- `news_count_20d`
+- `full_count_5d`
+- `avg_full_ratio_5d`
+- `news_burst_20d`
+- `trade_date`
+- `close`
+- `future_ret_5d`
+- `future_ret_20d`
+- `future_ret_60d`
+
+## Prediction Targets
+
+The system should support multiple target definitions.
+
+### Absolute Return Targets
+
+- `future_ret_5d`
+- `future_ret_20d`
+- `future_ret_60d`
+
+### Direction Targets
+
+- `future_ret_5d > 0`
+- `future_ret_20d > 0`
+- `future_ret_60d > 0`
+
+### Recommended Future Targets
+
+- benchmark-relative return:
+  - stock return minus SPY / QQQ / sector ETF return
+- ranking target:
+  - cross-sectional rank by future return
+
+For this project, ranking and excess-return targets are likely more useful than pure up/down classification.
+
+## Research Workflow
+
+### Phase 1. Data Integrity
+
+Done or mostly done:
+
+- collect raw news
+- clean company relevance
+- build daily features
+- align with price labels
+
+Still needed:
+
+- benchmark alignment
+- event/fundamental enrichment
+
+### Phase 2. Factor Research
+
+Current next step.
+
+Need to run:
+
+- top/bottom bucket tests
+- long-short tests
+- top 3 / top 5 / top 10 portfolio comparisons
+- stability by year
+- stability by horizon
+
+First candidate factors:
+
+- `full_ratio`
+- `news_burst_20d`
+- `article_count`
+- `unique_source_count`
+- `avg_content_length`
+- `extraction_failed_count` as a reverse-quality feature
+
+### Phase 3. Multi-Factor Research
+
+After single-factor validation:
+
+- combine quality factors
+- combine quantity + quality + recency factors
+- compare weighted score vs single-factor selection
+
+### Phase 4. Modeling
+
+Only after factor validation.
+
+Recommended order:
+
+1. linear / logistic models
+2. tree models:
+   - LightGBM
+   - XGBoost
+3. ranking models
+
+Do not start with large text models for price prediction.
+
+### Phase 5. Portfolio Construction
+
+Need explicit rules for:
+
+- rebalance frequency
+- top N holdings
+- equal weight vs score weight
+- sector cap
+- single-name cap
+- turnover limit
+- transaction cost assumptions
+
+### Phase 6. Production
+
+Later phase:
+
+- daily incremental collection
+- feature refresh
+- model scoring
+- signal generation
+- order routing
+- monitoring
+- logging
+- retry / failure handling
+
+## Research Principles
+
+### 1. Prefer simple baselines first
+
+Always test:
+
+- single factor
+- grouped returns
+- naive top-N strategy
+
+before training larger models.
+
+### 2. Use safe date windows
+
+Backtests should use:
+
+- `trade_date >= 2015-12-04`
+
+because current price data coverage starts there.
+
+### 3. Use clean collection by default
+
+Research should prefer:
+
+- `news_articles_company_matched_v1`
+- `daily_symbol_features_company_matched_v1`
+
+instead of raw collections.
+
+### 4. Keep raw data immutable
+
+Do not delete raw source collections.
+
+Use separate clean / derived layers.
+
+## Recommended Success Criteria
+
+The project should be considered healthy if:
+
+- clean company-matched news can be built reproducibly
+- feature table refresh is stable
+- at least one factor shows persistent positive excess return
+- results are stable across multiple years
+- simple baselines are competitive before modeling
+
+## File / Module Roadmap
+
+### Existing
+
+- `research/features/daily_symbol_features.py`
+- `research/company_match_rescore.py`
+- `research/backtest/backtest_news_factor.py`
+- `research/features/load_earnings_events.py`
+- `research/load_benchmark_prices.py`
+- `research/models/train_baseline_models.py`
+- `collectors/news/gdelt/special_rules/slm_filter.py`
+- `collectors/news/gdelt/special_rules/slm_skills.py`
+
+### Suggested Next Files
+
+- `research/backtest_year_stability.py`
+  - year-by-year IC breakdown with the full feature set
+- `research/build_interaction_features.py`
+  - earnings × news quality interaction features (Layer 3)
+- `research/expand_universe.py`
+  - helper to onboard new symbols into stock_universe and trigger collection
+
+## Notes
+
+The clean matched-news dataset is research-usable at the current scale.
+
+The two-layer earnings feature set has produced a meaningful model
+improvement (Ridge `60d` IC: `0.073` → `0.121`).
+
+Signal IC at 60d = 0.059 on the 100-symbol universe is more credible than the 0.121 at 14 symbols (a larger universe dilutes overfitting). The weak 2022/2024 years are driven by macroeconomic regime shifts; the signal itself is credible.
 
 ---
 
-## K. Architecture & Language Decisions (决策记录)
+# Part 5 · Stage History
 
-记录已评估但主动排除的技术选型，避免未来重复讨论。
+The original stage plan, in order. Later work moved to the lettered workstreams in Part 3.
 
-### K.1 不引入 Go / C / C++ (决策日期: 2026-07-16)
+## Stage 1. Immediate Next Tasks
 
-**结论**: 当前及可预见的未来不需要用 Go、C 或 C++ 替换任何现有服务。
+1. Extend first-pass backtest
+- top / bottom buckets
+- long-short
+- top 3 / top 5 / top 10
 
-**理由:**
+2. Add benchmark comparison
+- SPY / QQQ / sector baseline
 
-| 潜在场景 | 实际瓶颈 | 结论 |
-|---------|---------|------|
-| GDELT 下载 / 新闻采集 | 网络 I/O，带宽限制 | Python 足够；换语言无收益 |
-| LLM 推理 (Gemma / Qwen) | GPU/CPU 推理内核 | LM Studio 底层已是 C++；无需重写 |
-| 特征工程 (pandas) | 内存操作，100 symbols × 189K rows | Python + numpy 足够；算法优化比语言切换收益高 |
-| REST API (quant_api) | 内部服务，并发量低 | Java Spring Boot 完全足够 |
-| 信号评分 / 回测 | 每日单次运行，秒级耗时 | 无延迟要求 |
+3. Build quality factor basket
+- combine `full_ratio`, `unique_source_count`, `avg_content_length`, etc.
 
-**核心原因**: 策略持仓周期 5–60 天，信号只需每天 08:30 计算一次，延迟要求是**分钟级**，不是毫秒级。需要 C/C++ 的场景是 HFT（微秒级订单路由、tick 级订单簿），与本项目场景差三个数量级。
+4. Validate by horizon
+- 5d
+- 20d
+- 60d
 
-**唯一的例外条件**: 若未来升级为高频/盘中策略，需处理每秒千条以上 tick 数据，可考虑用 **Go** 编写 tick processor（goroutine 并发模型适合 WebSocket 流处理）。当前 J.5 盘中止损监控用 Python asyncio 足够。
+## Stage 2. Near-Term Data Expansion
 
-**现有技术栈不替换的理由:**
-- Python: data/ML pipeline 生态无可替代（pandas/LightGBM/LM Studio SDK）
-- Java Spring Boot: REST API 生产级可用，团队已有代码资产
-- React/TypeScript: 前端无替代方案
+Status: substantially complete.
 
----
+### Completed items
 
-## Q. Market Briefs and Event-Driven Decisions (2026-10-22)
+- benchmark/index price collection:
+  - done (`SPY`, `QQQ` daily prices, `benchmark_ret_5d/20d/60d`, `excess_ret_*`)
+- earnings event Layer 1 (timing only):
+  - done
+  - features: `days_to_earnings`, `days_since_earnings`,
+    `is_earnings_window_5d`, `is_post_earnings_window_20d`
+- earnings event Layer 2 (surprise + richer timing):
+  - done
+  - features: `eps_estimate_last`, `reported_eps_last`, `surprise_pct_last`,
+    `is_positive_surprise`, `is_negative_surprise`,
+    `days_to_earnings_bucket`, `days_since_earnings_bucket`,
+    `is_pre_earnings_10d`, `is_post_earnings_5d`, `is_post_earnings_10d`,
+    `is_post_positive_surprise_20d`, `is_post_negative_surprise_20d`
+  - result: Ridge `60d` IC improved from `0.073` to `0.121` (+66%)
+- sector mapping: basic version integrated
 
-**Why this series.** On 2026-10-21 Lam Research guided below hopes after the US close; the next
-day Tokyo Electron fell 7%, SK hynix 5%, ASML 3% and the user's semiconductor holdings 3-5% in
-pre-market, alongside Brent at $112 on Middle East escalation. The question asked: *does the
-platform capture events like this — an earnings miss, a war, an oil shock — and do they drive
-decisions?* The audit below says: per-company news sentiment, yes; propagation, macro and
-geopolitics, no; and right now nothing at all, because the pipeline is down.
+### Next: earnings event Layer 3
 
-### Q.0 Done on 2026-10-22 (quant_ai, quant_ui, quant_docker)
+Build on Layer 2 with deeper surprise structure and interaction features.
 
-- **Portfolio moved into quant_ai** (`markets/portfolio.py`, from job_agent's dashboard): trades,
-  average cost and FIFO, Nasdaq quotes incl. pre-market / after hours, watchlist, charts. Host
-  process, SQLite under `~/Library/Application Support/quant_ai`, Drive backup; launchd keeps
-  it alive. Sale profits are pushed to job_agent's budget through an idempotent endpoint.
-- **Global markets**: 16 Asian / European exchanges by region -> country -> exchange (CNBC,
-  Korean stocks via Naver) and a macro board (Brent/WTI, gold, US indices and futures, VIX,
-  yields, FX).
-- **Briefs** written by `claude -p` on the user's subscription, Chinese + English, from a
-  snapshot of the numbers plus cited web search:
-  - summaries: Asia & Europe 14:00 Dublin; US after 20:05 New York;
-  - **week ahead** 13:30 Dublin: earnings of holdings / watchlist / 17 sector bellwethers over
-    5 trading days (Nasdaq calendar, consensus EPS, implied move from the ATM straddle), main
-    economic releases, beat / miss scenarios per holding;
-  - **flash**: a bellwether moving >=5% pre-market / after hours triggers a transmission
-    analysis (Asia, Europe, the holdings at the next open). Once per company per day, cap 4.
-- **Scored predictions**: every brief ends with checkable calls ("8035.T closes <= -3% on
-  10/23", stated confidence). Only symbols the brief was shown, only sessions not yet open when
-  it was written (a flash at 14:43 Dublin predicting that day's US close was half known — fixed
-  the same day). Scored from CNBC daily bars after the close; scorecard = hit rate, Brier score,
-  calibration by confidence bucket, per brief kind.
-- quant_ui: My Holdings rebuilt on these routes; Market Briefs tab with the scorecard.
-  quant_docker: `ui_only.sh` (since replaced by `scripts/core.sh`) starts just the login chain (mysql, mongodb, keycloak, kafka,
-  quant_api, quant_ui); everything else `unless-stopped`.
+1. surprise magnitude buckets
+   - split `surprise_pct_last` into ordinal buckets:
+     - large miss (< -5%), small miss (-5% to 0), small beat (0 to +5%),
+       large beat (> +5%)
+   - rationale: the market reacts non-linearly to surprise size
 
-### Q.1 Audit: what the signal pipeline does with events today
+2. news quality × earnings interaction features
+   - `full_ratio_x_post_positive`: `full_ratio` × `is_post_positive_surprise_20d`
+   - `quality_score_x_post_negative`: `quality_score` × `is_post_negative_surprise_20d`
+   - rationale: a positive surprise with high-quality news coverage is a
+     stronger combined signal than either alone
 
-| Capability | State |
+3. earnings recency decay
+   - `earnings_recency_weight`: exponential decay of `days_since_earnings`
+     (weight = exp(-days_since / 20))
+   - rationale: the post-earnings drift effect weakens as time passes
+
+4. rerun backtest and model after Layer 3
+   - compare against the Layer 2 baseline (Ridge `60d` IC = `0.121`)
+
+### Most important next step: universe expansion
+
+The current universe is 14 symbols.
+This is the single biggest constraint on signal reliability.
+
+Why this matters:
+
+- at 14 symbols, one bad year (e.g. 2022, 2024) can make the IC negative
+  due to sampling noise alone
+- cross-sectional ranking needs depth: `top 3 / top 5` out of 14 is not
+  robust; `top 5 / top 10` out of 50-100 is meaningfully more stable
+- the current signals may be real but cannot be confirmed at this universe size
+
+Target: expand to 50-100 symbols.
+
+What is required:
+
+1. extend `stock_universe` collection with new symbols
+   - suggested scope: S&P 500 tech/growth names, or a defined sector basket
+   - keep sector distribution balanced
+
+2. collect historical news for new symbols
+   - extend GDELT / news collector coverage
+   - run `company_match_rescore` on new articles
+
+3. collect price history for new symbols
+   - extend `stock_prices_history`
+
+4. rebuild feature table
+   - `FEATURE_REBUILD_ALL=true` after data is ready
+
+5. rerun all backtests and models on expanded universe
+   - compare single-factor IC at 50-symbol vs 14-symbol universe
+   - a good signal should survive and become more stable
+
+## Stage 3. Modeling
+
+Status: first-pass baselines done.
+
+Current baseline results (14-symbol universe):
+
+- `Ridge` `60d` Rank IC: `0.121` / Top 5 excess return: `+6.58%`
+- `HistGB` `60d` Rank IC: `0.118` / Top 5 excess return: `+6.32%`
+
+Known issue: year-by-year variance is high.
+
+- strong years: 2020 (IC = 0.35), 2023 (IC = 0.19), 2025 (IC = 0.24)
+- weak years: 2022 (IC = -0.06), 2024 (IC = -0.04)
+- likely cause: macro regime shifts (2022: rate hikes + war; 2024: election
+  + rate pivot) break the news-quality thesis temporarily
+
+Next modeling steps (do only after universe expansion):
+
+1. year stability analysis
+   - run `--group-by-year` on factor backtest with full feature set
+   - identify which features drive the 2022/2024 failures
+   - test whether regime-aware features (e.g. VIX level, market vol) help
+
+2. simple Ridge + HistGB ensemble
+   - average predictions from both models
+   - rationale: the two models now have comparable IC and different error
+     patterns; blending should reduce variance
+
+3. sector-relative feature normalization
+   - normalize `full_ratio`, `quality_score` within sector on each day
+   - reduces bias from sectors that structurally attract more/less news
+
+4. ranking model
+   - convert to a pairwise ranking objective (LambdaRank or similar)
+   - more directly aligned with the top-N portfolio construction goal
+
+## Stage 3.5 Event-Driven Strategy Research
+
+Goal: evolve the fixed-horizon model into a news event-driven strategy where
+signals trigger dynamic entry, hold, and exit decisions rather than fixed
+holding periods.
+
+This stage must be completed before Stage 5 engineering work begins.
+
+### 3.5.1 Article-level event tagging (LLM batch annotation) ✅ Done 2026-05-22
+
+All 840,212 articles in `news_articles_company_matched_v2` tagged with:
+
+- Pass A (Gemma): `llm_sentiment_a`, `llm_event_type_a`, `llm_signal_strength_a` — 100%
+- Pass B (Qwen): `llm_sentiment_b`, `llm_event_type_b`, `llm_signal_strength_b` — 100%
+- Dual-LLM merge: `llm_sentiment_final`, `llm_disagreement`, `llm_label_model_probs` — 100%
+- Inter-model agreement rate 77.3%; mean sentiment +0.296 (overall positive bias)
+
+Deliverable: `research/labeling/llm_enrich_articles.py`, `research/snorkel_label_merge.py`
+
+
+### 3.5.2 Event-level daily features ✅ Done 2026-05-22
+
+Rebuilt `daily_symbol_features_company_matched_v2` (134,642 rows, 100 symbols)
+with full LLM sentiment feature coverage (100%):
+
+| Feature | Coverage |
 |---|---|
-| Per-company news: sentiment, 7 event types, signal strength (Gemma + Qwen labels, ~868K matched articles) | ✅ features `avg_sentiment_5d`, `sentiment_shift_5d`, `news_burst_20d`, `earnings_beat/miss_signal`, `ah_gap` |
-| Market regime | ✅ VIX, 10y, DXY, SPY -> RISK_ON / NEUTRAL / STRESSED / RISK_OFF reweighting |
-| **Propagation** (Lam's guidance -> Tokyo Electron, ASML, SK hynix) | ❌ news only moves the symbol it names; `sector` is used only for sector-relative ranks in training. Planned as the **N series** (N.1-N.5 pending) |
-| **Macro / geopolitical news** (war, OPEC, oil) | ❌ `event_type = macro` is labelled but feeds no feature; no oil series anywhere in quant_data; GDELT is a news source only, its tone / conflict fields unused. Only indirect, via VIX, and only as down-weighting, never direction |
-| **Earnings vs expectations** | ⚠️ "beat" is inferred from news sentiment, not actual vs consensus; no forward calendar (F.14 pending) |
-| **Coverage** | ❌ US universe only; no Asian / European listings |
-| **Latency** | ❌ one batch at 07:30: an after-hours report enters features the next morning, after Asia has traded it |
-| **Pipeline running** | ❌ signals stop at 2026-07-17, features 2026-10-09, macro 2026-10-14. The host Airflow scheduler (`com.quant.airflow-scheduler`) crash-loops on `connection refused 127.0.0.1:25432`: its metadata DB is the `airflow-postgres` container, so whenever Docker is off nothing is collected |
+| `avg_sentiment_3d/5d` | 100% |
+| `sentiment_shift_5d` | 99.6% |
+| `high_signal_count_3d` | 100% |
+| `negative_event_count_5d` | 100% |
+| `disagreement_avg_5d` | 100% |
+| `has_regulatory_risk_5d` | 100% |
+| `earnings_beat_signal` / `earnings_miss_signal` | 100% |
 
-### Q.2 Revive the pipeline — prerequisite for everything below (🔴, 1 day)
+Multi-horizon model results with LLM features (walk-forward, 100 symbols):
 
-- [x] ~~Move the Airflow metadata DB off Docker~~ — not enough on its own: the data itself
-      (MongoDB, MySQL batch queue, Qdrant) lives in Docker too. Decision (2026-10-22): Docker stays
-      up with `quant_docker/scripts/core.sh` (login chain + airflow-postgres, qdrant, mlflow; restart always).
-- [x] **Root cause of the stale signals found**: not only Docker. Since the 2026-07-21 reorganisation
-      the price and analyst collectors loaded a non-existent `.env` path, failed every run, and blocked
-      `score_signals`. Fixed (f97dc75); `daily_signal_pipeline` ran green end to end on 2026-10-22 and
-      signals moved from 2026-07-17 to 2026-10-22.
-- [x] Catch-up started 2026-10-22: GDELT backfill of 2026-10-08 → today, then match / enrich / features.
-- [x] Alerts: per-task failure notification (`notify_failure`) + freshness watchdog in quant_ai
-      (`/api/markets/pipeline/health`, widget line, one notification a day while stale).
-- [x] LM Studio kept (verified that mlx-lm reproduces gemma but not qwen3.5, and that llama.cpp
-      embeddings drift enough to need a reindex — see below); its server is kept up headless by
-      launchd `com.quant.lmstudio-server` so the 03:00 news chain does not depend on the app being open.
-- [x] Caught up 2026-10-24 after the disk-full pause of 10-22 (backfill DAGs paused, a hung orphan
-      collector killed): company match 10-11 → 10-24, enrich passes A/B (3,005 articles, 0 errors),
-      features and the Qdrant index; `/api/markets/pipeline/health` all green.
-- [x] **One LM Studio task at a time, sized to the machine** (`quant_data/tools/lm_session.py`).
-      Two LLM tasks at once made LM Studio swap models on every request (10-23: 69/76 job_agent judge
-      calls failed; 10-24: ~70 Channel Errors when backfill_1 and backfill_2 overlapped), and every
-      model ran with one parallel slot, so 8 client workers queued behind one prediction (0.8 art/s).
-      Each LLM task now goes through a shared flock (job_agent's own `lm_model_guard.py` honours the
-      same lock), unloads the LLMs it does not need, loads its model with the slot count measured on
-      this machine, sets its worker variable to match and unloads afterwards unless a queued task needs
-      the model. Measured on the M5 Pro 48 GB (generated tok/s at 1/2/4/8 slots):
-      gemma-4-e4b 50 / 86 / 137 / 155 → 8 slots; qwen3.5-9b 52 / 80 / 113 / 120 → 4 slots;
-      two qwen3.5-9b instances × 2 slots 82, below one × 4 — one instance with more slots wins on one GPU.
-- [ ] Confirm one fully automatic night (02:00 UTC backfill chain + 07:30 signals) with no alert,
-      the first one through `lm_session` (qwen3.5-4b calibrates itself at the start of gdelt_collect).
+| Horizon | Ridge IC | Ensemble IC | Ensemble Top5 Excess Return |
+|---|---|---|---|
+| 20d | 0.036 | 0.031 | +1.83% |
+| 45d | 0.044 | 0.043 | +4.38% |
+| 60d | 0.056 | 0.059 | +6.59% |
 
-**LM Studio replacement, evaluated 2026-10-22 (not done, kept as an option).** Python MLX can load
-every model without LM Studio (mlx-lm 0.32 supports qwen3_5 and gemma4). Against LM Studio on the
-same files and the pipeline's own `call_llm`: gemma pass A matches (event type 99%, sentiment
-corr 0.988 vs stored labels); qwen3.5-9b pass B does **not** (corr 0.78-0.80 vs LM Studio, whose
-own repeat is 0.999; four prompt renderings and mlx-vlm tried) — LM Studio's MLX engine is its own
-native build. nomic embeddings via llama.cpp on the same GGUF: cosine 0.9965, top-10 overlap 8.9/10.
-Switching would need a reindex, R.4 re-run, pass-B re-labelling with an IC check, and the qwen27
-judge's kappa re-measured.
+IC increases monotonically with holding period; the 60d signal is strongest.
 
-### Q.3 Events as structured features (🟡, ~6 days; feeds N.4)
+Deliverable: `research/features/daily_symbol_features.py`, `research/models/train_baseline_models.py`
 
-- [ ] **Peer / supply-chain graph** (= N.1 + N.3, extended): curated edges for the semiconductor
-      chain first (equipment -> foundry / memory -> chip designers -> hyperscalers), including
-      non-US names (Tokyo Electron, ASML, Samsung, SK hynix). A company event propagates one hop
-      with a signed weight. Cross-check curated edges against return co-movement.
-- [ ] **Oil and geopolitical risk index** from the GDELT GKG columnar store (Stage 6B): daily
-      tone and conflict-theme intensity for the Middle East / Russia-Ukraine / Taiwan Strait, plus
-      Brent and WTI added to `macro_indicators`. Features: level, 5-day change, shock flag.
-- [ ] **Earnings surprise, measured**: actual EPS / revenue vs consensus and the post-report gap
-      (Nasdaq calendar gives the consensus; F.14 covers the pre-report probability).
-- [ ] **Intraday path for after-hours events**: a small evening job (or the flash trigger) that
-      writes the event and the propagated scores the same night, so Asia-session decisions can use it.
-- [ ] Optional: Asian / European symbols in the feature universe (prices are already collected
-      for the briefs).
+### 3.5.3 Dynamic holding period backtest ✅ Done 2026-05-22
 
-### Q.4 Promote LLM event calls to a factor only after they earn it (🟡, gate, then 2 days)
+Event-driven framework results (100 symbols, 2018–2026):
 
-The briefs' predictions are a running out-of-sample test of "can an LLM read an event's impact".
-Wire them into `score_daily_signals` only when the scorecard says so:
-- [ ] at least 60 scored calls, spread over at least 4 weeks and several event types;
-- [ ] hit rate above the base rate of the same claims (e.g. how often `|move| >= 2%` happens anyway);
-- [ ] Brier score below 0.22 and calibration within +-10 points per confidence bucket;
-- [ ] then a walk-forward backtest with the call as one factor (H.1 realism rules), compared
-      with the same model without it. If any step fails, the calls stay a reading aid.
+Best config: `min_hold=20d`, `max_hold=60d`, `sentiment_shift_exit=-0.35`
 
-**Interview angle.** Same discipline as R.4 (judge validated before used): an LLM that explains
-every move after the fact is easy; one whose stated confidence matches how often it is right,
-measured on calls made before the fact, is the claim worth making.
+| Metric | Event-Driven | Fixed 20d Baseline | Fixed 60d Baseline |
+|---|---|---|---|
+| Avg Hold | 13.7d | 20d | 60d |
+| Excess Return | +1.40% | +1.22% | +3.80% |
+| Win Rate | 52.7% | 58.0% | 63.1% |
+| Trades | 390 | 2,060 | 2,020 |
 
-### Q.5 Holdings advisor — event-driven advice on the user's own positions (🔴, ~3 days)
+Event-driven outperforms the fixed 20d baseline within 13.7 days (+1.40% vs +1.22%) with lower turnover.
+Exit reasons: score_below_exit 69%, sentiment_reversal 17% (reasonable).
+2022/2024 remain weak years (macroeconomic regime shifts).
 
-**Goal (user, 2026-10-25).** The user's priority is profit: get the losing positions back (INTC is
--18%) and grow. The system watches the holdings and, when something worth reacting to happens,
-writes a report with concrete actions: what to do, at what limit price, how much, until when, and
-what happens if it is wrong — e.g. trim into strength before INTC's 10-29 earnings and buy back
-lower after, to lower the cost basis. Advice only: nothing is ever traded automatically.
+Deliverable: `research/backtest/backtest_event_driven.py`
 
-**Data (all already in the platform).** Holdings, cost and weights (quant_ai), live quotes with
-pre/post (Nasdaq, 5 s), daily bars (support / resistance / ATR), earnings calendar with consensus
-EPS and the options-implied move (Nasdaq), news per company with LLM sentiment and event type
-(quant_data, intraday every 30 min, labels overnight), the quant model's ranks and LONG list
-(daily), the macro board. New: **available cash**, entered by hand in My Holdings (starts at 0).
+### 3.5.4 Multi-horizon label expansion ✅ Done 2026-05-22
 
-**Monitoring — every 15 minutes, code only, no model.**
-- Price move beyond the stock's own threshold: **2x its median absolute daily move over the last six
-  months**, recomputed daily. A fixed 3% was measured first and rejected: INTC, SK hynix, Seagate and
-  WDC moved more than 3% on 50-57% of days; at 2x median (INTC/SKHY/STX ~6%, TSM ~3%) each name
-  triggers about once a week.
-- Price reaching a limit from an open recommendation.
-- Earnings: a holding reports tomorrow (prepare a plan), or has just reported (read it, adjust).
-- Important news on a holding: earnings / guidance / rating or target change / M&A / buyback /
-  regulation / litigation / export controls / management change (keyword rules first; a local
-  model to rank intraday headlines only if the rules prove too coarse), or a burst of news.
-- A sector bellwether moving 5%+ outside regular hours (the existing flash trigger).
-Cooldown: one trigger per holding and event type per 2 hours; at most ~6 updates a day.
+Added to `daily_symbol_features_company_matched_v2`:
+- `future_ret_10d/15d/30d/45d` — 87-88% coverage
+- `excess_ret_10d/15d/30d/45d` — 87-88% coverage
+- Also fixed `load_feature_frame` projection in `backtest_news_factor.py`
 
-**Flow.** trigger → snapshot built by code (position, break-even, % needed to get back to cost,
-support / resistance, ATR, earnings and implied move, 7 days of news, quant rank, buy candidates
-from the LONG list, cash) with **candidate limit prices computed by code** (implied move when a
-report is near, else 2x ATR), so the model quotes numbers rather than inventing them → Claude
-(`claude -p`, subscription, web search) writes the report in Chinese and English → a structured
-ORDERS block (symbol, side, % of position or shares, limit, valid until, reasons), validated by code
-(held or candidate symbol, limit within range of the price, validity at most 30 days) → stored and
-shown in My Holdings → scored by code: filled or not from daily bars, and at expiry whether acting
-beat not acting.
+Deliverable: `research/features/daily_symbol_features.py`, `research/backtest/backtest_news_factor.py`
 
-**Reports.** A full report every weekday at 13:00 Dublin (in the US pre-market, 1.5 h before the
-open); focused updates when a trigger fires. Sections: bottom line (the 2-3 actions today, or why
-nothing); each holding (status, drivers with sources, orders, the failure case); earnings plays
-(pre/post plan from the implied move, partial size, the gap risk of selling before a jump); new
-ideas (1-3 from the LONG list, preferring names that reduce the chip / memory concentration, sized
-to the cash or as a switch when cash is 0); risks and rules (concentration; the Irish CGT four-week
-rule on a loss sale bought back within four weeks).
+### 3.5.5 Fine-tune small model for sentiment scoring 🟡 In progress (distillation, 2026-11)
 
-**Alerts.** Two levels. Urgent — results just out, a recommended limit reached, a move beyond 1.5x
-the threshold, major news (M&A, regulator, profit warning): a macOS notification and a red banner
-in My Holdings. Normal — everything else: a "new advice" mark in My Holdings only. No widget lines
-and no phone push for now.
+After the two-pass LLM enrichment (3.5.1) completes, replace the slow LLM
+inference pipeline with a purpose-fine-tuned small model. This eliminates the
+need to keep Gemma + Qwen + a judge model running and reduces inference from
+days to minutes.
 
-**Models.** Monitoring, levels, validation and scoring: code. Analysis and writing: Claude, because
-it needs reasoning and fresh news (the local qwen agreed with Claude at kappa 0.43 in R.11 and is
-slow with thinking). Quota: ~1 report on a quiet day, 3-6 on an earnings day, 3-5 min each.
+**Training data**
 
-- [x] Cash in My Holdings (stored with the portfolio, editable, starts at 0)
-- [x] `markets/advisor.py`: snapshot, thresholds, levels, triggers, orders, scoring
-- [x] `advisor` brief kind: schedule 13:00 Dublin, focused updates, ORDERS block, urgent alerts
-- [x] My Holdings: latest report, open orders with fill status, history and scorecard
-- [x] Tests; one live report end to end (v1, 2026-10-25)
+Use articles where Pass A (Gemma) and Pass B (Qwen) agree as high-confidence
+pseudo-labels:
+- `llm_sentiment_a` and `llm_sentiment_b` same sign AND |diff| ≤ 0.2
+- Expected: ~60-70% of 586K articles → ~350K+ clean training samples
 
-**v2: plans generated and tested by code, chosen by the model (2026-10-25).** The user's verdict on
-v1: "太不智能了". Its first report proposed trimming INTC 20% at $91.26 before earnings and buying
-back at $78.35, which was the user's own idea read back from the conversation, sized in fractional
-shares a broker cannot fill, below the average cost, with no evidence that it beats holding. In v2:
+**Model**
 
-- *Candidates in code* (`markets/strategy.py`), whole shares: hold; one T (sell part at +a, buy the
-  same shares back at -b, the buy-back active only once the sale filled) at three widths; a two-step
-  ladder; trims; a sale at the average cost when within reach; an add when there is cash. Widths are
-  in units of the move scale: the options-implied move when the stock reports within the horizon,
-  else 2 x ATR(14).
-- *Tested on the stock's own past*: around each of its last 16 reports (daily bars from 5 sessions
-  before to 10 after, `earnings_reactions` in Mongo, refreshed weekly by `weekly_model_training`;
-  SK hynix from its Seoul listing 000660.KS, the ADR having listed on 2026-07-10), entered as many
-  sessions before the reaction as today is, limits scaled to that history's typical move; else
-  rolling 15-session windows of the last year. Result: gain against holding, win rate, P10, fill
-  rate per leg, regret (sold, never bought back, ended higher).
-- *Simulated for this time*: 3,000 paths with the stock's daily volatility and, on the reaction
-  day, a past reaction (centred) scaled to the implied move: how likely each limit fills.
-- *Profit first, enforced in code*: a plan is offered only when it beat holding on that history
-  (n >= 8, mean > +0.05% of the position, wins >= losses) and never sells below the average cost
-  without a buy-back. The model picks a candidate id per holding in a PLANS block (or none) and
-  explains it; code turns the plan into its orders. The ORDERS block is left for new buys only,
-  rounded down to whole shares.
-- *Conditional orders*: `advice_orders.parent_id`; a buy-back is `waiting` until its sale fills,
-  counts only from the next session, and is `void` if the sale never fills.
+Fine-tune `ProsusAI/finbert` (110M params, already pre-trained on financial
+text) with three output heads:
+- sentiment: regression head, output -1.0 to +1.0
+- event_type: 7-class softmax (earnings / product / MA / regulation / macro /
+  competition / other)
+- signal_strength: 3-class softmax (high / medium / low)
 
-First result (2026-10-25, last 16 reports each): every pre-earnings sale or T on INTC, SKHY and STX
-trailed holding (-0.3% to -1.3% of the position on average); holding through the report returned
-+4.6% to +7.2% on average, up 56-75% of the time, and the 10 sessions after the reaction drifted up
-after both up and down reactions (INTC +8.3% / +1.1%). So the advice for this week's reports is to
-hold, with the numbers. TSM (no report in the horizon) has small eligible T plans (+0.12 to +0.16%).
+Training setup:
+- LoRA or full fine-tune (BERT is small enough for full fine-tune)
+- GPU: Windows machine (same as LM Studio)
+- Estimated training time: 1-2 hours on 350K samples
+- Framework: HuggingFace Transformers + PyTorch
 
-- [x] `strategy.py`, `earnings_reactions.py`, PLANS block, conditional orders, UI ("after #X fills")
-- [ ] After the reports: compare the advice with what happened (scorecard) and widen the candidate
-      set if a family keeps winning (post-reaction entries, adds after a drop once there is cash)
+**Inference speed after fine-tuning**
 
-**v3: an earnings-day trading policy learned from data, not written by hand (user, 2026-10-25).**
-The user's idea: sell into the earnings-day pulse and buy back lower. A hand test on daily bars
-(sell at the open after a gap up, buy back 2% lower or at the close) said +1%/share for INTC
-(7/9) and -1.4% for STX (shares keep running after a gap up), but daily bars cannot tell whether
-the high came before the low, and a rule per stock is exactly what the user does not want: "我想让
-ML或者AI自动学会这个策略".
-- *Data*: hourly bars with pre/after-hours (yfinance, back to 2023-11) around every report of the
-  whole universe (~100 stocks, ~11 reports each), EPS estimate / reported / surprise, daily bars.
-  Minute bars (Alpaca, from 2016) when a key is available.
-- *Actions*, enumerated by code: hold; sell at the open or at +a% and buy back at -b% or at the
-  close of day 1 / day 3; buy at the open or -b% (when there is cash). Label = what each action
-  made per share against holding.
-- *Features*, all known at the open of the reaction day: gap, the pre-market path, EPS surprise,
-  run-up, volatility, gap relative to the stock's typical reaction, the stock's own past fades
-  (earlier reports only), the market's gap, report timing.
-- *Model*: LightGBM over (event, action) rows; policy = the action with the highest predicted gain
-  when it clears a margin, else hold. Walk-forward by quarter; offered only if it beats holding
-  and a static rule out of sample.
-- [x] Data and labels  - [x] Walk-forward model and report  - [ ] Live (only once it beats holding)
-
-*First result (2026-10-25): no learnable edge.* 1,120 reports of 101 stocks (2023-11 .. 2026-10),
-30 actions, walk-forward by quarter over 806 out-of-sample reports
-(`research/models/earnings_policy.py`):
-
-| Decision point and features | rank IC (pred vs outcome, per action) | Policy when it acts |
-|---|---|---|
-| Open: gap, pre-market path, EPS surprise, run-up, volatility, the stock's past fades, market | -0.001 to +0.019 | -0.3% to -0.5% per share, win 59-66%, P10 -7.5% |
-| + the platform's news sentiment published between the report and the open | +0.002 / +0.014 | -0.3% to -0.7% |
-| 10:30, + the first hour's path | +0.007 | -0.1% to +0.2% (noise) |
-
-High win rates with a negative mean: small gains on fades, wiped out by the reports where the stock
-keeps running and the shares are bought back higher. Post-report news sentiment correlates with the
-gap (Spearman 0.34) but not with the open-to-close move (0.008): it is priced in at the open. The
-"INTC fades +1%/share" seen on daily bars (9 reports) does not survive 1,120. Hindsight-best would
-make +4% per report: the money is there, nothing available at the open predicts which way.
-Next levers, in order: minute bars from 2016 (Alpaca, ~3x the reports); the call transcript read by
-an LLM (guidance, tone) as a feature. Until a version beats holding out of sample the advisor keeps
-holding through reports.
-
-*Second round (2026-10-25 evening): more data and the release read by an LLM.* Alpaca 5-minute bars
-incl. pre/after-hours from 2016: 3,866 reports. The press release behind each (EDGAR 8-K item 2.02 /
-6-K, accepted before the open: 3,747 found, 97%) read by local qwen3.5-9b (`earnings_releases.py`):
-full-year outlook raised / kept / lowered, margin direction, tone, revenue against the last outlook,
-next quarter's outlook against this quarter, capital return, restructuring. Walk-forward over 3,030
-out-of-sample reports: rank IC rose from ~0 to +0.05 with the larger sample and to +0.056/+0.059 with
-the release features (27 of 30 actions positive), still too weak for a policy that makes money
-(mean about 0 per share when it acts). The release is mostly priced in at the open: its fields
-correlate with the gap (0.13-0.25) and hardly with the open-to-close move (-0.08..+0.03).
-One pattern worth following: after a full-year outlook cut the stock gaps down (-2.7% on average)
-and then recovers. Buying at the open and holding three sessions: +0.30% (n=77, not significant) in
-2016-2020, +2.46% (n=67, 4 standard errors) in 2021-2026; selling at the open the same day lost
--1.39% in 2021-2026. Not stable across periods and one of many looks, so not a rule yet; for a
-holder it argues against selling into the open after a guidance cut. Next: a 1D-CNN on the 5-minute
-pre-market / first-hour path as a challenger to LightGBM; earnings spillover (a peer's report as the
-event for the holdings, more bets per year); an LLM proposing hypotheses for the same event engine,
-with a multiple-testing correction.
-
-**v4: the after-the-close pulse, from 1-minute bars (2026-10-25 night).** The user's actual idea was
-not the next day: right after an after-the-close release the stock spikes for minutes and often
-fades before or during the call; sell a ladder into the spike, buy the shares back lower. INTC
-2026-07-23: +8.6% at 16:00, +11.8% at 16:20-16:25, +4.1% by 17:15 (2026-04-23: +16.7% and kept
-rising). `research/models/earnings_pulse.py`: Alpaca 1-minute bars 15:30 .. next day 10:30 for 2,491
-after-the-close reports since 2016; the release minute found in the bars (the wire beats the SEC
-acceptance by minutes: INTC moved at 16:00-16:01, accepted 16:09), the call time read from the
-release (82%). 224 plans enumerated: when the ladder goes in (before the release; 1/3/5/10/20/30
-minutes after it; 5 minutes before the call) x levels (+1/2/3 .. +5/8/12%) x buy-back (5 or 30
-minutes into the call, end of after-hours, next open, or 1/2/3% under each sale).
-
-| Walk-forward 2019-2026 (each year trained on the earlier ones) | Acted | Mean when acting | Win | P10 |
-|---|---|---|---|---|
-| Per stock, the plan that did best in its earlier years | 96% | +0.05% (se 0.08) | 44% | -2.0% |
-| Conditional LightGBM (move since the close at placement, its range and volume, run-up, the stock's own past on the plan, EPS surprise and the LLM-read outlook after the release), 0.10%/side | 42% | +0.49% (se 0.12) | 66% | -1.9% |
-| Same, 0.25%/side and limits must trade through by 0.05% | 30% | +0.66% (se 0.13) | 59% | -1.15% |
-
-Every year >= 0 in the strict run (2019 -0.02% .. 2024 +0.67%). INTC: 14 of 30 reports, +1.33% per
-share of the ladder, 79% wins; STX negative (7 reports, -1.29%: it keeps running), so mostly
-left alone. Worst single case -15%: a ladder on part of the position, never all of it.
-Pre-release plans get no post-release features (the first run leaked them: +0.54% -> +0.49%).
-- [x] Live for the holdings (2026-10-26): `quant_ai/markets/pulse.py`. Price-only features (the
-      release and volume features added nothing: +0.64% vs +0.66% per acted report), 5-second quotes,
-      the release minute from a 0.5% move, placements as in training, the first plan that clears the
-      0.3% margin on a stock whose walk-forward record is positive becomes whole-share orders
-      (30% of the position over three steps, PULSE_FRACTION), an urgent macOS notification; no
-      report is written first. Replay of INTC evenings: 2026-01-22 acted at 16:02 (sold into the
-      bounce, bought back lower), 2026-04-23 stayed out (predicted -0.5%; holding was right: +20%),
-      2026-07-23 stayed out (predicted +0.2%, under the margin; the fade would have paid). First
-      live evenings: STX 10-27, INTC 10-29. The broker must accept extended-hours limit orders.
-- [x] Final model on all data, refreshed weekly (`refresh_earnings_pulse.sh` in weekly_model_training,
-      replaced only while its walk-forward stays positive); each evening's orders scored the next
-      morning on 1-minute bars (`pulse.score_due`)
-
-*v4.2 (2026-10-26): the algorithm sets the steps, levels and sizes.* The user: the number of steps
-and their levels must not be fixed either. Labels became single steps: 12 levels (+0.5 .. +12%) x 7
-buy-back rules x 8 placements, 1.65M rows; any ladder is a weighted sum of them. LightGBM predicts
-each step's gain (huber) and its 10th percentile (quantile); the plan at a placement is the steps
-above the margin under the best buy-back rule (at most 4), weighted by gain over downside. The
-walk-forward now replays the live decision strictly in time order (v1's evaluation took the best
-placement of the evening, which a live watch cannot know). Bake-off 2019-2026:
-
-| Policy | Acted | Mean | P10 | Worst | Sum |
-|---|---|---|---|---|---|
-| A greedy (first placement that clears) | 772 | +0.45% | -2.70% | -30% | +346% |
-| B optimal stopping (fitted value iteration over the placements: act only when the plan beats the predicted value of waiting) | 732 | +0.49% | -2.61% | -24% | +360% |
-| C = B, weights by gain over downside | 732 | +0.51% | -2.48% | -24% | +375% |
-
-The gains sat in 2023-2026 (C: +0.09% per acted report in 2019-2022, +0.83% after). Risk controls
-were then chosen on 2019-2022 only (160 variants) and checked on 2023-2026: the 10th-percentile
-model is what matters; dropping steps whose predicted P10 is below -1.5% lifted 2019-2022 from
-+29% to +208% and kept 2023-2026 (395 acted, +0.86%, P10 -0.16%). Chosen and live: margin 0.3%, no
-orders before the release, P10 filter -1.5%, risk weights, greedy (stopping adds nothing once the
-filter is on). Whole period: 660 of 1,906 acted, +0.83%, P10 -0.23%, worst -15.3%, every year
-positive; INTC 14 of 30, +1.81%; STX negative (gated out). The plans sit far above the price
-(INTC 2026-07: +4/5/6% at 16:20; 2026-01: +8/10/12%): near levels fill more but get run over.
-- [x] Pre-market reports (2026-10-26): the same engine on 1,345 before-the-open reports (53 stocks):
-      the window runs from the previous close to the reaction day's 10:30, the release minute found
-      against the pre-market's own volume around the SEC time (72% from the price), the session's
-      end 09:25, the open the same day; a `bmo` flag in the features. 3,835 reports in all.
-- [x] 1D-CNN challenger (`earnings_pulse_cnn.py`: the last 90 one-minute bars before each placement
-      plus the state, all 84 steps' gain and P10 at once). Judged the same way, it passed no risk
-      limit on 2019-2022 and made +0.40% per acted report under LightGBM's policy (P10 -2.72%, three
-      negative years). The average of the two was attractive on 2023-2026 (+2.01%, worst -11%) but
-      lost on the selection years, so it is noted, not used.
-- [x] Policy re-chosen on 2019-2022 with both sessions: margin 0.5%, P10 filter -2.0%. 2023-2026:
-      407 acted, +1.40% per acted report, P10 -0.09%. Whole period 589 acted, +1.36%, every year
-      positive; after the close +1.15% (434), before the open +1.95% (155); INTC 10 of 30, +3.43%.
-      The live watch now also runs the pre-market (04:00-09:35 ET) for holdings reporting before
-      the open.
-- [ ] Survival (first-passage) model for the fill and buy-back probabilities; hierarchical shrinkage
-      for the per-stock gate; MiniRocket as a cheap sequence challenger
-
-### Q.7 Action RL — the system chooses among actions it can compose (🔴, started 2026-10-26)
-
-**Goal (user, 2026-10-26).** "设计 action，RL 能选择最合理的 action": the advisor kept proposing the
-same two-step TSM ladder (+0.36% on 47 heavily overlapping windows), because its candidates are a
-fixed list of eight. Replace the list with a grammar the policy composes from, and let only what
-survives the lab's statistics through.
-
-- **Decision points**: report evenings and pre-markets (minute placements), peer reports, the
-  daily 13:00 check and event triggers.
-- **State**: position (shares, cost, unrealised, weight, cash), the price path (minute and daily),
-  volatility, event context (days to report, implied move, release read, peers), news sentiment,
-  the ranking model, regime; constraints (whole shares, the Irish four-week rule).
-- **Actions = entry x exit x size**, distances in units of the stock's daily volatility: reduce
-  then buy back, reduce, add with cash, buy a stock not held, exit; entries at market, limit
-  above/below, breakout; exits by limit, trailing stop, stop loss, bracket (OCO), or time (session
-  end, next open, day 1/3/5/10/20); sizes as fractions of the position or the cash, in whole shares.
-  Single legs are scored; ladders are composed from them (as in Q.5 v4.2).
-- **Reward**: against doing nothing, net of costs; a CVaR penalty; a penalty for a loss sale bought
-  back within four weeks. Hard constraints, not rewards: no sale below cost without a buy-back, no
-  sale beyond the shares held, no buy beyond the cash.
-- **Learning**: offline (no money spent exploring). The orders are too small to move prices, so
-  every action's outcome is computed exactly on the bars: a full-information contextual bandit at
-  each decision point, fitted Q iteration for when to act and how long to hold, distributional Q
-  (mean and P10) from the lab's champion (CatBoost); composition and size under a CVaR limit.
-  Default action: hold; anything else must clear the margin and the lab's deflated Sharpe gate.
-- **New actions**: evolutionary / Bayesian search over the grammar and LLM-proposed hypotheses
-  enter the library only through the same out-of-sample gate.
-- **Rollout**: walk-forward (select on 2019-2022, report on 2023-2026), shadow, champion, a
-  per-stock hierarchical gate, live drift monitoring.
-
-- [x] 1. Grammar and simulator (`quant_data/research/rl/`): 576 report actions, paths stitched from
-      1-minute, 5-minute and daily bars (daily put on the raw minute scale: yfinance is
-      split-adjusted), conservative fills, numba (8.8M outcomes in 20 s), 9 tests. First policies
-      on 15,356 report decision points: a single LightGBM picking the best of 576 (winner's curse)
-      DSR 0.62; an ensemble scoring mean - spread, composed: 26 trades in 2023-2026, +2.52%, none
-      negative, DSR 0.98, but 49 trades in eight years against the pulse champion's 370: a
-      candidate, not live.
-- [x] 2. Daily decision points (`build_daily`, `learn_daily`): 48,645 (every fifth session of 101
-      stocks since 2016) x 256 actions, regular-session cost 0.05% a side, one plan per stock at
-      a time, CVaR limits. Chosen on 2019-2022 (56 trades, +0.71%); 2023-2026: 110 trades, -1.79%,
-      DSR 0. Selling and buying back on daily bars does not beat holding these rising names (a
-      reduce held 20 days averages -2.44%; MRNA +177% on 2026-08-19 shows the uncapped side). The
-      advisor got the significance gate instead (quant_ai `strategy.py`, t >= 2 on the overlap-
-      adjusted sample): TSM's ladder (+0.36%, t 1.0 on ~16 independent windows) is withdrawn and
-      every holding is a hold today; the report-evening pulse is unaffected.
-- [ ] 3. Holding period by fitted Q iteration; CVaR sizing
-- [ ] 4. Stocks not held; peer spillover events
-- [ ] 5. Grammar search and LLM-proposed actions
-
-### Q.6 Event strategy lab — many algorithms, many actions, every result kept (🔴, ongoing)
-
-**Goal (user, 2026-10-26).** Try many algorithms and keep every backtest in MLflow; let the system
-find more actions than sell / buy back / hold, including buying stocks not held. Long only (no
-shorting, no options); cash may be used to buy first; the holding period is not fixed but part of
-what is learned; events: earnings and peer-earnings spillover. The user trades by hand, so there is
-no deadline: the bar is evidence.
-
-1. **Lab.** `quant_data/research/lab/`: MLflow experiment `earnings_pulse`, one run per (model,
-   policy); one evaluation for all: walk-forward by year, selection on 2019-2022 and the report on
-   2023-2026, by session and stock, and the deflated Sharpe ratio over all trials so far (the more
-   variants tried, the higher the bar).
-2. **Algorithm zoo** on the same steps: LightGBM seed/feature ensembles, CatBoost, XGBoost,
-   MiniRocket, a first-passage (survival) model for fills, hierarchical shrinkage for the per-stock
-   gate; the LightGBM + CNN average in shadow.
-3. **Action grammar.** Entries: limit sell above, limit buy below (cash), breakout buy, market at a
-   time. Exits: limit back, trailing stop, stop loss, bracket (OCO), time (session end, next open,
-   day k close). Any stock with a report, held or not (buys only for the ones not held). Searched
-   by evolution / Bayesian optimisation over the grammar, then a state-conditional choice.
-4. **Peer spillover.** A bellwether's report as the event for its peers and the holdings.
-
-*Lab, first results (2026-10-26).* MLflow experiment `earnings_pulse` (id 2): eight models x 80
-policy variants = 640 trials. Each model's variant is chosen on 2019-2022 (highest total within
-worst > -10%, P10 > -2%) and reported on 2023-2026; the deflated Sharpe ratio (DSR) is computed
-against every trial logged so far.
-
-| Model | 2023-2026 acted | Mean | P10 / worst | DSR |
-|---|---|---|---|---|
-| CatBoost | 257 | +2.03% | 0.00% / -10.5% | 0.992 |
-| 5 LightGBMs averaged (seeds, feature subsets) | 252 | +1.97% | 0.00% / -10.0% | 0.979 |
-| LightGBM + CNN average | 281 | +2.01% | 0.00% / -11.3% | 0.950 |
-| single LightGBM (live until today) | 407 | +1.40% | -0.09% / -24.0% | 0.247 |
-| average of all four | 467 | +1.31% | 0.00% / -21.4% | 0.338 |
-| average of the three GBDTs | 623 | +1.04% | -1.00% / -19.6% | 0.001 |
-| XGBoost, 1D-CNN | no variant within the risk limits on 2019-2022 | | | |
-
-The single LightGBM's record did not survive the deflation (its per-trade Sharpe 0.335 is below the
-0.366 that 240 trials reach by luck); the ensembles and CatBoost did. Champion rule fixed from now
-on: DSR >= 0.95, highest wins. Live since 2026-10-26: CatBoost champion (acts, announces), the
-LightGBM ensemble as shadow (saved with status `shadow`, scored the next morning, compared at
-`/api/markets/pulse/scorecard`). Next: choose a model's variant by its per-trade Sharpe within the
-risk limits rather than by its total (the total favours loose margins: the GBDT average picked 0.3
-and failed); then the action grammar.
-
-*Lab, second round — SIP extended-hours phantom-wick audit, two-stage Hurdle models & `sharpe_trade` selection (2026-10-30, `quant_data` `f607022`, `quant_ai` `a82430a`).*
-Scoring `INTC`'s live `2026-10-29` report evening (`advice_orders` `#28–#39`) uncovered a systemic
-contamination in Alpaca SIP 1-minute extended-hours bars: late-reported regular-session `16:00`
-closing-cross / TRF benchmark prints appear after `16:02` ET (e.g. `INTC` `16:15/16:16` `high = $92.07`
-while trading at `$75` on a `-30%` crash, and `AAPL` `2024-05-02` `16:53` `low = $173.03` while at
-`$185` on a `+7%` rally), creating fake limit fills on both crash sells and runaway buy-backs.
-- **Scrubber (`scrub_extended_bars` in `earnings_pulse.py`, `rl/build_events.py`, and `quant_ai/markets/pulse.py`):**
-  clamps extreme extended-hours `high`/`low` needles after `16:02` ET whose excursion from the bar's
-  `open`/`close` body exceeds `max(1.5%, 2.5×body)` and matches `regular_close` within `0.35%`. Across
-  `3,835` earnings reports (`2,539,584` step rows), **`1,319` phantom bars across `844` reports** were
-  scrubbed; live `INTC` `#28–#39` orders were re-scored from bogus `+14.35%..+18.35%` to accurate
-  `expired` / `void` (`0.0%`).
-- **Two-stage Hurdle Bandit (`hurdle_lgbm`, `hurdle_catboost`) & `sharpe_trade` selection (`zoo.py`):**
-  decomposes unconditional expected step value into $\hat{P}(	ext{fill}) \cdot \hat{\mathbb{E}}[	ext{gain} \mid 	ext{fill}]$
-  while keeping the tail gate on conditional downside $\hat{Q}_{10}[	ext{gain} \mid 	ext{fill}]$ (multiplying
-  $Q_{10}$ by small $P(	ext{fill})$ shrinks `-15%` adverse-selection fills below `-1%` and breaks tail gating),
-  with variants chosen on `2019–2022` by `select_sharpe_trade` within `worst > -10%`, `P10 > -2%`.
-- **MLflow experiment `earnings_pulse_scrubbed` (`400` clean variant runs across `5` models):**
-
-| Scrubbed Model (`2019–2022` `sharpe_trade` choice) | Passing `/80` | `2023–2026` OOS acted | OOS Mean | OOS `P10` / Worst | OOS `SR/trade` | Status (2026-10-30) |
-|---|---|---|---|---|---|---|
-| **5-seed LightGBM (`lgbm_seeds`)** | 26 / 80 | 116 | **+1.40%** | `0.00%` / **`-3.18%`** | **0.454** | **Champion** (`margin=0.5, q10>=-1.5, risk`) |
-| **5-seed LGBM + Hurdle LGBM (`avg_lgbm_hurdle`)** | 6 / 80 | 122 | **+1.38%** | `0.00%` / `-5.05%` | **0.463** | Ensemble (`DSR_80 = 0.973`) |
-| **Two-stage Hurdle LGBM (`hurdle_lgbm`)** | 20 / 80 | 163 | **+1.06%** | `0.00%` / `-5.08%` | 0.342 | **Shadow** (`margin=0.5, q10>=-1.0, risk`, `DSR_80 = 0.961`) |
-| **CatBoost + 5-seed LGBM (`avg_cb_lgbm`)** | 20 / 80 | 61 | **+1.56%** | `0.00%` / `-5.57%` | 0.438 | `87` total trades (`<100` live floor) |
-| **CatBoost (`catboost`, prior champion)** | **0 / 80** | (141) | (+0.96%) | (`0.00%` / `-7.00%`) | (0.348) | **Retired** (`2019–2022` worst `-12.02%` once phantom fills removed) |
-
-  Removing SIP phantom fills exposed that roughly half of standalone CatBoost's prior `+2.03%` headline
-  relied on unfillable `close16` late prints, whereas `lgbm_seeds` retained `+1.40%` OOS mean (`t = +4.89`)
-  with a `-3.18%` worst loss across 4 OOS years. Refreshed `/Volumes/Data4T/earnings_policy/pulse_model/`
-  on `2026-10-30` with `lgbm_seeds` as live champion and `hurdle_lgbm` as live shadow.
-
-### Q.8 Three-layer upcoming catalysts, per-stock event modal & AI query (✅ Done 2026-10-30 — `quant_ai` `74741a9`..`52b50e9`, `quant_ui` `da1a8f9`..`8d33dc4`)
-
-**Goal (user, 2026-10-30).** Every stock in **My Holdings** and **Watchlist** needs forward-looking
-visibility into upcoming binary catalysts — not just earnings dates, but conferences, product/node
-launches, policy/tariff/antitrust milestones, and supply-chain spillover — presented cleanly without
-bloating the Holdings page, plus an AI search bar to ask targeted forward-risk questions.
-
-**Architecture (`quant_ai/markets/events.py`, `quant_ai/markets/catalysts.py`, `quant_ui/src/components/markets/CatalystsPanel.tsx`):**
-
-1. **Layer 1 (`L1_calendar` — deterministic structured schedules):**
-   - Nasdaq + Finnhub earnings calendars (including ADR underlying tickers `000660.KS`, `2330.TW`,
-     `ASML.AS`) enriched with ATM-straddle options implied moves (`±%`).
-   - Nasdaq cash dividend ex-dates / pay-dates (with estimated USD payout on held shares) and stock splits.
-   - Authoritative macro & market-structure dates (`OFFICIAL_MACRO_SCHEDULE`: US Midterm Elections,
-     BLS Nonfarm Payrolls & CPI, FOMC & SEP dot plots, SEC 13F deadlines, monthly OpEx / Quad Witching),
-     deduplicated against Nasdaq's economic calendar with secondary ISM sub-indices filtered out.
-   - TSMC 10th-of-month consolidated revenue releases (`_tsm_monthly_revenue_dates`) and verified
-     semiconductor / cloud / investor conferences (`OFFICIAL_INDUSTRY_CONFERENCES`: SC26, Microsoft
-     Ignite, AWS re:Invent, UBS Global Tech & AI Conference, Barclays Global Tech Conference, IEEE
-     IEDM 2026, CES 2027).
-2. **Layer 2 (`L2_extracted` — automated forward-event extraction every 6h in `markets/background.py`):**
-   - Pulls forward-filtered Google News RSS (excluding post-earnings price-recap noise), SEC EDGAR
-     recent `8-K` / `6-K` material filings, and MongoDB `news_articles`, extracting structured dated
-     catalysts via the local LLM into SQLite (`collected_catalysts`).
-3. **Layer 3 (`L3_web` — web catalyst discovery with resilient fallback):**
-   - Daily / on-demand Claude CLI `WebSearch` sweep for non-earnings catalysts, with automatic
-     graceful fallback (`_collect_l3_thematic_web_fallback`) to targeted thematic RSS + local LLM
-     extraction whenever Claude CLI is unavailable or hits weekly quota.
-4. **Per-stock pop-up modal & compact 1-line AI search bar (`CatalystsPanel.tsx`):**
-   - Default 90-day horizon covering full quarterly conference + next-earnings cycle; per-row
-     `🔭 事件` button on every Holding and Watchlist row opens a closable modal (`✕`, `Esc`, backdrop)
-     grouped into **Direct**, **Supply-Chain & Peer Spillover**, and **High-Impact Macro** events.
-   - Interactive AI query endpoint (`POST /api/markets/catalysts/query`, modes `fast` and `web`) with
-     persisted history (`catalyst_queries`) and one-click deletion.
-
-### Q.9 Per-stock order status & swing lot allocation manager (✅ Done 2026-10-30 — `quant_ai` `52b50e9`, `quant_ui` `8d33dc4`)
-
-**Goal (user, 2026-10-30).** While brokers settle disposals under FIFO for tax reporting (Irish CGT),
-swing-trading tranches bought on dips (e.g. buying 20 shares at `$73.14` when overall `avg_cost` is
-`$92.24` and taking profit at `$85.00`) require per-order lifecycle visibility and explicit lot
-matching — **without** mutating the portfolio's headline average cost (`Mine`) or Irish CGT `FIFO`
-cost basis on the main Holdings table.
-
-**Architecture (`quant_ai/markets/portfolio.py`, `quant_ui/src/components/markets/LotManagerModal.tsx`, `Holdings.tsx`):**
-
-1. **Single-ledger atomic storage (`transactions.lot_allocations`):**
-   - Added nullable JSON column `lot_allocations` (`[{"buy_id": <int>, "quantity": <float>}, ...]`)
-     on `transactions` rows (`side == "sell"`). Buy/sell entries inside the modal write directly to
-     `transactions` inside `_write_conn` (`BEGIN IMMEDIATE`), preserving a single source of truth.
-   - Validation in `compute_holdings`: rejects over-allocating beyond any buy lot's `open_qty`,
-     rejects deleting a buy order explicitly referenced by a subsequent sale (rolling back atomically),
-     absorbs 8-decimal Revolut fractional-share precision cleanly (`SNAP_EPS = 5e-9`), preserves
-     custom allocations when editing a sale's note via the legacy trade form, and falls back to FIFO
-     for any unallocated shares.
-2. **Per-order statuses & three-way accounting conservation:**
-   - Every buy order carries an explicit status (`"open"` 🟢 持仓中, `"partial"` 🟡 部分平仓,
-     `"closed"` ⚪ 已结清), live independent unrealized P&L (`open_pnl`, `open_pnl_pct`), realized
-     swing P&L, matched sale slices, and parallel strict-FIFO status (`fifo_status`, `fifo_open_qty`)
-     for one-click side-by-side comparison.
-   - Headline `avg_cost` (`Mine`) and `fifo_avg_cost` (`FIFO`) remain bit-for-bit unchanged; the
-     modal additionally reports `swing_realized`, `open_lots_avg`, and true net-cash `breakeven_price`
-     (`(cycle_buys - cycle_sells - dividends + fees) / held_qty`), satisfying the exact conservation
-     identity `open_lots_unrealized + swing_realized == fifo_unrealized + fifo_realized == unrealized + realized`.
-3. **Interactive UI (`StockLotButton` + `LotManagerModal.tsx`):**
-   - Every row in **My Holdings** displays a `📦 批次` button highlighting any currently profitable
-     open tranches (e.g. `🟢 3笔浮盈 +$xx.xx`) or the lowest-cost open lot when underwater.
-   - Inside the modal, users can filter/sort buy orders by status or cost, record new buys (by shares
-     or USD amount), or sell by checking specific open buy orders and entering partial/full share
-     counts (with quick `✨ 全选盈利批次` / `最低成本优先` / `LIFO` / `FIFO` helpers, live hypothetical
-     sell-price profit simulation, and one-click re-allocation `🎯 改配批次` on historical sales).
-   - Verified by 123 unit tests across `quant_ai/tests/test_markets_*.py` and clean strict TypeScript
-     build in `quant_ui`.
-
-### Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor (✅ Done 2026-10-30 — `quant_ai` `a82430a`, `quant_ui` `51ce6e8`)
-
-**Goal (user, 2026-10-30).** Bridge empirical multi-day swing research directly into the user's manual
-tranche workflow (`📦 批次`) without black-box daily RL overfitting (where `learn_daily` scored
-`-1.79%` OOS, `DSR = 0.000`, and `learn_peers` scored `+0.01%..+0.13%` OOS, `DSR = 0.000`): prevent
-clustered knife-catching (e.g. `INTC` `#40 @ $71.68` and `#41 @ $73.14`, spaced only `0.29×ATR` apart)
-and give every open lot concrete volatility-calibrated profit targets (`TP1` / `TP2`) so underwater
-positions can rotate capital profitably without waiting for an anchored overall average cost (`$92.24`).
-
-1. **Out-of-sample empirical calibration (`102` US stocks, `2023–2026`, `703` `≥2×ATR` single-day drops):**
-   - After a `≥2×ATR` single-day drop, there is a **`42.8%`** probability of dropping another `≥1.0×ATR`
-     within 3 sessions (`24.9%` for `≥1.5×ATR`).
-   - Immediate Day-1 dip entry (`+1.5×ATR` 15-day take-profit) yields `+0.97%` mean per trade (`54.8%`
-     TP hit rate), whereas spacing limit tranches **`-1.5×ATR`** below yields **`+2.50%` mean per trade**
-     (`33.6%` fill rate, `54.2%` `+2.0×ATR` TP hit rate — **2.6×** higher expectancy per trade).
-2. **Backend engine (`quant_ai/markets/lot_advisor.py` + `GET /api/markets/portfolio/lot-advice`):**
-   - Computes 14-day Wilder `ATR(14)`, `RSI(14)`, `SMA(20)`, 1-day/3-day drop in `%` and `×ATR`, and
-     post-drop stabilization (`close >= prev_close && close >= open` once crash velocity subsides).
-   - Integrates **7-day binary catalyst risk** from `Q.8` (`catalysts.upcoming_feed`, escalating minimum
-     tranche spacing from `1.5×ATR` to `2.0×ATR` when earnings/policy/macro high-impact events are due
-     within 7 days or when a crash has not yet stabilized) and **semiconductor/memory cluster weight**
-     across `My Holdings`.
-   - Retrospectively flags tight historical lot pairs (`gap < 0.75×ATR`, e.g. `INTC` `#40` & `#41` at
-     `0.29×ATR`) and computes exact suggested limit entry prices (`anchor_lowest_lot - min_spacing×ATR`,
-     e.g. `INTC ≤ $61.51`).
-   - Generates per-lot exit plans for every active buy tranche: `TP1 = unit_cost + 1.5×ATR`,
-     `TP2 = unit_cost + 2.0×ATR`, and `1.0×ATR` trailing protection once a lot reaches `+1.0×ATR`.
-3. **Interactive UI (`LotManagerModal.tsx`):**
-   - Top **⚡ 波段风控引擎** strip displaying `ATR(14)`, `RSI(14)`, stabilization badge, 7-day catalyst
-     alert pill, and semiconductor cluster weight.
-   - Live debounced **🛡️ 抄底档位与风控检查** card inside the Buy tab (`green` / `amber` / `red`) with
-     one-click **`🎯 填入建议挂单价`** button and OOS benchmark summary.
-   - Per-lot `TP1` / `TP2` column and **`🎯 目标测算`** button on the Orders list & Sell tabs to pre-fill
-     any lot's `+1.5×ATR` target directly into the swing settlement simulator.
-   - Verified by 126 unit tests across `quant_ai/tests/test_markets_*.py` (`test_markets_lot_advisor.py`
-     included) and zero-error `eslint` + `tsc -b && vite build` in `quant_ui`.
-
-### Q.11 全系统定时任务与数据管道中控大盘 (Unified Task & Schedule Monitor Dashboard) (✅ Done 2026-10-30 — `quant_ai` `a4baa2f`, `quant_ui` `ab54717`, `quant_docker` `2cf687a`)
-
-**Goal (user, 2026-10-30).** Unified system observability dashboard in personal quant UI displaying
-progress, logs, running tasks, upcoming schedules, and health across all background automation on
-the machine — bridging:
-1. **Airflow Pipelines**: All active DAGs (`daily_signal_pipeline`, `backfill_1_collect_and_match`,
-   `quant_intraday_news`, `price_history_backfill`, `quant_retail_sentiment`, `weekly_model_training`),
-   running tasks, execution durations, next schedules, step-by-step progress bars, and live task logs.
-2. **找工中控平台 (Job Agent on `http://127.0.0.1:5050/`)**: Launchd daemon (`com.xiangyu.jobagent`
-   scheduled at 11:00 & 16:00), web server health, next execution countdown, last successful scrape
-   record, generated report metadata (`Today_Jobs.md`), and real-time log viewer modal.
-3. **Core System Daemons**: `com.quant.ai` (:18000), `com.quant.airflow-scheduler`, `com.quant.lmstudio-server`
-   (:1234), `com.quant.disk-watch`, and Docker infrastructure containers.
-
-- **Backend API (`quant_ai/markets/task_monitor.py` + `api.py`)**:
-  - `GET /api/markets/tasks/monitor`: queries Airflow PostgreSQL metadata directly, checks port health
-    & process status, parses `launchctl list`, `scrape_state.json`, and `Today_Jobs.md`.
-  - `GET /api/markets/tasks/log`: tails live execution logs across Airflow task instances, Airflow
-    scheduler, Job Agent (`job_agent.log`, `launchd.log`), and `quant_ai.log`.
-- **Frontend Dashboard (`quant_ui/src/components/TaskMonitorPanel.tsx` + `Dashboard.tsx`)**:
-  - Dedicated `⏱️ Task Monitor` tab with auto-polling (10s), running status strip, pipeline breakdown cards,
-    step instance expandable views, and a full-featured dark monospace terminal modal with refresh and copy.
-
-
-### Q.12 Review of the 2026-10-30 suggestions, and the portfolio risk gate (🟡 started 2026-10-31)
-
-**Why (user, 2026-10-31).** INTC: 98.9 shares at an average of $106.74; sold 30 at $92.22, bought 30
-back at $71.68 two hours later, then added 20 at $73.14 and 23.28 at $64.44. The sale was a loss:
--$435.60 realised (30 x ($106.74 - $92.22)). Against holding, the round trip lost $616 less than not
-trading would have: a smaller loss, not a gain. The adds afterwards were the problem: two lots 0.29 x ATR apart while
-the stock was still falling, INTC at 43.6% of the portfolio, chips / memory at 98.7%, no cash.
-The lesson for every model here: a trade is judged against not doing it, never against the average
-cost.
-
-**Review of the suggestions made on the other machine (2026-10-30).**
-
-| Suggestion | Verdict |
+| Setup | Speed |
 |---|---|
-| Stop daily buy-low/sell-high RL (`learn_daily`) | Agree: 2023-2026 -1.79%, DSR 0 |
-| Stop peer-spillover RL (`learn_peers`) | Pause, not refuted: the evening catch-up signal is there (IC about 0.11, top-bottom quintile about 0.65% gross); it is the assumed 0.5% round trip that eats it, and the spreads below say that is about twice the real cost on liquid names |
-| No larger action spaces, no PPO / DQN | Agree (the single LightGBM over 576 actions showed the winner's curse) |
-| Three layers: signal / position-and-risk / execution | Agree; the missing piece is layer 2 as one gate every module passes (below) |
-| "Pulse model +2.03%, DSR 0.992" | Out of date: that was CatBoost before the phantom-bar scrub; live is the 5-seed LightGBM (+1.40%, 116 trades, worst -3.18%), hurdle LightGBM in shadow. The pulse sells into the spike and buys back; it does not "catch the knife" |
-| Dip-entry spacing model | As a rule yes, as a trained model no: the per-fill figures overstate it (re-run below) |
-| Swing-lot exit model | Display only: lots are fungible (selling the $64 lot or the $106 lot sells the same INTC), so "take profit on the cheap lot" is "reduce after a rebound", which `learn_daily` found loses to holding on these names |
+| Current LLM (Gemma via LM Studio) | ~3.9 art/s |
+| Fine-tuned FinBERT (GPU) | ~1000-2000 art/s |
+| Fine-tuned FinBERT (CPU only) | ~200 art/s |
 
-**Checks run on 2026-10-31.**
+586K articles: current ~41h → fine-tuned ~5-10 min
 
-1. *Pulse release minute (fixed, `quant_ai` `markets/pulse.py`).* STX 2026-10-27: the closing cross
-   moved the quote +0.6% at 16:00:22 and the watch took that as the release; the wire came at
-   16:05 (-3.5%), so the r+1 / r+3 / r+5 placements were five minutes early. In the first three
-   minutes after 16:00 a release now needs 2% (INTC 2026-07-23 moved 4.8% at 16:00: still caught).
-2. *Dip entry re-run (daily bars, 102 stocks; script kept in the session scratchpad).* Drops of
-   >= 2 x ATR: 2,593 since 2016, 899 in 2023-2026; another >= 1 x ATR within three sessions 47%
-   (2023-2026). A buy at the close or a limit k x ATR lower (five sessions to fill), out at
-   +tp x ATR or after 15 sessions, 0.05% a side; chosen on 2016-2022, reported on 2023-2026:
+**Deliverables**
 
-   | k (limit below the close) | fill | per fill | **per signal** | same rule on random days |
-   |---|---|---|---|---|
-   | 0 (buy at the close), tp 3 | 100% | +1.34% | **+1.34%** | +1.30% |
-   | 0.5, tp 3 (best on 2016-2022) | 75% | +2.18% | **+1.64%** (t 3.1 by date) | +0.98% |
-   | 1.5, tp 2 (Q.10's rule) | 39% | +1.89% | **+0.74%** | +0.49% |
+- `research/finetune_sentiment.py` — training script
+- `research/infer_sentiment.py` — batch inference on remaining articles
+- benchmark report: fine-tuned vs LLM scores on held-out set
 
-   Spacing raises the gain per fill, as Q.10 said, but lowers it per signal (most limits never
-   fill); buying right after a drop is no better than buying on any day of a rising market. The
-   spacing rule stays, for risk (no clustered adds), not as a source of return. After such drops
-   the high reached +1.5 x ATR within 15 sessions in 61% of cases and +2 x ATR in 50%.
-3. *After-hours spreads (Alpaca SIP quotes, 60 random report evenings since 2025).* Median full
-   spread: 0.05% at 15:00, 0.25% five minutes after the release, 0.22% at +20 min, 0.19% at
-   +60 min, 0.15% at 19:30 (75th percentile 0.43% at +5 min); INTC 0.10% at +5 min, then 0.05%.
-   A market order pays about half the spread, so the 0.25% a side assumed in the pulse and the RL
-   is conservative (roughly 2x) for liquid names. Next: per-stock measured costs, then re-judge the
-   peer-spillover policy with them.
 
-**The gate (`quant_ai/markets/risk_rules.py`).** Fixed rules, not learned, checked on every order
-before it is shown: a sale within the whole shares held; a buy within the cash; no stock above
-`RISK_MAX_SYMBOL_PCT` (30%, placeholder) of holdings + cash and no chips / memory cluster above
-`RISK_MAX_CLUSTER_PCT` (70%, placeholder); no buy before a >= 2 x ATR drop has stabilised; a buy at
-least 1.5 x ATR below the cheapest open lot (2 x with a high-impact event within 7 days). Each block
-says why. Wired into today's action (Q.13); the pulse (sales and buy-backs only) and the advisor's
-add orders are next.
+### Execution order
 
-- [x] Pulse release fix, dip re-run, spread measurement, the gate with tests (2026-10-31)
-- [x] Targets set with the user (2026-10-31): cash at least 10% (`RISK_MIN_CASH_PCT`; a buy must
-      leave it, and it is listed as a breach), chips / memory at most 70%, one stock at most 30%.
-      With no cash the dip rules could never act; the measured edge of the pulse (+1.4% a trade, a
-      few trades a year) is far smaller than what concentration costs (INTC's 10.6% ATR on 43.6% of
-      the portfolio moves the whole of it 4-5% on an ordinary day)
-- [x] The user's own trades scored against not making them (below)
-- [ ] Advisor add orders through the gate; pulse orders annotated with it
-- [ ] Per-stock measured after-hours costs; re-judge `learn_peers` with them
-- [x] Quick PEAD test on daily bars (2026-10-31, below)
-- [x] Sell the rebound, buy back lower, against holding (2026-10-31, below)
-- [x] `learn_peers` rebuilt with the measured costs (0.125% a side after hours, 0.025% regular;
-      EP_DIR `/Volumes/Data4T/earnings_policy_realcost`, MLflow `action_rl_peers_realcost`,
-      2026-10-31): still nothing. No cash: 125 trades on 2023-26 at +0.03% (se 0.19), DSR 0.000;
-      with cash: 2 trades on 2023-26. Halving the cost did not make the peer spillover pay; dropped
-
-**Agreed order (user, 2026-10-31).** 1) the user reviews INTC's Action column and the targets above;
-2) score the user's own trades; 3) re-judge `learn_peers`, quick PEAD test; 4) everything else
-(call-transcript features, volume-based stabilisation, an execution bandit for daily orders) waits
-until `daily_actions` holds one to two months that can be compared with doing nothing. Not pursued:
-
-**The user's own trades against not making them (2026-10-31).** Every trade recorded since the
-holdings were entered (10-21 to 10-30, 11 trades), each marked at the 10-30 close: a sale gains
-`q x (sale - now)`, a buy `q x (now - buy)`; the sum is exactly the difference from having done
-nothing. Total **+$680 against doing nothing** (losses avoided, not profits): INTC +$462 (the sale of 30 at $92.22 +$820, the buy-back of 30 at $71.68
--$204, the adds of 20 at $73.14 -$165 and 23.28 at $64.44 +$10), STX +$265 (the sale of 4 at $710.27
-before the report), GOOGL -$16, WDC -$31. The sale-and-buy-back pair's $616 of loss avoided is fixed
-whatever INTC does next (the sale itself still realised -$435.60); the adds depend on it. Eleven trades in ten days decide nothing about skill. What can be
-read: the sales into strength cut the losses, the adds while falling gave some of that back. The large
-losses came before 10-21 — INTC bought nine times from $119.91 down to $90.98, SKHY seven times from
-$179.66 to $137.54, STX four from $810 to $651.51 — and those lots were entered without their dates,
-so they cannot be scored until the broker statement is.
-
-**PEAD, quick test (2026-10-31).** 3,865 reports, 100 stocks, 2016-2026; entry at the reaction
-day's close; returns in excess of SPY and then of the same stocks' random days (control, 3,967 days;
-the control itself beats SPY by +1.1% over 20 sessions in 2023-26 — the universe is today's large
-caps), t clustered by week:
-
-| 2023-26 | n | 5 sessions | 20 sessions | 60 sessions |
-|---|---|---|---|---|
-| Hold after a gap <= -5% | 355 | -0.65% (t -1.8) | **-1.15% (t -2.2)** | -1.62% (t -0.6) |
-| Hold after a gap <= -10% | 144 | -0.46% | -1.10% (t -2.1) | -0.72% |
-| Buy after a gap >= +5% | 379 | +0.04% | +1.21% (t 0.7) | +0.53% |
-| Buy after a gap >= +10% | 181 | +0.34% | +2.85% (t 1.8) | +2.23% (t 1.3) |
-
-The same signs in 2016-22 (gaps -5..-2%: -1.71% over 20 sessions, t -2.8; above +10%: +0.62%, t
-1.3). Read: after a bad report a stock lags for about a month, by about 1% — real but small next to
-INTC's 10.6% daily ATR, and gone by 60 sessions; after a very good one the drift is larger but not
-significant. It supports reducing after a gap down rather than adding, nothing stronger. Per stock
-the samples are too small (INTC: 17 gaps <= -5%).
-
-**Sell the rebound, buy back lower (2026-10-31).** The user's 10-29 INTC round trip avoided $616 of
-loss; is it repeatable? After the 2,534 drops of >= 2 x ATR (876 in 2023-26, 711 on report days): a
-sell limit at close + s x ATR (15 sessions), then a buy-back at the sale - b x ATR until session T,
-else T's close; 40 variants (s 0.5-2, b 0.5-3, T 20 / 40). Chosen on 2016-22 (s 1, b 0.5, T 20,
-+0.12% a signal) it gave **-0.10% on 2023-26 (t -0.0)**; the best in hindsight +0.11%; report-day
-drops -0.15%. Larger b and longer T lose more (the stock is not there to buy back). On random days
-the same orders lose -0.9% to -1.9% a signal (t -3.6 to -4.5), what `learn_daily` found. The 10-29
-trade was the stock carrying on down after its report, not a repeatable rule: the Action column
-keeps trims as reductions and adds no buy-back. `scratchpad q10/swing_back.py`, `pead/pead.py`.
-
-**Infrastructure, 2026-10-31 evening.**
-*Data4T incident.* Between 19:17 and 19:26 every container whose data lives on the external disk
-(`/Volumes/Data4T/docker-volumes`) lost it at once: mysql8 crashed, airflow-postgres PANICked ("Not a
-directory"), mongo6 aborted, mlflow could not open its sqlite file; the host walk-forward writing to
-the same disk died at 19:35 without a traceback. The files were intact on the host; Docker Desktop's
-share of the disk had gone stale (`mkdir /host_mnt/Volumes/Data4T: file exists` on every start).
-Restarting containers does not help; restarting Docker Desktop does, and the databases recovered on
-their own (InnoDB / WAL crash recovery). Likely the disk hiccuped under the heavy parquet I/O.
-
-*MySQL retired.* Three databases were one too many. mysql8 held only Keycloak (realm re-imported
-from `quant-realm.json` on every start anyway) and the GDELT batch queue (`workflow`: two tables,
-~6,000 rows); quant_api had the MySQL driver and a datasource but no SQL at all. Now:
-- Keycloak on PostgreSQL (`keycloak` DB and role in airflow-postgres). The image's entrypoint sources
-  a baked-in `.env` with `KC_DB=mysql`, so compose overrides the entrypoint with the same two steps.
-- The batch queue in PostgreSQL (`workflow` DB and role): the two tables copied (counts match),
-  `historical_collector.py` ported (`ON CONFLICT DO NOTHING`, `make_interval`, `RealDictCursor`,
-  psycopg2 lock errors); `TASKDB_*` / `USE_DB_BATCH_QUEUE` / `TASK_TABLE`, the old `MYSQL_*` names
-  still read. Exercised end to end on a scratch table. Note: a batch now turns `failed` on its third
-  failure, as `retries+1 >= 3` reads; MySQL's left-to-right `SET` made it the second.
-- quant_api: JDBC starter, MySQL driver and datasource removed (10 tests pass).
-- quant_api `POST /api/auth/refresh`: tokens are issued by `http://quant_keycloak:8080`, and Keycloak
-  refuses a refresh on any other address, so the browser's refresh on :18082 had always failed
-  (the 5-minute access token simply lapsed); quant_ui now refreshes through quant_api.
-- mysql8 stopped and removed from compose; its data stays at `docker-volumes/mysql_data`, dumps in
-  `docker-volumes/backup/mysql-2026-10-31` and `~/Quant_trade_db_backups/mysql-2026-10-31`.
-
-### Q.13 Today's action per holding and watchlist stock (🟡 pilot on INTC, 2026-10-31)
-
-**Goal (user, 2026-10-31).** Every holding and watchlist stock gets one action for the day. First
-INTC only; the user judges the result before it goes wider.
-
-**Design (`quant_ai/markets/daily_action.py`, `GET /api/markets/portfolio/daily-action`; `quant_ui`
-column "Action" in My Holdings).** The three layers in one line: a tested signal or a rule makes an
-action, the gate sizes it, the limits come from ATR. The first that applies:
-
-| Action | When | Basis |
-|---|---|---|
-| Earnings | the stock reports tonight or before the next open: the pulse watch runs, no buys | tested (pulse champion) |
-| Trim | above the symbol cap: the excess in two limits at +1.5 and +2 x ATR, good 15 sessions | rule + the rebound statistics above |
-| Add | a buy every rule allows | rule |
-| Hold | otherwise; what blocks a buy is listed | default |
-
-Each day's answer is kept (`daily_actions` in markets.db) to be scored against doing nothing.
-
-*First answer, INTC on 2026-10-31 (price $64.89, ATR $6.86):* Trim 45 shares into a rebound, 23 at
-$75.18 and 22 at $78.61 (43.6% of the portfolio against the 30% cap); buys blocked (not stabilised,
-$50.72 or lower by spacing, no cash, chips / memory 98.7%). If both fill: cash 13.8%, chips / memory
-84.9%, $3,152 more of chip names to sell to reach 70%.
-
-- [x] Backend, tests, the column for INTC (2026-10-31)
-- [ ] Score the kept answers against doing nothing
-- [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
-
-### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1, 2, 4, 6, tests A1-A4 and the action's risk plan done 2026-11-02; 3 partly; 7 needs live months)
-
-The 2026-11-01 review of every model (factor ranking, earnings pulse, lab, action RL, risk gate,
-RAG) gave these next steps. They are ranked by what they can change per day of work. The
-strength to keep is the evaluation layer: walk-forward, DSR, bootstrap CIs and t-tests on
-overlap-adjusted samples, with the negative results kept. The weak point is evidence: small
-samples, assumed costs, and a survivor universe.
-
-- [x] 1. **Re-run the pulse champion at the measured cost.** ✅ 2026-11-02: already stricter than measured — the weekly refresh trains at `PULSE_COST_PCT=0.25` a side plus 0.05% fill-through (`_strict`), twice the 0.125% spread; the note below predates it. New finding: the champion `lgbm_seeds` has DSR 0.712 (< 0.95), the shadow `hurdle_lgbm` 0.961 — the shadow is the one that survives the multiple-testing deflation.
-      Original note: training assumes `PULSE_COST_PCT`
-      0.10% a side after hours; the measured spread is 0.125% (Q.12). The peer spillover died of
-      cost alone. Re-judge `lgbm_seeds` (+1.40%, 116 OOS trades, t 4.89, worst -3.18%) and
-      `hurdle_lgbm` at 0.125% before trusting the headline. One parameter; largest possible change.
-- [x] 2. **Fitted weights for the factor scorer.** ✅ 2026-11-02 (`quant_data/research/backtest/factor_lab.py`,
-      top 5 every 20 sessions, the backtest's costs, selection 2019-01..2025-10 = 86 rebalances). The hand
-      weights ranked no better than chance: mean 20-day rank IC -0.0005 (NEUTRAL) / -0.007 (regime), Sharpe
-      0.79 / 0.83 against 0.88 for buying the whole universe equally. A ridge refitted at each rebalance on
-      past sessions reached IC 0.049 (t 2.62), Sharpe 0.97, +7.8%/yr over the universe (t 1.52, not
-      significant), DSR 0.989 (0.847 on the excess). Live since 2026-11-02: `score_daily_signals.py` reads
-      `research/signals/fitted_weights.json` (`SIGNAL_WEIGHTS=hand` restores the old dicts). Only features
-      filled on >= 30% of rows and half the sessions are weighted: retail_sent_score (from 2025-12),
-      analyst_buy_ratio (2026-03) and ah_gap (2026-05) had taken the largest weights from a few months of
-      data. Also found: `backtest_portfolio.py` never switched regime (it did not load the macro columns), so
-      the 0.58 reference was NEUTRAL weights throughout.
-      Original note: The hand-weighted regime scorer lost 0.074 net
-      Sharpe when syndicated news was deduplicated (M.12), while the fitted models moved by less
-      than 0.005 IC. Fit each regime's weights walk-forward (ridge or constrained regression)
-      instead of fixed weights such as `news_burst_20d` 0.9; compare net Sharpe and drawdown
-      against today's 0.58 / -39.6% (20d).
-- [~] 3. **Overfitting defences (M.5) and survivorship.** 🟡 2026-11-02, partly: an untouched final holdout
-      (2025-11..2026-10, 12 rebalances) is reported once in factor_lab.py and chose nothing; DSR counts the
-      four scored variants. In it no variant beat the universe (fitted -9.8%/yr, fitted by regime -0.4%, hand
-      -22% / -37%; 12 periods, t within +/-1.6). Survivorship is now measured rather than assumed: today's
-      102 names bought equally made Sharpe 0.88 against SPY's 0.66 in 2019-2025, so every factor result is
-      reported as excess over that universe. A point-in-time universe is not built: it needs historical
-      index membership and the prices of delisted names, which yfinance does not carry.
-      Original note: Keep an untouched final holdout; report
-      DSR for the factor model as the lab does. Build the universe point in time: today's large caps
-      bias every test (in the PEAD test even the random-day control beat SPY by +1.1% over 20
-      sessions in 2023-26).
-- [x] 4. **Fill-probability (first-passage / survival) model.** ✅ 2026-11-02 for the trim limits
-      (`quant_data/research/models/drop_rebound.py`, 2,455 drops of >= 2 x ATR, 102 stocks, 2016-2026,
-      walk-forward 2019-2026). LightGBM on 17 features (AUC 0.58-0.60) was over-confident and lost to the
-      pooled rate on Brier; logistic and an earnings x size x market table did no better. What wins at
-      every level, in 5-7 of 8 years: the rate split by cause. +1.5 / +2 x ATR reached in 15 sessions:
-      earnings drops >= 4 x ATR 39% / 28% (193), other earnings drops 50% / 36% (509), no report 65% / 54%
-      (1,753) — the action quoted 61% / 50% for all. Unfilled, the close 15 sessions later averaged
-      -4.3 to -6.3% vs selling at the next open. Picking the limit per drop by model lost 0.16% vs the
-      fixed pair (CI crosses 0), so the pair stays. Live in `daily_action.REBOUND` (cause from the
-      Nasdaq calendar; `lot_advisor._last_big_drop`).
-      Tests from the 11-01 reading list, same script: **A2** overnight vs intraday: +0.051% vs +0.049% a
-      day, after drops +0.05% vs -0.01% (CIs cross 0) — no reason to prefer the open or the close.
-      **A3** session before an after-the-close report: +0.149% vs +0.099% other sessions (CI crosses) —
-      no pre-report run-up in this universe. **A4** volatility-managed exposure per stock (1/sigma,
-      1/sigma^2): median Sharpe 0.578 / 0.546 vs 0.602 held, t -1.59; max drawdown -55.5% vs -60.6% —
-      no return gain, only a little less drawdown, so the fixed caps stay.
-      Original note: the phantom-bar scrub (Q.6, round
-      two) showed about half of CatBoost's +2.03% came from fills that could not have happened.
-      Estimate "does it fill" apart from "what it makes if filled". This feeds the hurdle models.
-- [ ] 5. **No more neural networks for now.** With ~2,490-3,835 reports, gradient-boosted trees
-      are the right tool: the 1D-CNN found no variant within the risk limits on its own, and PPO /
-      DQN were rejected (winner's curse over 576 actions). If tried later: MiniRocket (planned,
-      not implemented), or self-supervised pre-training on all 1-minute bars, then fine-tuning.
-- [x] 6. **RAG.** ✅ 2026-11-02, measured before spending the 20 hours (`quant_ai/eval/chunk_ablation.py`):
-      the 60 evaluation queries' judged pools (2,487 pairs, qwen3.8-27b rubric v3) re-ranked by the
-      query's cosine to title + lede (the index today) or to the best ~400-token chunk of the whole body.
-      nDCG@10 0.760 -> 0.773 (+0.013, 95% CI -0.010..+0.036, t 1.11; 25 queries better, 16 worse),
-      strict P@10 0.710 -> 0.723. Paraphrase queries gained (0.461 -> 0.531), temporal lost (0.807 ->
-      0.755). Not significant, and a third of the reranker's +0.076, which already reads the bodies; the
-      title + lede index stays and the 20-hour chunked re-index is not run. (A re-ranking of judged
-      documents: it cannot show first-stage recall of articles whose relevant part is deep in the body.)
-      Original note: Only 30.2% of articles fit 512 tokens, and the index holds title + lede.
-      Chunk and index long bodies; try query rewriting. Keep Claude as the judge, since the local
-      judges are not reliable (R.11).
-- [x] **Action: risk plan (2026-11-02).** The daily action had no return forecast that earned a place
-      (the factor score ranked the user's holdings no better than chance, item 2), so it now uses a
-      risk model the way a desk's optimiser does with zero alpha: `quant_ai/markets/optimizer.py` sells
-      each stock's excess over 30%, then takes what the chip cluster is over 70% and cash under 10% in
-      $50 steps from the holding with the largest marginal variance (6-month covariance, 20% shrinkage).
-      On 2026-11-02: sell $5,842 — INTC $2,914, SKHY $2,928 — portfolio volatility 69.5% -> 46.3%; INTC
-      carried 49% of the risk, SKHY 39%. The INTC trim is sized by the plan (48 shares, not 43).
-- [ ] 7. **Live evidence first.** Once `daily_actions` holds one to two months, score it against
-      doing nothing (Q.13). That is the only test of the advice itself and outranks any new model.
-
-### Q.15 Get out of INTC, and the rules that would have kept it small (🔴 recorded 2026-11-02, user's request)
-
-**The case.** INTC fell from $127 (09-24) to $90 (10-16) and, after a Q3 beat with a weak Q4 outlook
-(PC slowdown, an Israeli fab explosion, supply shortages), 28.6% on 10-30. Causes in the news store:
-10-05..06 Musk said Terafab was talking to TSMC (Intel's foundry role in doubt, -6%; relief on 10-07
-when Intel's CEO said it stays); 10-08..09 a chip sell-off "ahead of the Oct 29 report" (-7%); 10-29 the
-guidance. The user added 12 times: 9 lots from $119.91 to $90.98 (three on 10-08 alone) and three after
-the report ($71.68, $73.14, $64.44). Replayed on the daily bars, the add rules now in `risk_rules.gate`
-would have allowed only the first: seven were 0.1-0.8 x ATR apart (the rule wants >= 1.5, 2.0 within 7
-days of a report), two came while the stock fell 1.9 x ATR in 3 sessions, and the three after the
-report broke the falling, report-day and guidance rules together. Today: 142.18 shares at $87.69
-average, -31%; breakeven needs +46%. After 193 earnings drops of >= 4 x ATR (102 stocks, 2016-2026)
-the price was back above the pre-drop close within 60 / 120 / 250 sessions in 29% / 49% / 73% of cases,
-and 46% above the drop-day close within 250 sessions in 37%.
-
-- [ ] Q.15.1 **Why it fell, on the action.** For a holding down >= 2 x ATR or 5% in a day, retrieve the
-      news (hybrid search_news) and state the cause with sources, classified: guidance / results,
-      sector sell-off, macro, company news, none found. The cause feeds the reach rates (A1) and the
-      add rules below.
-- [ ] Q.15.2 **Add planner (补仓): when, at what price, how many.** Allowed only when stabilised, >= 1.5
-      x ATR below the lowest lot (2.0 within 7 days of a report), not in the week before a report, not
-      for N sessions after a guidance cut (N to be measured on the post-earnings drift), and sized so
-      the stock stays under 30% and the portfolio's bad day under the loss budget. Show the next
-      allowed price and size, or why none.
-- [ ] Q.15.3 **Recovery plan (解套) per losing holding.** Together, with each part's odds:
-      (a) rebound tranche sells (in the action since 11-02: 39% / 28% reach after such a drop);
-      (b) **profit offset (the user's idea)**: when another holding is sold at a gain G, sell the losing
-      one so its realised loss is X% of G (X = 30% proposed). Measured on today's numbers it is slow:
-      at $65, $1,000 of gains clears 13 INTC shares at X = 30%, 44 at 100%; clearing all 142 needs
-      ~$10.8k of gains at 30%. SKHY and TSM are below cost today, so it has nothing to work with yet;
-      (c) optional swing of the recent cheap lots ($64.44-$73.14) on rebounds — no tested plan has beaten
-      holding (Q.5 advisor), so labelled as such; (d) the base rates above, so "wait for breakeven" is a
-      known 1-in-3 bet over a year, not a plan. Decisions are on the position's risk from today, not
-      on its cost.
-- [ ] Q.15.4 **Profit-offset engine**: watch the other holdings; when one gains (above cost + a
-      threshold), propose the paired orders (sell part of the winner, sell INTC for X% of the gain) in
-      the action, and score them against doing nothing (daily_actions).
-
-### Q.16 What to do with each name: enter, take profit, stop loss, hold (🟡 recorded 2026-11-02, user's request)
-
-The user wants, per holding and watchlist name: which can be entered now, which to take profit on,
-which to cut, which to hold, and whatever news and events can add. Every rule is tested on the
-102-stock history (walk-forward, net of cost, against doing nothing and against the universe) before it
-shows; a rule that does not beat holding is shown as such or not at all. What the 11-02 work found
-sets the expectation: direction forecasts did not beat simple averages (Q.14), risk and fill rates did.
-
-- [ ] Q.16.1 **Take profit**: trailing exits (give back X% of the peak gain, or k x ATR from the high) and
-      partial profit-locking — would have fired on SKHY at +$450 (10-28) and STX at $718 (10-29).
-- [ ] Q.16.2 **Stop loss / cut**: k x ATR below cost or the entry, time stops, and "cause = guidance cut"
-      exits; measured against holding on the drop events (drop_rebound.py).
-- [ ] Q.16.3 **Entry**: watchlist names that pass the add rules (stabilised, spacing, no report within 7
-      days) with the fitted factor score (IC 0.049) as a tie-break, not as a forecast.
-- [ ] Q.16.4 **Hold**: the default, with the loss budget and the next event shown.
-- [ ] Q.16.5 **News and events as features**: cause of each move (Q.15.1), event calendars (Q.8), the
-      sentiment store; tested as features in the drop / fill models rather than read as signals.
-- [ ] Q.16.6 Real-time alerts (phone) when one of the above fires.
-
-**2026-11-02 first build and the plan after it.** `daily_advice.py` (LightGBM quantiles + P(up), MLP
-challenger, 102 stocks x 2016-2026, 5 / 20 / 60 days) found no direction skill (20-day IC 0.004, t 0.5;
-"reduce" days did better than "hold" in 2023-2026; excess-return targets no better), so the action
-shows hold, calibrated odds and ranges, the news causes and the add rule. What the literature and
-practice suggest instead (sources in the 11-02 session notes): ML return prediction is weak per stock
-(Gu-Kelly-Xiu: monthly R2 ~0.4%) and pays through breadth; LLM scores of individual headlines predict
-the next days' returns (Lopez-Lira-Tang; Chen-Kelly-Xiu); drift continues after bad earnings / guidance
-as analysts revise (PEAD); option skew and put-call volume (Xing-Zhang-Zhao; Pan-Poteshman) and short
-interest / days-to-cover (Boehmer et al.) carry informed trading; stops add value only when losses have
-momentum (Kaminski-Lo); pre-set limit orders curb the disposition effect (Odean). Order of work:
-
-- [x] Q.16.7 ✅ 2026-11-02 (`quant_data/research/models/barrier_model.py`, live in the action as "Getting out"):
-      walk-forward multiclass LightGBM per barrier set. 5 sessions (+1 / -1.5 x ATR): beats the base rate
-      (Brier 0.6287 vs 0.6326; P(lower first) sorts 21% -> 30% across fifths), calibrated and shown. 20 and
-      60 sessions: worse than the base rate, so the situation rates are shown instead. Managing with both
-      barriers against holding to the time limit, out of sample: 20 sessions, 30%+ under the high after
-      bad news (4,758 cases) +0.6% vs +2.1% mean, worst 5% -14% vs -18%; 60 sessions +3.0% vs +6.8%, -23% vs
-      -37% (holding flattered by a survivor universe). The action sizes the position so the worst 5% with
-      the stop fits the loss budget: INTC on 11-02, sell 23 now, 119 with a $70.44 sell and a $46.01 stop.
-      Original note: Ask which
-      comes first from today: a rebound to +u x ATR (a sell level), a fall to -l x ATR (a stop), or the
-      time limit; P(each) per horizon, walk-forward, judged against the pooled and grouped base rates
-      (which beat ML on the 11-02 fill test) and on deep-drawdown days.
-- [x] Q.16.8 ✅ 2026-11-02 (`news_events.py`): 880k articles placed on the first tradable session; excess
-      returns vs all days (t clustered by date): guidance cut 20d -1.61% (t -4.4), 60d -2.35% (t -3.6);
-      bad earnings news 20d -0.76% (t -5.0); high-impact bad news 20d -0.50% (t -3.4); upgrade 20d +0.46%
-      (t 2.9); a 5%+ fall without bad news 20d +1.11% (t 3.0), 60d +3.12% (t 4.2); bad news on a 5%+ fall
-      20d -0.66% (t -1.2). The title rule for "guidance raise" misfires (it trails too) and is not used.
-      Features for Q.16.7; the guidance-cut line is on the action.
-      Original note: Each article of the 880k store scored by its
-      own sentiment / event type and time; forward returns from the next session by type (guidance cut,
-      downgrade, results, sector, macro); features for Q.16.7 and a line on the action ("after news like
-      this, stocks went on X% over 20 days").
-- [x] Q.16.12 ✅ 2026-11-02 **Scheduled events ahead** (`calendar_events.py`; FOMC dates from the Fed's calendars
-      2016-2027): SPY 2016-2026 — options-expiration week -0.09% a day vs others (t -2.2); with an FOMC
-      decision within 5 sessions SPY made +0.05% over 5 days vs +0.32% otherwise; FOMC day / eve, jobs day,
-      turn of month, pre-holiday not significant (the pre-FOMC drift has faded since its 2012 publication);
-      stocks the session before their report +0.16% over SPY (t 3.2). As model features: the 5-day barrier
-      model's Brier 0.6287 -> 0.6271 (kept), the 5-day direction model unchanged (IC 0.004 -> 0.003). On the
-      action as "Coming up", with these figures.
-- [~] Q.16.9 🟡 2026-11-02 collection started (`collectors/market/options_analyst_snapshot.py`, DAG
-      `market_snapshots` weekdays 21:15 UTC): per stock (102 + holdings) the option chain's ATM / 10%-OTM
-      implied vols (Black-Scholes from the mid), skew, straddle %, put / call volume and open interest for
-      the first expiries >= 5 and >= 25 days, and Finnhub's monthly rating counts and surprises (price
-      targets, rating changes and estimates are paid tiers). To be tested once months have accumulated.
-      Original note: **Institutional data**: analyst estimate / rating revisions (Finnhub), short interest and
-      days-to-cover (FINRA / Nasdaq), option skew and put-call volume (Nasdaq chain; no free history, so
-      a daily snapshot starts now).
-- [ ] Q.16.10 **Breadth**: rank all 100+ names daily for entry / rotation ("what to own instead of INTC"),
-      rather than timing one stock.
-- [ ] Q.16.11 **Pre-set take-profit / stop orders** at entry from the barriers, against the disposition
-      effect (the SKHY +$450 and STX $718 that were not taken; INTC averaged down 11 times).
+1. 3.5.4 Multi-horizon labels ✅
+2. 3.5.1 Article tagging ✅
+3. 3.5.2 Event features ✅
+4. 3.5.3 Dynamic backtest ✅
+5. 3.5.5 Fine-tune small model — Pending development
 
 ---
 
-## Consolidated Priority Table (all pending items)
+## Stage 4. Production Readiness
 
-**Top of the queue, as of 2026-07-30.** The R-series is ranked above everything else pending
-because it is the only block addressing named, sourced interview feedback (eBay, 2026-07-28:
-"more experience with AI at scale, particularly RAG and MCP"), and because the corpus that
-makes it credible — 845K articles — is already collected and sitting unindexed. R.4 carries
-the weight: it turns retrieval into numbers.
+1. schedule feature build from clean news
+2. track model versions
+3. persist experiment results
+4. build daily signal job
+5. add monitoring
 
-| Priority | Item | Interview Value | Practical Value | Effort | Status |
-|---|---|---|---|---|---|
-| 🔥 | **Q.2 Revive the data pipeline** | DE: an outage found and fixed | 🔴 Nothing is fresh without it | 1 day | 🟡 2026-10-24: caught up (company match current, health all green); LM Studio tasks serialised and sized by `lm_session`; confirm one automatic night |
-| ⭐⭐⭐ | **Q.3 Events as structured features** (peer graph, oil / geopolitical index, earnings vs consensus, same-night path) | Quant+AI | 🔴 Lam / war / oil reach the signals | ~6 days | [ ] Pending (with N.1-N.4) |
-| 🔥 | **Q.5 Holdings advisor (event-driven advice with limit prices, scored)** | AI agent on real decisions, with a track record | 🔴 The user's own positions | ~3 days | 🟡 In progress (2026-10-25) |
-| ⭐⭐⭐ | **Q.8 3-layer upcoming catalysts, per-stock modal & AI query** | Event-driven + LLM extraction + web fallback | 🔴 Forward binary risk on every holding | 1.5 days | ✅ Done (2026-10-30) — L1 calendars/conferences/implied moves + L2 6h RSS/8-K extraction + L3 web fallback, 90D modal (`52b50e9`, `8d33dc4`) |
-| ⭐⭐⭐ | **Q.9 Per-stock order status & swing lot allocation manager** | Accounting invariants & atomic ledger design | 🔴 Dip-buying tranche P&L without mutating Mine/FIFO avg cost | 1 day | ✅ Done (2026-10-30) — `transactions.lot_allocations`, open/partial/closed statuses, 3-way P&L conservation (`52b50e9`, `8d33dc4`) |
-| ⭐⭐⭐ | **Q.10 Inventory-aware dip-entry spacing & ATR swing-lot exit advisor** | Empirical execution guardrails vs overfit daily RL | 🔴 Stops clustered knife-catching & sets per-lot ATR targets | 1 day | ✅ Done (2026-10-30) — `lot_advisor.py` (`1.5–2.0×ATR` spacing + 7D catalyst/sector gates + `TP1`/`TP2` lot exits) wired into `LotManagerModal` (`a82430a`, `51ce6e8`) |
-| 🔥 | **Q.12 Portfolio risk gate** (caps, cash, spacing, falling-knife) + review of the 10-30 suggestions | Layered advice like a desk: signal / risk / execution | 🔴 INTC 43.6%, chips 98.7%, no cash | 1 day | 🟡 2026-10-31: gate, pulse release fix, dip re-run, spreads, targets (10% cash / 70% chips / 30% one stock), own trades scored; next learn_peers + PEAD |
-| 🔥 | **Q.13 Today's action per holding / watchlist** | One line per stock, each with its basis, scored | 🔴 What to do today | 1 day | 🟡 2026-10-31: pilot on INTC |
-| 🔥 | **Q.15 Get out of INTC + add discipline** (why it fell, add planner, recovery plan, profit offset) | Event-driven decisions on a real loss | 🔴 INTC -31%, 42% of the portfolio | ~3 days | [ ] Recorded 2026-11-02 |
-| ⭐⭐⭐ | **Q.16 Enter / take profit / stop loss / hold per name** (trailing exits, stops, entries, news features, alerts) | Rules tested before shown | 🔴 SKHY +$450 and STX $718 not taken | ~5 days | [ ] Recorded 2026-11-02 |
-| ⭐⭐⭐ | **Q.14 Model optimisation backlog** (pulse at real cost, fitted factor weights, M.5 holdout + point-in-time universe, fill model, RAG chunking) | Evidence over more models | 🔴 Is +1.40% real after costs | ~1 day for item 1 | [ ] Recorded 2026-11-01 |
-| ⭐⭐ | **Q.4 LLM event calls → factor, behind a gate** | 🔴 LLM-forecast evaluation | High | gate + 2 days | [ ] Collecting scores (briefs' predictions since 2026-10-22) |
-| 🔥 | **R.1 Qdrant + embedding pipeline over 845K news** | 🔴 AI at scale — the corpus exists, unindexed | High | 3 days | ✅ Done (2026-07-30) — 716,074 vectors in 2.65h; on_disk vectors cut memory 4.3x; index repaired in place twice (13,027 dupe points, null event_type) without re-embedding |
-| 🔥 | **R.2 Hybrid retrieval (Mongo weighted text + dense, RRF)** | 🔴 The answer most candidates cannot give | High | 1.5 days | ✅ Done (2026-08-01) — **and naive RRF measurably loses to both single legs**; parameters left for R.4 to settle rather than tuned by eye |
-| 🔥 | **R.4 Retrieval eval harness (recall@k / MRR / nDCG ablation)** | 🔴 "Depth" means a table, not a longer component list | Medium | 2 days | 🟡 Judge validated (2026-10-09): v1 kappa **0.41** vs 150 reference labels, rubric v2 **0.74** (0.67 in the full re-judge). The "93% = inflation" reading was wrong — ~91% of the pool is genuinely related; the loose bar was the problem. Table: **dense 0.803 ≈ hybrid_k60 0.797 nDCG@10 (CI includes 0), both > sparse 0.683 (significant)**; P@10 (g=2) added. Open: human spot-check of the reference labels |
-| 🔥 | **R.10 Retriever wired into generation (`/api/ask/news`)** | 🔴 Without it "I built RAG" is only the R | Medium | 1 day | ✅ Done (2026-08-01) — citations by id, refusal on empty retrieval, symmetric date filters |
-| ⭐⭐⭐ | **R.11 Generation eval (faithfulness / citation accuracy)** | 🔴 recall@k says nothing about whether the answer is true | Medium | 2 days | ✅ Done 2026-10-24 — thinking off: ~10x faster, faithfulness 0.869 vs 0.899 (n.s.); judge's evidence 2,996/2,996 verbatim |
-| ⭐⭐⭐ | **R.12 One retriever for every news consumer (`search_news` hybrid mode)** | 🔴 The research agent gets the same retrieval as `/api/ask/news` | High | 1 day + R.4 | ✅ Done 2026-10-09 — hybrid default (+0.114 nDCG@10 over keyword, from R.4), fusion only in quant_ai, Java calls `/api/retrieve/news`, reported fallback; keyword leg is 95% of the ~0.9 s latency |
-| ⭐⭐⭐ | **R.13 One agent for every stock question (agent picks the tools)** | 🔴 Agentic RAG: the model decides when to retrieve and which tool to trust | High: one place to ask anything | ~2 days | [ ] Pending (2026-10-25) — signals/performance tools answer 401; agent lacks the quant_ai tools; thinking still on per step |
-| ⭐⭐⭐ | **R.3 Cross-encoder reranking** | AI essential | Medium | 1.5 days | ✅ Done (2026-10-13) — nDCG +0.076 [+0.043, +0.113] for the shipped top-30/256 config (~1 s), +0.117 at top-100; significant under both validated judges; behind NEWS_RERANK in /api/ask/news |
-| ⭐⭐⭐ | **R.6 MCP protocol depth (resources / prompts / sampling / elicitation)** | 🔴 Everything past `@mcp.tool()` | Medium | 3 days | [ ] Pending |
-| ⭐⭐ | **R.8 Scale concerns (embed cache, reindex, p99 latency, cost/query)** | AI production credibility | Medium | 2 days | [ ] Pending |
-| ⭐⭐ | **R.7 RAG as a feature source (grounded event extraction → features)** | AI+Quant crossover | High | 3 days | [ ] Pending (after R.2, N.1) |
-| ⭐⭐⭐ | **H.1 Backtest with transaction costs + liquidity filter** | Quant essential | 🔴 Real returns | 2 days | ✅ Done — COMMISSION_BPS=5, SLIPPAGE 10/30bps tiered, MIN_DOLLAR_VOL=$5M filter in backtest_portfolio.py |
-| ⭐⭐⭐ | H.2 Market Regime detection (VIX filter) | Quant essential | 🔴 IC stability | 4 days | ✅ Done (2026-07-15) — 4-regime weight switching (RISK_ON/NEUTRAL/STRESSED/RISK_OFF) |
-| ⭐⭐⭐ | H.3 Paper Trading engine + stop-loss | Quant essential | 🔴 OOS validation | 4 days | ✅ Done (2026-07-15) — vol-adaptive stop-loss (2×vol_20d) + OOS IC rolling monitor |
-| ⭐⭐⭐ | Stage 7 Airflow + Kafka end-to-end | DE critical | High | 1 week | 🟡 Revived 2026-10-22 — the host Airflow scheduler (launchd) runs all 10 DAGs; its metadata DB and the data are in Docker, so `core.sh` must be up. Kafka runs (quant_api needs it). See Q.2 |
-| ⭐⭐⭐ | G.1 Live trading execution (Alpaca API) | Quant/Prod | 🔴 Real money | 2-3 weeks | [ ] Pending — paper trading done; need broker API + order manager + risk guardrails |
-| ⭐ | G.2 Stock universe expansion (103→150+) | Quant bonus | Medium | 2-7 days | Phase 1 ✅ Done (STX/WDC/HXSCL added 2026-07-15); Phase 2 energy/materials [ ] Pending |
-| ⭐⭐⭐ | C.2 Risk metrics (Sharpe / drawdown) | Quant essential | High | - | ✅ Done |
-| ⭐⭐⭐ | C.9 Factor analysis report (IC/IR/SHAP) | Quant essential | Medium | - | ✅ Done |
-| ⭐⭐⭐ | C.8 ETL unit tests | DE essential | Medium | 3 days | ✅ Done (2026-07-15) — 90 tests passing; scoring 60%, positions 52%, features 40% cov |
-| ⭐⭐⭐ | E.7 README + architecture diagram | All interviews | Medium | 1 day | ✅ Done (2026-07-15) |
-| ⭐⭐⭐ | Stage 7 MLflow actual runs | DE/MLE | Medium | 1 day | ✅ Done (2026-07-15) — 8 runs logged (Ridge/LightGBM/Ensemble × 20d+60d) |
-| ⭐⭐ | H.4 Signal quality monitoring (rolling IC) | Quant strong | 🟡 Signal health | 2 days | [ ] Pending |
-| ⭐⭐ | C.1 Daily signal automation | Medium | Extremely high | 3 days | ⚠️ Was silently broken 2026-07-21 → 2026-10-22: after the collectors reorganisation (d14f30c) the price and analyst collectors read a stale `news_collectors/finnhub/.env` path, failed every morning, and `score_signals` (downstream) never ran — signals stuck at 2026-07-17. Fixed 2026-10-22 (f97dc75); runs under Airflow |
-| ⭐⭐ | C.3 Signal UI page | Medium | Extremely high | 3 days | ✅ Done |
-| ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → 情绪特征) | DE关键 | 🔴 填补数据缺口 | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_1_collect_and_match` (02:00 UTC) matches every new `news_articles` doc, intraday sources included (N.0 gave them candidate symbols) |
-| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on任意任务失败) | DE essential | 🔴 运维必需 | 0.5 days | ✅ Done 2026-10-22 — `notify_failure` on every task (macOS notification + `airflow_task_failures.log`) and quant_ai's freshness watchdog (`markets/pipeline_health.py`, every 30 min, widget warning) for when nothing runs at all |
-| ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | AI差异化 | 极高 | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.6 |
-| ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → Claude对话查信号) | AI差异化 | 高 | 0.5 days | ✅ Done — verified over the real MCP protocol |
-| ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | AI essential | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
-| ⭐⭐ | F.3 SHAP interpretability | MLE strong | Medium | 1 day | ✅ Done (factor_analysis.py) |
-| ⭐⭐ | **J.3 Daily LLM sentiment enrichment** (每日Gemma+Qwen对新文章打分，保持情绪特征最新) | MLE+DE | 高 | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_2_enrich_and_features` (pass A gemma, pass B qwen3.5-9b, merge, features, Qdrant index) is triggered daily by backfill_1 |
-| ⭐⭐ | **J.1 Airflow DAG migration** (依赖链调度；任务失败自动停止下游；可视化DAG视图) | DE强 | 高 | 3.5 days | ✅ Done 2026-07-17 — Airflow host scheduler replaced task.py; dependency chains per DAG |
-| ⭐⭐ | F.10 Strategy Studio → Backtest execution pipeline | AI+Quant full-loop | High | 3-4 days | [ ] Pending — UI exists, need backtest adapter + quant_api endpoint |
-| ⭐⭐ | F.4 LangGraph multi-agent research assistant | AI Engineer must-have | High | 2 weeks | [ ] Pending |
-| ⭐⭐ | F.17 Portfolio Manager Agent (signals+positions→rebalance recommendation) | AI+Quant | 高 | 3 days | ✅ Done (2026-07-27) — review layer over the rule engine; 3 validation gates; 25 unit tests |
-| ⭐⭐ | F.16 Real-time news monitoring agent (30min轮询→即时告警) | 实用价值高 | 高 | 3 days | [ ] Pending |
-| ⭐⭐ | F.14 Earnings surprise prediction (pre-earnings beat/miss概率因子) | Quant+AI | 高 | 3 days | [ ] Pending |
-| ⭐⭐ | F.12 Signal explanation SLM (为高评分股票生成原因解释→UI展示) | AI+UX | 中 | 2 days | [ ] Pending |
-| ⭐⭐ | I.3 Alpaca order via MCP (LLM自主决策下单，保留风控) | AI自动交易 | 极高 | 2 days | [ ] Pending (after G.1+I.1) |
-| ⭐⭐ | I.4 External data MCP tools (Finnhub/EDGAR/yfinance as Agent工具) | AI Agent基础 | 高 | 2 days | [ ] Pending |
-| ⭐⭐ | F.15 SEC EDGAR + earnings transcript RAG | AI+Research | 中 | 3 days | [ ] Pending (after F.2) |
-| ⭐⭐ | F.8 Active learning Agent (disagreement samples) | MLE+AI | High | 4 days | [ ] Pending |
-| ⭐⭐ | **F.9 Rule Optimization Agent (iterative eval→modify loop)** | AI Engineer strong | 🔴 Fixes FP/FN in rule layer | 5-7 days | 🟡 Developed, not tested |
-| ⭐⭐ | E.2 CI/CD GitHub Actions | DE strong | Medium | 2 days | [ ] Pending |
-| ⭐⭐ | C.7 Data quality checks | DE strong | High | 2 days | ✅ Done (data_quality_check.py) |
-| ⭐⭐ | **L.1 隔夜新闻动量策略** (15:30 情绪扫描→收盘买→次日开盘卖，无需小时线) | Quant+AI | 高 | 4 days | [ ] Pending (after G.1+J.3) |
-| ⭐⭐ | **L.3 5分钟线数据基础设施** (Alpaca API backfill + 每日16:35增量 + 日内特征) | Quant+DE | 高 | 2 days | [ ] Pending (after G.1 Alpaca key) |
-| ⭐ | **L.2 日内快速信号** (5分钟线 + Finnhub WebSocket实时新闻 → 日内动量) | Quant+AI | 中 | 2 weeks | [ ] Pending (after L.1+L.3) |
-| ⭐⭐ | B quant bonus: Long-short portfolio | Quant strong | Medium | 3 days | [ ] Pending |
-| ⭐⭐ | B quant bonus: Beta neutralization | Quant strong | Medium | 2 days | [ ] Pending |
-| ⭐⭐ | F.5 FinBERT fine-tuning | MLE strong | High | 1-2 weeks | [ ] Pending |
-| ⭐ | F.6 rule_validator ReAct Agent | AI bonus | Medium | 3 days | [ ] Pending |
-| ⭐ | F.7 Airflow adaptive scheduling Agent | DE+AI | Medium | 3 days | [ ] Pending |
-| ⭐⭐⭐ | D.1 Macro Regime features (merged into H.2) | Quant essential | 🔴 Real utility | 4 days | ✅ Done |
-| ⭐ | E.4 K8s configuration | DE bonus | Low | 3 days | [ ] Pending |
-| ⭐ | E.5 Data lineage diagram | DE bonus | Low | 2 days | [ ] Pending |
-| ⭐ | E.6 WebSocket real-time push | Backend bonus | High | 3 days | [ ] Pending |
-| ⭐ | E.9 UI intraday price chart (TradingView + Alpaca API) | UI bonus | Medium | 3 days | [ ] Pending — no hourly DB needed; Alpaca API on-demand |
-| ⭐ | D.2 Retail sentiment | Quant bonus | Medium | 3 days | ✅ Done (StockTwits, not Reddit) |
-| ⭐ | F.1 Prompt evaluation framework | MLE bonus | Medium | 2 days | [ ] Pending |
-| ⭐ | F.11 News pre-filter SLM (双LLM前加轻量二分类，降70%推理量) | ML效率 | 中 | 3 days | [ ] Pending |
-| ⭐ | F.13 Morning briefing agent (07:00盘前持仓简报) | 实用 | 中 | 2 days | [ ] Pending |
-| ⭐ | F.18 Backtest reflection agent (自动诊断弱年份+生成报告) | Research | 低 | 2 days | [ ] Pending |
-| ⭐ | F.19 LLM factor hypothesis generator (LLM建议新因子) | Research | 低 | 1 day | [ ] Pending |
-| ⭐ | I.5 MCP inter-service (quant_ai→quant_api改MCP协议) | 架构 | 低 | 3 days | [ ] Pending (after I.1) |
-| ⭐ | M.1 Point-in-time S&P 500 universe (survivorship-free) | QR essential | 🔴 Signal validity | 1-2 weeks | [ ] Pending (only if targeting QR roles) |
-| ⭐ | M.2 PIT data hygiene audit (dirty dates, lookahead lineage) | QR essential | 🔴 Signal validity | 3 days | [ ] Pending |
-| ⭐ | M.3 IC significance (Newey-West t-stat, decay, regime tables) | QR essential | Medium | 3 days | [ ] Pending |
-| ⭐ | M.4 Sentiment orthogonalization vs momentum/size/sector | QR essential | 🔴 Core question | 1 week | [ ] Pending |
-| ⭐ | M.5 Overfitting defenses (holdout, trial registry, deflated Sharpe) | QR essential | Medium | 2 days | [ ] Pending |
-| ⭐ | M.6 Research report writeup (paper-style, honest conclusions) | QR essential | Medium | 3 days | [ ] Pending |
-| — | D.4 Analyst rating changes | Quant bonus | Medium | 3 days | ✅ Done |
-| — | D.7 Institutional 13F holdings change | Quant bonus | High | 3 days | ⚠️ **Withdrawn (M.7)** — the "strongest single factor, 60d IC=+0.20" was look-ahead: one undated row per symbol broadcast across all trade dates. Factor removed; net Sharpe 0.78→0.69 |
-| — | D.8 Pre-market / after-hours price signals | Quant bonus | High | 1 day | ✅ Done (strongest short-term factor, 5d IC=+0.23) |
+## Practical Recommendation (snapshot, 2026-06-20)
 
----
+Do next (in priority order, updated 2026-06-20):
 
-# Stage 5. Engineering Extensions (post-research)
+1. **H.1 Backtest with transaction costs + liquidity filter** (2 days) — current Sharpe 0.70-0.84 is pre-cost; the first question any reviewer asks, highest ROI
+2. ~~**Stage 7 validation**~~ ✅ **Done** — Airflow now runs the full DAG set from a host `launchd` scheduler (containers cannot reach the host LLM under VPN), and the Kafka producer/consumer path was verified end to end after fixing a deserializer mismatch that had the consumer stuck in a poison-pill retry loop. Signals publish and are consumed with zero lag.
+3. **E.7 README + architecture diagram** (1 day) — currently missing, fastest result
+4. **H.2.2 Dynamic factor weights** (regime-aware) — regime_mult base multiplier already exists; needs extension to auto-switch factor weight sets in volatile market
+5. **H.3.2/H.3.3 Paper trading improvements** — position tracking and exit triggers already exist; missing OOS IC monitoring and -5% stop-loss rule
+6. **Stage 3.5.5 FinBERT fine-tuning** — train on Gemma+Qwen consensus labels to replace LLM inference pipeline
+
+Completed:
+
+- universe expansion to 100 symbols ✅
+- year stability analysis ✅
+- earnings Layer 1 / 2 / 3 ✅
+- Ridge + LightGBM + Ensemble baseline (60d IC = 0.10, Top5 = +6.7%) ✅
+- Stage 3.5.1 LLM article tagging (845K articles, Gemma + Qwen + dual-LLM merge) ✅
+- Stage 3.5.2 event-level daily features (134K rows, 100% LLM coverage) ✅
+- Stage 3.5.3 event-driven backtest (min20d, +1.40% vs fixed 20d +1.22%) ✅
+- Stage 3.5.4 multi-horizon labels (10/15/30/45/60d) ✅
+- **D.1/D.2/D.4/D.7/D.8 research layer extensions all completed** (2026-06-16), D.3/D.5/D.6 skipped ✅
+- **C.1-C.7, C.9 all completed (baseline versions)** (daily signal automation + UI + position tracking + exit alerts + risk metrics + data quality checks + factor analysis report, 2026-06-16~20) ✅
+- **H.2.1 regime multiplier baseline** (score_daily_signals.py integrated macro_risk_on / macro_vix_pctile_252d to adjust signal strength) ✅
+- Ops: removed duplicate launchd scheduler job to prevent all collection tasks from running twice daily ✅
+
+Do not do next:
+
+- live trading automation (live trading is still H.1-H.5 fully complete + 3-6 months of paper trading away from being truly usable)
+- Stage 5 engineering before Stage 7 validation is complete
+
+## Stage 5. Engineering Extensions (post-research)
 
 Goal: after the research stages above produce a validated signal on a
 50+ symbol universe, harden the system into a production-quality full-stack
 showcase. These items are intentionally scoped to exercise three skill
 areas — **Java backend**, **data engineering**, and **AI/ML engineering** —
-so the project becomes a multi-role interview artifact.
+so the platform is production-grade end to end.
 
 Do not start these until:
 - universe is expanded to 50+ symbols
 - year-stability analysis is complete
 - at least one signal has persistent positive excess return
 
-## 5.1 Java Backend Track
+### 5.1 Java Backend Track
 
-### 5.1.1 Event-driven signal distribution (Kafka)
+#### 5.1.1 Event-driven signal distribution (Kafka)
 - Spring Boot microservice publishes daily signals to a Kafka topic
 - Subscribers: UI push, alerting, risk control, audit log
 - Requirements: idempotent consumers, dead-letter queue, schema registry
@@ -5112,11 +5263,8 @@ Do not start these until:
   - `quant_signal_publisher` service
   - Kafka broker + schema registry in docker-compose
   - consumer reference implementations
-- Resume framing:
-  *"Designed event-driven signal distribution system using Kafka,
-  supporting 40+ symbols with sub-second latency and idempotent consumers."*
 
-### 5.1.2 Backtest orchestration API
+#### 5.1.2 Backtest orchestration API
 - REST endpoint to submit backtest jobs → async worker → WebSocket push
   results
 - Resilience4j circuit breakers, Bucket4j rate limiting, Redis result cache
@@ -5125,22 +5273,16 @@ Do not start these until:
   - new endpoints under `quant_api`
   - async job queue (RabbitMQ, already present)
   - WebSocket progress stream
-- Resume framing:
-  *"Built async backtest orchestration service with circuit breakers,
-  rate limiting, and real-time result streaming over WebSocket."*
 
-### 5.1.3 Admin dashboard backend
+#### 5.1.3 Admin dashboard backend
 - CRUD for: stock universe, job schedules, backtest experiments,
   model versions
 - Audit log of every mutation
 - Expand `quant_ui` with admin views
-- Resume framing:
-  *"Implemented admin control plane with auditable CRUD for universe,
-  scheduling, and model version management."*
 
-## 5.2 Data Engineering Track
+### 5.2 Data Engineering Track
 
-### 5.2.1 Airflow orchestration (replace `scheduler/task.py`)
+#### 5.2.1 Airflow orchestration (replace `scheduler/task.py`) ✅ Done (host Airflow scheduler; `scheduler/task.py` removed 2026-11-08)
 - Migrate the current monolithic scheduler to Airflow DAGs
 - One DAG per domain: news ingest, price history, feature build,
   backtest, model refresh
@@ -5148,11 +5290,8 @@ Do not start these until:
 - Deliverables:
   - `airflow/dags/` directory
   - docker-compose service for Airflow webserver + scheduler
-- Resume framing:
-  *"Migrated monolithic scheduler to Airflow DAGs orchestrating 15+
-  daily ETL jobs with backfill, SLA, and retry policies."*
 
-### 5.2.2 Streaming news pipeline (Kafka + Flink)
+#### 5.2.2 Streaming news pipeline (Kafka + Flink)
 - Replace batch GDELT collector with streaming ingest
 - Flink jobs: dedup → content extraction → SLM relevance → fan-out to
   MongoDB (raw) and Qdrant (embeddings)
@@ -5160,32 +5299,23 @@ Do not start these until:
 - Deliverables:
   - Flink job modules
   - Kafka topic design doc
-- Resume framing:
-  *"Built streaming news ingestion pipeline with Kafka + Flink
-  processing 1M+ articles with exactly-once semantics."*
 
-### 5.2.3 MLflow experiment tracking
+#### 5.2.3 MLflow experiment tracking
 - Every backtest + model training run logged to MLflow
 - Parameters, metrics, artifacts, model registry
 - Deliverables:
   - MLflow server in docker-compose (Postgres backend)
   - wrapper in `research/` scripts to log runs
-- Resume framing:
-  *"Implemented experiment tracking with MLflow, managing 100+ backtest
-  runs and model versions across Ridge / HistGB / ensemble baselines."*
 
-### 5.2.4 dbt transformations
+#### 5.2.4 dbt transformations
 - Model the MySQL / MongoDB feature derivations as dbt models
 - Lineage graphs, schema tests, documentation
 - Deliverables:
   - `dbt_project/` with staging / intermediate / mart layers
-- Resume framing:
-  *"Introduced dbt for data transformations, providing lineage graphs,
-  automated tests, and self-documenting feature logic."*
 
-## 5.3 AI / ML Engineering Track
+### 5.3 AI / ML Engineering Track
 
-### 5.3.1 RAG news search system
+#### 5.3.1 RAG news search system
 - Qdrant already deployed for Dify — add a second collection for
   news article embeddings
 - Service: `/search?q=NVIDIA earnings beat` → semantic recall + LLM summary
@@ -5195,11 +5325,8 @@ Do not start these until:
   - embedding batch job for news_articles_company_matched_v2
   - FastAPI / Spring search service
   - simple UI search page
-- Resume framing:
-  *"Built RAG system over 1M+ financial news articles using Qdrant
-  and local LLM, supporting semantic search and summarization."*
 
-### 5.3.2 Multi-agent research assistant (LangGraph)
+#### 5.3.2 Multi-agent research assistant (LangGraph)
 - Expand the existing `langchain-agent` container into a multi-agent graph:
   - data agent: pulls relevant news / prices / earnings
   - analysis agent: extracts events, generates hypotheses
@@ -5209,12 +5336,8 @@ Do not start these until:
 - Deliverables:
   - `quant_langchain/` extension with agent graph
   - demo UI or CLI
-- Resume framing:
-  *"Designed multi-agent financial research system using LangGraph with
-  specialized agents for news analysis, signal generation, and risk
-  assessment."*
 
-### 5.3.3 SLM fine-tuning for company-match
+#### 5.3.3 SLM fine-tuning for company-match
 - Use the v2 matched dataset as labeled training data
 - Fine-tune Qwen3.5-4B on the company-relevance task (LoRA)
 - Benchmark: base vs fine-tuned on held-out set
@@ -5222,12 +5345,8 @@ Do not start these until:
 - Deliverables:
   - `research/finetune_slm.py` training script
   - before/after benchmark report
-- Resume framing:
-  *"Fine-tuned Qwen3.5-4B with LoRA on 500K+ article classification
-  dataset, improving accuracy from X% to Y% and reducing inference
-  latency by Z%."*
 
-### 5.3.4 LLM-based feature generation
+#### 5.3.4 LLM-based feature generation
 - Use a larger LLM to generate enrichment features per article:
   - sentiment (-1..+1)
   - event type (earnings / product / M&A / regulation / macro)
@@ -5237,11 +5356,8 @@ Do not start these until:
 - Deliverables:
   - batch enrichment job
   - 5-10 new daily features
-- Resume framing:
-  *"Added LLM-based feature extraction (sentiment, event type, entities)
-  to enrich 1M+ articles, contributing to a +X% lift in model IC."*
 
-## 5.4 Integration: End-to-End MLOps Showcase
+### 5.4 Integration: End-to-End MLOps Showcase
 
 Single flagship deliverable that ties the three tracks together:
 
@@ -5253,47 +5369,25 @@ Kafka (news) → Flink (clean + SLM) → Feature Store
 ```
 
 This touches: event streaming, Java backend, ML inference, observability,
-cloud-native deployment — interview-ready for backend, data engineer,
-and AI / ML engineer roles simultaneously.
+cloud-native deployment — backend, data engineering and AI / ML engineering in one system.
 
 Deliverables:
 - architecture diagram (`docs/architecture.md`)
 - all pieces deployable via a single `docker-compose up`
 - README walkthrough of the full signal lifecycle
 
-## 5.5 Execution Order (Stage 5)
+### 5.5 Execution Order (Stage 5)
 
 Recommended build order, each item ~1-2 weeks:
 
 1. **5.3.1 RAG news search** — quickest AI win, reuses existing Qdrant
-2. **5.2.1 Airflow migration** — immediate data-engineering credential
-3. **5.2.3 MLflow tracking** — low effort, high resume value
+2. **5.2.1 Airflow migration** — replaces the ad-hoc scheduler
+3. **5.2.3 MLflow tracking** — low effort, every training run traceable
 4. **5.1.1 Kafka signal publisher** — core event-driven piece
 5. **5.3.2 Multi-agent system** — deepest AI showcase
 6. **5.2.2 Flink streaming** — headline data-engineering item
 7. **5.3.3 SLM fine-tuning** — after enough v2 data accumulates
 8. **5.4 End-to-end integration** — final polish
-
-## 5.6 Resume Skill Coverage Matrix
-
-| Skill                       | Covered by              |
-|-----------------------------|-------------------------|
-| Spring Boot microservices   | 5.1.1, 5.1.2, 5.1.3     |
-| Kafka / event-driven        | 5.1.1, 5.2.2, 5.4       |
-| Resilience patterns         | 5.1.2                   |
-| WebSocket / real-time       | 5.1.2                   |
-| Airflow / orchestration     | 5.2.1                   |
-| Flink / stream processing   | 5.2.2                   |
-| MLflow / experiment tracking| 5.2.3                   |
-| dbt / data modeling         | 5.2.4                   |
-| RAG / vector search         | 5.3.1                   |
-| LangGraph / multi-agent     | 5.3.2                   |
-| LLM fine-tuning (LoRA)      | 5.3.3                   |
-| LLM inference at scale      | 5.3.4, existing pipeline|
-| Observability / monitoring  | 5.4                     |
-| Docker / K8s deployment     | 5.4                     |
-
----
 
 ## Stage 6 — GDELT GKG Full Index Import into MongoDB (Implemented; `$text` index dropped 2026-10-07 — see 6.7 and Stage 6B)
 
@@ -5565,22 +5659,22 @@ cannot be paged out. Fixes:
 
 ---
 
-# Stage 7 — New Mac Validation + Scheduled Task Verification + Execution Records (Pending development)
+## Stage 7 — New Mac Validation + Scheduled Task Verification + Execution Records (Pending development)
 
-## 7.1 Background
+### 7.1 Background
 
 A 48GB RAM Mac has been purchased and data/code migration is complete. A comprehensive validation of all services and scheduled tasks on the new machine is needed, along with adding observability for execution results.
 
-## 7.2 Service validation
+### 7.2 Service validation
 
-### 7.2.1 Docker service verification
+#### 7.2.1 Docker service verification
 - [ ] Verify all containers start correctly: mongo6 / quant_api / quant_ui / quant_data /
       airflow-webserver / airflow-scheduler / kafka / mlflow, etc.
 - [ ] Check inter-service network connectivity (project-net internal communication)
 - [ ] Verify external volume mounts are correct (MongoDB, MySQL, Airflow logs, etc. data intact)
 - [ ] Confirm `.env` connection addresses are valid on the new machine
 
-### 7.2.2 Airflow scheduled tasks running end-to-end (not just validation, must actually run)
+#### 7.2.2 Airflow scheduled tasks running end-to-end (not just validation, must actually run)
 - [ ] Check scheduling times and dependencies for all DAGs in `airflow/dags/`
 - [ ] Manually trigger each DAG; confirm full end-to-end execution succeeds (not just "defined")
 - [ ] Confirm Docker socket mount path is correct (`/var/run/docker.sock`)
@@ -5588,7 +5682,7 @@ A 48GB RAM Mac has been purchased and data/code migration is complete. A compreh
 - [ ] Check DAG execution logs; fix any failing tasks
 - [ ] Goal: news collection / feature build / model training — all three main DAGs running stably
 
-### 7.2.3 Kafka actually running (not just deployed, must have real data flow)
+#### 7.2.3 Kafka actually running (not just deployed, must have real data flow)
 - [ ] Confirm kafka container is healthy and reachable at `kafka:9092`
 - [ ] Create required topics (e.g. `quant.signals`, `quant.news`)
 - [ ] Implement at least one producer: push to `quant.signals` topic after daily signal generation
@@ -5596,22 +5690,22 @@ A 48GB RAM Mac has been purchased and data/code migration is complete. A compreh
 - [ ] Verify message flow through kafka-ui (port 15070)
 - [ ] Goal: signal generation → Kafka → consume and write to DB — full pipeline running
 
-### 7.2.4 MLflow actual run recording
+#### 7.2.4 MLflow actual run recording
 - [ ] Confirm mlflow container is healthy (port 15050)
 - [ ] Enable `--mlflow-uri` in `train_baseline_models.py`; run one training and record
 - [ ] Verify parameters, metrics, and model files are visible in MLflow UI
 - [ ] Goal: every model training run is recorded; IC / Top5 excess return is traceable
 
-### 7.2.5 LLM inference validation
+#### 7.2.5 LLM inference validation
 - [ ] Verify LM Studio / Ollama is available on the new Mac and models are loaded
 - [ ] Verify `SLM_API_URL` environment variable points to the correct endpoint
 - [ ] Run a small batch of `llm_enrich_articles.py` to confirm inference is working
 
-## 7.3 Execution result recording (UI / API)
+### 7.3 Execution result recording (UI / API)
 
 Current problem: execution results for Airflow and Python scripts (success/failure, rows processed, duration, key metrics) have no unified visibility entry point, making troubleshooting difficult.
 
-### 7.3.1 quant_api execution log endpoint
+#### 7.3.1 quant_api execution log endpoint
 - [ ] Add `pipeline_runs` collection (MongoDB) or table (MySQL) to record each task execution:
   ```json
   {
@@ -5629,22 +5723,22 @@ Current problem: execution results for Airflow and Python scripts (success/failu
 - [ ] Each Python script (daily_symbol_features.py, llm_enrich_articles.py, etc.)
       calls the endpoint to report results after completion
 
-### 7.3.2 quant_ui execution history page
+#### 7.3.2 quant_ui execution history page
 - [ ] Add a "Task Execution Records" page in the UI showing:
   - Task name, status (success/failure), start/end time, rows processed
   - Execution trend chart for the last 30 days
   - Failed tasks highlighted + error message display
 - [ ] Support filtering by task name and time range
 
-### 7.3.3 Model training result persistence
+#### 7.3.3 Model training result persistence
 - [ ] After each `train_baseline_models.py` run, write per-horizon IC / Top5 excess return
       to `model_results` collection with timestamp and feature set version tag
 - [ ] quant_ui displays model historical result trends to facilitate comparison across different feature versions
 
-## 7.4 Priority
+### 7.4 Priority
 
 1. Docker baseline service validation (blocks all subsequent work)
-2. **Airflow DAG actually running** (not just defined; must run stably — key interview proof)
+2. **Airflow DAG actually running** (not just defined; must run stably — the proof the orchestration works)
 3. **Kafka producer/consumer actually running** (signal → topic → consume and write to DB full pipeline)
 4. **MLflow actual run recording** (every training run is traceable)
 5. quant_api execution log endpoint (pipeline_runs write to DB)
@@ -5653,9 +5747,11 @@ Current problem: execution results for Airflow and Python scripts (success/failu
 
 ---
 
-## G. Reference Resources (compiled 2026-05-22)
+# Appendix
 
-### G.1 LLM sentiment factor / alpha mining papers
+## Ref. Reference Resources (compiled 2026-05-22)
+
+### Ref.1 LLM sentiment factor / alpha mining papers
 
 | Paper | Key points |
 |------|------|
@@ -5664,7 +5760,7 @@ Current problem: execution results for Airflow and Python scripts (success/failu
 | [AlphaAgent: LLM-Driven Alpha Mining (arXiv 2502.16789)](https://arxiv.org/html/2502.16789v2) | LLM-automated alpha factor mining including anti-decay mechanism |
 | [Automate Strategy Finding with LLM in Quant Investment (arXiv 2409.06289)](https://arxiv.org/html/2409.06289v1) | LLM-driven strategy discovery pipeline; useful prompt design reference |
 
-### G.2 CBOE options data (free download)
+### Ref.2 CBOE options data (free download)
 
 - **PCR historical CSV** (for D.5 Put/Call Ratio factor):
   `https://cdn.cboe.com/resources/options/volume_and_call_put_ratios/indexpcarchive.csv`
@@ -5672,7 +5768,7 @@ Current problem: execution results for Airflow and Python scripts (success/failu
   `https://www.cboe.com/us/options/market_statistics/historical_data/`
 - Usage: load daily PCR data directly with `pd.read_csv(url)`; no registration required
 
-### G.3 FinBERT fine-tuning resources (for F.5 / Stage 3.5.5)
+### Ref.3 FinBERT fine-tuning resources (for F.5 / Stage 3.5.5)
 
 | Resource | Key points |
 |------|------|
@@ -5680,7 +5776,7 @@ Current problem: execution results for Airflow and Python scripts (success/failu
 | [ProsusAI/finbert on HuggingFace](https://huggingface.co/ProsusAI/finbert) | Official FinBERT pre-trained weights, ready to load |
 | [Efficient FinBERT via Quantization (ACL FinNLP 2025)](https://aclanthology.org/2025.finnlp-2.6.pdf) | INT8/INT4 quantization compression; runnable locally on Mac M-series chips |
 
-### G.4 SEC EDGAR 13F Python tools (for D.7)
+### Ref.4 SEC EDGAR 13F Python tools (for D.7)
 
 | Library | Description |
 |----|------|
@@ -5689,164 +5785,13 @@ Current problem: execution results for Airflow and Python scripts (success/failu
 
 ---
 
-## H. Live Trading System Roadmap (from research → truly usable)
-
-### Background: why live trading is not yet possible
-
-Backtest results (long-short annualized +21.7%, Sharpe 0.85) look promising, but the following issues would cause real money to lose:
-
-| Problem | Specific manifestation | Risk level |
-|------|---------|---------|
-| IC year-over-year instability | IC was negative in 2022/2024/2025, signal reversed | 🔴 Fatal |
-| No transaction costs | Backtest does not deduct commissions + slippage; real returns reduced by 30-40% | 🔴 Fatal |
-| Signal lag | LLM processing takes several hours after news is published | 🟡 Serious |
-| No position sizing | Equal-weight allocation; single-stock risk is unconstrained | 🟡 Serious |
-| No out-of-sample validation | All data used for backtest; overfitting risk | 🟡 Serious |
-| Only 100 stocks | Concentration too high; liquidity risk | 🟠 Moderate |
-
----
-
-### H.1 Fix backtest realism (🔴 must do first)
-
-**H.1.1 Add transaction cost model**
-- One-way commission: 0.05% (standard broker level)
-- Slippage model: 0.3% for small-cap, 0.1% for large-cap (tiered by market cap)
-- Modify `backtest_news_factor.py` and `backtest_event_driven.py`:
-  ```python
-  net_return = gross_return - commission * 2 - slippage * 2
-  ```
-- Goal: determine how much of the long-short annualized return remains after costs
-- Status: [x] Done — `backtest_portfolio.py`: COMMISSION_BPS=5, liquidity-tiered slippage 10/30bps, $5M min dollar-volume filter; measured 30.4 bps round trip
-
-**H.1.2 Add liquidity filter**
-- Exclude stocks with average daily volume < $5M (avoid execution failure)
-- Add `avg_daily_volume` feature; filter at position selection
-- Status: [ ] Pending development (0.5 days)
-
-**H.1.3 Add position limit constraints**
-- Max position per stock: 5% (avoid over-concentration)
-- Max position per sector: 25%
-- Modify `score_daily_signals.py` to add position constraint logic
-- Status: [ ] Pending development (0.5 days)
-
----
-
-### H.2 Resolve IC instability (🔴 must do first)
-
-**H.2.1 Market Regime detection**
-
-Year-by-year IC analysis reveals the signal is only effective in "trending markets":
-```
-2022 (bear market / high VIX): IC = -0.035 → disable signal
-2023 (recovery / low VIX):     IC = +0.163 → enable signal  
-2024 (choppy):                  IC = -0.022 → disable signal
-2025 (choppy):                  IC = -0.020 → disable signal
-```
-
-Implementation:
-- Data source: `yfinance` for daily VIX data
-- Regime definitions:
-  - **Trending market**: VIX < 20 AND SPY 20-day moving average trending up → enable LLM sentiment factor weighting
-  - **Choppy / panic**: VIX > 25 → reduce position to 50%, switch to mean-reversion factors
-- New field: `market_regime` (trend / volatile / crisis)
-- Adjust composite_score weights by regime in `score_daily_signals.py`
-- Status: [x] Done (2026-07-15) — `_WEIGHTS_BY_REGIME` in `score_daily_signals.py`, four regimes (RISK_ON / NEUTRAL / STRESSED / RISK_OFF) switched on VIX percentile and SPY vs 200MA
-
-**H.2.2 Dynamic factor weights**
-- Different factor weights for different regimes:
-  - Trending market: LLM sentiment weight 40%, momentum weight 30%, earnings weight 30%
-  - Choppy market: LLM sentiment weight 10%, mean-reversion weight 50%, earnings weight 40%
-- Add `market_regime` as a feature during model training, or train separate models per regime
-- Status: [ ] Pending development (2 days)
-
----
-
-### H.3 Paper Trading validation (🔴 must do, run for at least 3-6 months)
-
-**Goal**: validate signals in a real market environment and accumulate out-of-sample data
-
-**H.3.1 Paper Trading engine**
-- Execute automatically after market close each day:
-  1. Read the top 10 stocks by composite_score from that day's `daily_signals`
-  2. Check regime: if VIX > 25, skip or halve the position
-  3. Simulate order entry; record entry price (use next day's open price)
-  4. Write to `paper_positions` collection
-- Fields: `symbol`, `entry_date`, `entry_price`, `size`, `score_at_entry`, `regime_at_entry`
-- Status: [x] Done (2026-07-15) — `track_positions.py`: vol-adaptive stop-loss at 2x vol_20d plus a rolling OOS IC monitor
-
-**H.3.2 Paper Trading performance tracking**
-- Update unrealized P&L daily
-- Compute real out-of-sample IC (each day's actual holdings: predicted vs actual performance)
-- Target metrics:
-  - OOS IC > 0.02 (signal is effective in real markets)
-  - OOS Sharpe > 0.5 (strategy is executable)
-  - 3 consecutive months of positive excess return (signal is stable)
-- Status: [ ] Pending development (1 day)
-
-**H.3.3 Stop-loss and exit logic**
-- Per-stock stop-loss: auto-exit if the position drops -5% from entry
-- Sentiment reversal stop-loss: if `avg_sentiment_5d` turns negative during holding, actively exit
-- Time stop-loss: auto-exit if holding exceeds `max_hold_days` (default 45 days)
-- Status: [ ] Pending development (1 day)
-
----
-
-### H.4 Signal quality monitoring (🟡 important)
-
-**H.4.1 Real-time IC monitoring**
-- Compute rolling IC over the most recent 20 trading days every day
-- If IC stays below 0 for 5 consecutive days → trigger alert, pause new position entries
-- Write to `signal_quality` collection; UI displays IC trend chart
-- Status: [ ] Pending development (1 day)
-
-**H.4.2 Model drift detection**
-- Weekly: compare the latest feature distribution against the training-time distribution (KL divergence)
-- If distribution shift exceeds threshold → trigger retraining reminder
-- Status: [ ] Pending development (1 day)
-
----
-
-### H.5 Live trading readiness checklist
-
-All of the following must be satisfied before considering real capital:
-
-- [ ] Paper trading has run for **at least 3 months**, OOS IC > 0.02
-- [ ] Backtest Sharpe **remains > 0.5** after including transaction costs
-- [ ] Regime detection works correctly; automatically reduces position when VIX > 25
-- [ ] Stop-loss logic tested (simulated extreme market conditions)
-- [ ] Max position per stock ≤ 5%; overall leverage = 1x (no leverage)
-- [ ] Broker API connected (Interactive Brokers / Alpaca)
-- [ ] First live-trading capital ≤ 10% of total capital (testing phase)
-
----
-
-### H. Roadmap overview
-
-```
-Now (research validation complete)
-    ↓
-H.1 Fix backtest realism (3 days)        ← know the real returns
-H.2 Regime detection (4 days)            ← know when to use the signal
-H.3 Paper Trading (1 month to get going) ← real-market validation
-    ↓ continue running 3-6 months
-H.4 Signal monitoring (2 days)           ← keep signal effective
-    ↓ paper trading metrics pass
-H.5 Live trading checklist all ✓
-    ↓
-Small live position (≤10% of total capital)
-    ↓ 6 months of stable excess return
-Truly usable quantitative trading system ✓
-```
-
----
-
-## G. Strategy Generation Complete Implementation Plan (quant_langchain)
+## SG. Strategy Generation Implementation Plan (quant_langchain) — ❌ Cancelled 2026-11-08
 
 > Current state: `quant_langchain/main.py` already has the endpoint framework for `/api/workflow/generate-spec` and `/api/workflow/generate-tasks`, but all three core features are stub implementations that need to be completed.
 
 ---
 
-### G.1 RAG — Replace keyword matching with vector retrieval (3 days)
+### SG.1 RAG — Replace keyword matching with vector retrieval (3 days)
 
 **Current problems:**
 - `retrieve_context()` scores by keyword token overlap, not semantic retrieval
@@ -5873,7 +5818,7 @@ Truly usable quantitative trading system ✓
 
 ---
 
-### G.2 MCP — Tools actually executable (4 days)
+### SG.2 MCP — Tools actually executable (4 days)
 
 **Current problems:**
 - Module paths in `MODULE_CATALOG` (e.g. `quant_langchain.features.momentum`) do not exist
@@ -5918,7 +5863,7 @@ def backtest_strategy(spec: dict, initial_cash: int, fee_bps: int) -> dict:
 
 ---
 
-### G.3 API Key routing — proactive tiering by task complexity (1 day)
+### SG.3 API Key routing — proactive tiering by task complexity (1 day)
 
 **Current problems:**
 - Uses `OpenAI` (text completion); should switch to `ChatOpenAI` (chat model)
@@ -5962,13 +5907,13 @@ def get_llm(task_type: str = "simple"):
 
 ---
 
-### G.4 Priority and time estimate
+### SG.4 Priority and time estimate
 
 | Priority | Feature | Effort | Value |
 |--------|------|--------|------|
 | 🔴 Highest | G.2 MCP tools actually executable | 4 days | Strategy generation changes from "hallucinated output" to "real execution" |
 | 🟠 High | G.3 API Key routing refactor | 1 day | Code quality improvement; deprecated API removed |
-| 🟡 Medium | G.1 RAG vector retrieval | 3 days | Retrieval precision improved; interview demo highlight |
+| 🟡 Medium | G.1 RAG vector retrieval | 3 days | Retrieval precision improved; better-grounded answers |
 
 **Total timeline: approximately 8 days**
 

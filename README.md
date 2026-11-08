@@ -1,6 +1,19 @@
 # AI-Driven Equity Signal Platform
 
-An end-to-end quantitative research and signal generation platform that processes financial news through LLM pipelines to produce daily equity trading signals for a ~100-stock core universe, with news coverage extended to 490 point-in-time S&P 500 / Nasdaq-100 companies.
+A self-hosted equity research platform that reads financial news with local LLMs, turns it into
+point-in-time signals, and uses them — with prices, earnings and alternative data — for stock
+ranking, event-driven strategy research and daily decisions on a real portfolio. Every model
+runs on one Mac; every reported number is out of sample and comes with its failure cases.
+
+## What It Does
+
+| Area | What is built | In numbers |
+|---|---|---|
+| **News intelligence** | GDELT (13 TB of GKG) plus Finnhub / NewsAPI / Yahoo every 30 minutes; per-company matching rules with an SLM check; syndication dedupe; weekly keyword refresh reviewed in the UI | 885K labelled core articles; 490 point-in-time S&P 500 / Nasdaq-100 companies, news from 2018 (~743K articles crawled, ~661K with a body) |
+| **Local LLM labelling and distillation** | Dual-LLM labels (event type, sentiment −1…1, strength) on title + 500 characters; teacher self-consistency as the pass line; distillation into small students, judged on the daily features they produce | Teacher 1.15 articles/s → students 18–108 articles/s (Qwen3-0.6B / 1.7B LoRA on MLX, ModernBERT-large) |
+| **Quant research** | Feature store, Ridge + LightGBM ranking with walk-forward fitted weights, an event-strategy lab (CatBoost champion, LightGBM shadow, deflated Sharpe, MLflow), earnings pulse on 1-minute bars, Action RL | 189K+ feature rows × 7 horizons; look-ahead and syndication leaks found and removed (see Key Results) |
+| **Decision support** | Holdings from the trade log, a portfolio risk gate, a daily action per holding (English / Chinese), upcoming catalysts, market briefs, indices against the last close, a phone page | Advice three times per trading day; every call logged and scored |
+| **AI layer** | Hybrid retrieval (MongoDB text + Qdrant dense, RRF) with cross-encoder rerank, cited answers that refuse without evidence, a hand-written ReAct agent whose tools come from the MCP server, prompt-injection defence at the MCP boundary | Rerank +0.076 nDCG; judge agreement kappa 0.41 → 0.67; injection false positives 3 in 40,000 |
 
 ## Platform Overview
 
@@ -19,8 +32,9 @@ An end-to-end quantitative research and signal generation platform that processe
 │                          Pass B: Qwen3.5-9B ─┘                          │
 │                                    │                                     │
 │                       llm_sentiment_final / event_type                  │
+│   Distilled students (in validation): Qwen3-0.6B/1.7B, ModernBERT-large │
 └────────────────────────────────┬────────────────────────────────────────┘
-                                 │ 845K labeled articles
+                                 │ 885K labeled articles
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      FEATURE ENGINEERING LAYER                           │
@@ -50,10 +64,11 @@ An end-to-end quantitative research and signal generation platform that processe
 │                       SERVING / PLATFORM LAYER                           │
 │                                                                           │
 │   Kafka ──▶ signal distribution ──▶ alerts / position tracking          │
-│   Spring Boot REST API (Keycloak JWT, deny-by-default)                                   │
-│   React Dashboard: signal scores │ portfolio tracking │ trade alerts    │
-│   quant_ai: ReAct tool-calling research agent + RAG stock Q&A           │
-│   quant_ai/mcp_server.py: MCP (stdio) — platform tools for any client   │
+│   Spring Boot REST API (Keycloak JWT, deny-by-default)                  │
+│   React Dashboard: Quant Model │ Holdings + daily action │ Briefs       │
+│   quant_ai: holdings, risk gate, daily action, catalysts, briefs        │
+│   quant_ai: hybrid RAG (Mongo text + Qdrant, rerank) + ReAct agent      │
+│   quant_ai/mcp_server.py: MCP (stdio) — 12 tools for any client         │
 └─────────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
@@ -80,7 +95,7 @@ An end-to-end quantitative research and signal generation platform that processe
 | Metric | Value |
 |--------|-------|
 | Raw news data processed | **13TB** (GDELT GKG, 2016→present) |
-| Articles labeled | **845K+** |
+| Articles labeled | **885K** (core universe) |
 | Stock universe | **~100-stock core** (signals) + **490** point-in-time S&P 500 / Nasdaq-100 companies (news) |
 | LLM agreement rate | **77.3%** (Gemma + Qwen) |
 | Portfolio backtest Sharpe (20d, net of cost) | **0.58** (gross 0.73) vs SPY 0.54 — *0.78 → 0.69 after the M.7 look-ahead fix, → 0.58 after the M.12 syndication fix* |
@@ -92,7 +107,11 @@ An end-to-end quantitative research and signal generation platform that processe
 | Walk-forward short-leg contribution | **−0.03% annualized, Sharpe −0.00** — the short side adds nothing |
 | Hit rate (20d portfolio, net) | **62.9%** |
 | Best single-factor IC (60d) | ~~+0.198 (`inst_holding_pct_chg`)~~ — **withdrawn, contaminated by look-ahead (see M.7)**. The 13F holdings are stored without a date and broadcast to every historical trade date, so this factor was reading the present. Institutions accumulate what has already risen, which is precisely the spurious correlation that produces a high IC here. Removed from the feature set, the four regime weight dicts, and the model inputs; the backtest was re-run and cost 0.09 Sharpe. |
-| Platform services | **13 active** (11 Docker containers + 2 host processes) |
+| Retrieval rerank (R.3) | **+0.076 nDCG** over hybrid fusion, significant under both LLM judges |
+| LLM judge calibration (R.4) | Cohen's kappa **0.41 → 0.67** after fixing the 1/2 grade boundary |
+| Prompt-injection guard (S.1) | **3 false positives in 40,000** real articles (0.0075%); reports, never withholds |
+| Labelling throughput (3.5.5) | Teacher **1.15** articles/s → distilled students **18–108** articles/s |
+| Platform services | **8 Docker containers + 3 host processes** in the always-on core |
 
 > **Why the figures moved down again (2026-07-30).** M.12 found that GDELT ingests every
 > site of a syndication network as a separate article — one McDonald's story appears **402
@@ -119,10 +138,11 @@ An end-to-end quantitative research and signal generation platform that processe
 > what the leak was worth. The strategy survives it and still beats SPY net of cost, so the
 > remaining factors were carrying real signal rather than riding on the leak.
 >
-> **0.69 is still an upper bound.** M.1 has not been done: the 100-symbol universe was
-> hand-picked in 2026 and backtested from 2016, so it consists of names that survived and
-> did well. That selection bias is very likely worth more than the 0.09 just removed, and
-> until it is closed no figure here should be read as an achievable return.
+> **0.69 is still an upper bound.** The 100-symbol universe was hand-picked in 2026 and
+> backtested from 2016, so it consists of names that survived and did well. The point-in-time
+> universe that removes this bias (M.1) was built on 2026-11-03, but the backtest has not been
+> re-run on it yet. That selection bias is very likely worth more than the 0.09 just removed,
+> and until the re-run no figure here should be read as an achievable return.
 >
 > **The bigger problem the re-run exposed: the signal is not stable across years.** The
 > ML path barely moved when the leaked factor was removed — 60d ensemble IC went 0.059 →
@@ -168,18 +188,19 @@ An end-to-end quantitative research and signal generation platform that processe
 
 | Repo | Description | Tech |
 |------|-------------|------|
-| [quant_data](https://github.com/zhengtiantian/quant_data) | ML pipeline: LLM labeling, feature engineering, model training, backtesting | Python, LightGBM, Airflow |
-| [quant_api](https://github.com/zhengtiantian/quant_api) | REST API backend: signal serving, portfolio tracking, Kafka publishing | Java 21, Spring Boot 3, Keycloak |
-| [quant_ui](https://github.com/zhengtiantian/quant_ui) | Signal dashboard frontend | React, TypeScript, Vite |
-| [quant_ai](https://github.com/zhengtiantian/quant_ai) | AI interface: ReAct research agent, RAG stock Q&A, and the platform's MCP server | Python, FastAPI, MCP SDK, LM Studio |
-| [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment (this repo) | Docker Compose |
+| [quant_data](https://github.com/zhengtiantian/quant_data) | Collection, LLM labelling, features, models, backtests, the Airflow DAGs (run by the host scheduler) | Python, LightGBM, CatBoost, Airflow |
+| [quant_ai](https://github.com/zhengtiantian/quant_ai) | Portfolio advisor and daily action (`markets/`), hybrid RAG, ReAct agent, the MCP server | Python, FastAPI, Qdrant, MCP SDK, LM Studio |
+| [quant_api](https://github.com/zhengtiantian/quant_api) | REST API: signals, positions, holdings, news, agent data; Kafka signal events | Java 21, Spring Boot 3, Keycloak |
+| [quant_ui](https://github.com/zhengtiantian/quant_ui) | Dashboard: Quant Model, Holdings, Market Briefs, Positions, Task Monitor, Keywords | React, TypeScript, Vite |
+| [quant_keycloak](https://github.com/zhengtiantian/quant_keycloak) | Identity: the `quant` realm and its import | Keycloak |
+| [ai-equity-signal-platform](https://github.com/zhengtiantian/ai-equity-signal-platform) | Platform deployment, project plan, repository map (this repo) | Docker Compose |
 
 ---
 
 ## Tech Stack
 
 ### Data & ML
-`Python` `LightGBM` `Ridge Regression` `Gemma-4-E4B` `Qwen3.5-9B` `LM Studio` `MLflow` `SHAP`
+`Python` `LightGBM` `CatBoost` `Ridge Regression` `SHAP` `MLflow` `Gemma-4-E4B` `Qwen3.5-9B` `LM Studio` `MLX (LoRA distillation)` `ModernBERT` `PyTorch (MPS)`
 
 ### Data Engineering
 `Apache Airflow` `Apache Kafka` `MongoDB` `PostgreSQL` `GDELT` `Finnhub API` `SEC EDGAR`
@@ -188,7 +209,7 @@ An end-to-end quantitative research and signal generation platform that processe
 `Java 21` `Spring Boot 3` `Keycloak` `REST API` `Kafka Producer/Consumer`
 
 ### Frontend & AI
-`React` `TypeScript` `Vite` `RAG` `ReAct Agent` `Function Calling` `SSE Streaming` `LM Studio` `FastAPI`
+`React` `TypeScript` `Vite` `Hybrid RAG (MongoDB text + dense, RRF)` `Cross-encoder rerank` `Qdrant` `ReAct Agent` `MCP` `Function Calling` `SSE Streaming` `FastAPI`
 
 ### Infrastructure
 `Docker` `Docker Compose` `launchd` (host scheduler) `Multi-node work queue` (PostgreSQL-backed, 2× MacBook workers + RTX 5090 inference node)
@@ -199,10 +220,11 @@ An end-to-end quantitative research and signal generation platform that processe
 
 | Service | Port | Description |
 |---------|------|-------------|
-| `quant_ui` | 18080 | React signal dashboard |
+| `quant_ui` | 18080 | React dashboard |
 | `quant_api` | 18081 | Spring Boot REST API |
 | `quant_keycloak` | 18082 | Auth server |
-| `mongo6` | 37018 | MongoDB (845K articles, feature store) |
+| `mongo6` | 37018 | MongoDB (articles, labels, feature store, signals) |
+| `qdrant` | 26333 | Vector index for news retrieval |
 | `airflow-postgres` | 25432 | PostgreSQL (Airflow metadata, Keycloak, GDELT batch queue) |
 | `airflow-webserver` | 15060 | Airflow DAG management |
 | `mlflow` | 15050 | Experiment tracking |
