@@ -2591,6 +2591,35 @@ losing strategy.
 
 ---
 
+### N.7 Market-wide news track: macro, geopolitics, elections (recorded 2026-11-10, user's request)
+
+**Goal**: collect the news that names no company (a war, a CPI print, a midterm election) on its own
+track. Today it is not collected: an article enters `news_articles` only when a company keyword
+matches, and is then filed under that company; 16,563 rows without a company sit unread;
+`macro_indicators` holds four numbers (VIX, 10-year yield, dollar index, SPY). The company relevance
+filter is right to reject these articles, so they must not go through it. N.6 needs this track: its
+example ("Democrats win the midterms" + a data-center restriction) starts from articles of this kind.
+
+- **Stored by topic, once.** One row per article with a topic, not one copy per company. About eight
+  topics: inflation, the Fed and rates, jobs, war and geopolitics, elections and policy, tariffs and
+  trade, oil and energy, financial stress. Own collection, so nothing downstream of the company
+  pipeline changes.
+- **Sources.** (1) The Finnhub general feed and the nine Asian feeds (`asia_rss`) are already pulled
+  every 30 minutes and dropped when no company matches: keep the rows that match a topic. (2) The
+  GDELT 15-minute files carry theme tags per article; the hourly collector reads only title and URL
+  today, the index (`gkg_index`) stores no theme column, so history depends on the raw files still
+  being on disk (to check). (3) Scheduled releases (CPI, payrolls, FOMC): the figures from the
+  official release, not from articles about them.
+- **Trusted outlets only** (a whitelist), so the junk problem of the company track does not repeat.
+- **Use.** Daily heat and tone per topic as market-level features joined to every company (as the
+  regime features of D.1 are); a market-backdrop paragraph in the daily brief; N.6 maps a topic to
+  the companies it touches (N.3's exposure matrix).
+- **Order**: after the relevance student's retraining (v4 prompt) is settled.
+
+- Status: [ ] Pending
+
+---
+
 ## P. Portfolio Holdings
 
 > **Superseded 2026-10-22.** The holdings that are actually used now live in quant_ai on the host
