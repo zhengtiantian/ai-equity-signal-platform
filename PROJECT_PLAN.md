@@ -2618,6 +2618,40 @@ example ("Democrats win the midterms" + a data-center restriction) starts from a
 
 - Status: [ ] Pending
 
+### N.8 Collection coverage for the 490 universe companies: redesign plus quality monitoring (recorded 2026-11-11, user's request)
+
+**Finding (data audit, 2026-11-11)**: after the universe run (766,755 rows judged by the v4 relevance
+student, 341,318 kept), 68 of the 490 companies keep fewer than 50 articles over eight years (Merck 7,
+Ventas 2, Lowe's 30, Public Storage 14, Dover 9, AES 8; median 196, 10th percentile 40). The filter
+is not the cause: few articles were collected in the first place (Merck 28 in total). The collection
+rules (`collectors/news/gdelt/universe_rules/company_rules/*.json`) count only full legal names as
+`primary_keywords` ("Merck & Co.", "Realty Income Corporation", "Lowe's Companies") and put the
+names articles actually use ("Merck", "Realty Income", "Lowe's") in `weak_names_not_counted`. The
+relevance filter's name gate uses the same keywords, so about 670 rows with the short name in the
+title were also rejected without a model verdict (Chevron, Whirlpool, Cummins, Realty Income). The
+earlier note that BBY, PSA and WM need new rules is part of the same problem.
+
+**User's direction**: not a patch per company but a larger redesign, with quality watched over a long
+period or by a scheduled check.
+
+- **Rules.** Let the common short name count when it is unambiguous, and handle the ambiguous ones
+  (Merck KGaA vs Merck & Co., "O", "Block", "Strategy", "Match", "Southern") with context rules or a
+  required ticker or exchange mention, instead of dropping them. Tickers that collide with words need
+  their own treatment.
+- **Re-collection.** Rescan the GDELT history (2018-01-01 on) for the companies whose rules change,
+  then run them through the prefilter, the relevance student and labels A and B, as in the universe
+  run.
+- **Name gate.** The filter's gate reads the same keywords, so it changes with the rules.
+- **Quality monitoring**, scheduled (weekly, beside `keyword_refresh_weekly`): per company the number
+  of articles collected and kept per month against its own history and against companies of similar
+  size; keep rate per company and per source; flag companies whose monthly count falls to zero or
+  whose keep rate drops below a threshold; a sample of kept and rejected titles per flagged company
+  for manual review (quant_ui page, as the Keywords page does for keywords).
+- **Order**: after the core 102 re-judge, the move of pre-2018 rows, the universe entering features
+  and retrieval, and the rebuild of historical features; before the data is used for N.6.
+
+- Status: [ ] Pending (design not started)
+
 ---
 
 ## P. Portfolio Holdings
