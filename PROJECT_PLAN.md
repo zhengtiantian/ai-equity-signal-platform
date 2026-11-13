@@ -445,8 +445,13 @@ missing piece is propagation, and the honest question is not "can this be captur
     exposure-weighted theme sentiment and the logged linkage judgments as features, used by the models
     only after N.4's event study shows they predict. Every alert is logged and scored against 5/20-day
     excess returns.
-  - Open choice: the reasoning model (Claude via the CLI already used by `catalysts.py` L3, or local 27b);
-    the theme tagger is a local small model either way.
+  - Decided 2026-11-13 (user): the per-article labels gain `leadership` as an event type, 14 yes/no themes
+    and the effect on up to five other covered companies (named in the text first, then peers from
+    `research/rl/peers.parquet`), taught by GD1 (schema v3, ~100k articles, running) before any history
+    relabel, so history is relabelled once; storylines (articles of one ongoing story linked by meaning,
+    entities and time, with novelty vs repeats) and an escalation trigger decide when Claude (CLI) judges
+    the combined impact; holdings and watchlist first; alerts on the page only until the replay of the
+    2026-10-29..11-13 Nvidia leadership story and control weeks show it can be trusted.
 
 ### Stock Universe
 - [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
@@ -2651,6 +2656,77 @@ period or by a scheduled check.
   and retrieval, and the rebuild of historical features; before the data is used for N.6.
 
 - Status: [ ] Pending (design not started)
+
+### N.9 New labelling teacher: Gemini Decision 1, students trained on Colab (recorded 2026-11-11, user's request)
+
+**Goal**: students (relevance filter and labels) that are closer to a *better* teacher, trained faster.
+Work files: `/Volumes/Data4T/colab_students/` (phase0, phase1, phase1/gemini, phase1/blind).
+
+**What the 2026-11-11 tests showed**
+
+- *Colab training works.* The label-B student (Qwen3-1.7B, final50k, same recipe as
+  `train_clean_lora.py`) retrained on a Colab G4 (RTX PRO 6000, 96 GB) with PyTorch + PEFT: 7x faster
+  than the Mac (11.2 vs 1.6 steps/s, 21 minutes), 3.8 compute units. Only the 70 MB LoRA adapter comes
+  back, converted to the MLX layout (A.T, B.T), so production keeps its base + adapter shape. On the
+  Mac: realmix all-three 73.9 vs 74.0 for the Mac-trained student, year-spread set 70.3 vs 70.4. The
+  same model on CUDA and MLX agrees on 97–99% of articles (boundary cases only, no direction).
+- *The current teachers are the weak link.* The 9B and E4B teachers run on the Mac in 4-bit through
+  LM Studio. The same weights at full precision on a GPU agree with them on only 65–74% (all three
+  fields), against 93% / 98% for the Mac teacher with itself: quantisation plus LM Studio itself
+  (same 4-bit weights run directly: 84–86%). Part of the current label standard is noise that no
+  student can learn, so "agreement with the Mac teacher" understates or misdirects progress.
+- *Teacher accuracy, blind-judged* (240 articles: 200 where eight teachers disagree + 40 where they
+  agree; judged from the article alone, before any answer was seen, with more than one answer
+  accepted where the definitions allow it). All-three right on the 200 disagreements / estimated on
+  the full 2,002: **Gemini Decision 1 82.5 / 83.3**; gemma-4-31B 65.0 / 72.0; Qwen3.8-27B 60.0 / 68.6;
+  Qwen3.5-27B 49.5 / 61.4; 9B full precision 47.5 / 60.0; Qwen3.5-35B-A3B 49.0 / 59.5; E4B full
+  precision 45.0 / 57.5; Mac E4B 4-bit (current A) 43.5 / 56.5; Mac 9B 4-bit (current B) 38.0 / 52.7.
+  Gemini minus gemma-4-31B: +15 points with its most likely sentiment level (95% CI +6.5 to +23.5).
+  Gemini agrees with the current Mac teachers on only 33–39%, so adopting it changes the standard.
+  Caveat: one judge.
+- *Gemini Decision 1* (`gemini-decision-1`, Decisions API, released 2026-11-11): closed-set questions
+  only, returns calibrated probabilities per option (usable directly as soft labels), $0.10 per million
+  input tokens, no output charge. Free tier 200 requests/min, 50k tokens/min, 10k requests/day (free
+  tier data may be used by Google; paid tier not). About 800 tokens per article asked one by one,
+  about 460 when ten articles share one request with the definitions written once.
+
+**Plan**
+
+| Step | Content | Gate |
+|---|---|---|
+| G0 | Packed requests (10 articles each) vs one by one on the same 2,002; Gemini on the 496-row relevance gold of 2026-11-10 | packed ≥95% same, blind score within 2 points; relevance accuracy vs the v4 9B teacher and the production student |
+| G1 | Paid API key from the subscription's Cloud credit (user). Hard token cap at 95% of the credit, a ledger of every call, a 1,000-article pilot reconciled against the Cloud console | ledger matches the console |
+| G2 | Teaching set, ~100k articles: core 102 + universe 490, stratified by year (2018–2026), capped per company, balanced by event class, students' uncertain cases first, ~20% relevance-rejected rows so the filter can be taught; all test and calibration articles excluded. Store answers and all option probabilities; jsonl first | 200-row spot check |
+| G3 | Train on Colab: label students (Gemma E2B, Qwen3-1.7B; hard vs soft labels; 25k / 50k / 100k; the two averaged) and a new relevance student | clearly above today's 74–78% agreement; blind accuracy at least gemma-4-31B's 72 |
+| G4 | Deploy on the Mac. New fields, A and B untouched: Gemini's own answers in `llm_gd1` {event_type, sentiment, signal_strength, probs, model, schema, input, labeled_at}, student output in `student_gd1_*`. Relabel the library (~1.65M rows) with the students. Switch features, retrieval and the advisor to the new labels and rebuild historical features only after the user agrees | user's go |
+| G5 | Monitoring: 200 new articles a day judged by Gemini (free tier), compared with the students; part of N.8's scheduled quality checks | — |
+
+- *Changes to the earlier plan.* The Colab "bigger teacher" step is dropped (Colab now only trains
+  students). One teacher instead of two (A = E4B, B = 9B): the second label student is kept only if
+  the average of the two beats the better one by 2 points or more. The relevance filter is retrained
+  from Gemini too (user, 2026-11-11). Proposed: hold the approved core 102 re-judge until the new
+  relevance student exists, so it is done once.
+- *Cost.* Teaching set 100k packed ≈ 46M tokens ≈ $4.6 (or about a day of free tier); tests ≈ $0.3;
+  daily monitoring within the free tier; Colab ≈ 30–50 compute units.
+- *Not done:* stacking free tiers across accounts (against the API terms); writes to MongoDB without
+  the user's go.
+
+- *Results (2026-11-13).* 97.9k articles labelled by GD1 (single requests: packed ones were not
+  deterministic). Students trained on Colab G4 on 96.8k: relevance Qwen3-1.7B 86.1% on the blind gold
+  (production student 80.8%; Qwen3-0.6B 83.7, Qwen3.5-0.8B 85.5); labels Qwen3-1.7B blind ~85%
+  (Gemma E2B 83.0, 0.6B 81.1, 0.8B 79.5, 1.7B+E2B average 84.8, 4B 84.8 but 2x slower). Kept: the two
+  1.7B students (`gd1_rel_q17`, `gd1_label_q17`). CUDA vs MLX same answer on 98–99.6%.
+- *Shadow deployment (2026-11-13).* `research/labeling/student_gd1_shadow.py` writes
+  `news_articles.student_gd1` only (relevance, labels, the student's own verdict, the rule that
+  overrode it); a side task `gd1_shadow` in backfill_2 after label B. 7-day trial on 15,413 articles:
+  83.8% agreement with the production filter, event type 77.8% / 70.7% with A / B.
+  Key-person rule (`key_people.json` + `key_people.py`, user's standard: news about a company's leaders
+  is news about the company — a CEO returning or joining a rival moves the stock): turns a "not
+  relevant" into relevant when the title has the company with a leadership word, a listed leader with
+  a leadership event, or the company with a scandal word; 580 rows in the trial, 536 of them Nvidia.
+- *Next.* The N.6 label schema (v3) is being taught first so history is relabelled once (see N.6).
+
+- Status: [~] G0–G3 done, G4 shadow live; switch-over waits for the N.6 relabel
 
 ---
 
