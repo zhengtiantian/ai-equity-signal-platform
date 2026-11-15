@@ -452,6 +452,30 @@ missing piece is propagation, and the honest question is not "can this be captur
     entities and time, with novelty vs repeats) and an escalation trigger decide when Claude (CLI) judges
     the combined impact; holdings and watchlist first; alerts on the page only until the replay of the
     2026-10-29..11-13 Nvidia leadership story and control weeks show it can be trusted.
+  - **Progress 2026-11-14/15: steps 1–5 done, live** (quant_data `research/news_linkage/`, DAG `news_linkage`).
+    *Noise audit first:* 17% of kept articles are noise and 34% filler (commentary with nothing new); 21% of
+    rejected ones are relevant. Handled inside N.6 rather than by refiltering: filler does not count as
+    progress, and GD1-rescued and key-person rows join as sources.
+    1. *Storylines* (`storylines.py`): an article joins when it is close to a member (cosine ≥ 0.80) and to the
+       centroid (≥ 0.82) and shares a rare title word (in < 1.5% of a year's titles); repeats and filler are marked.
+       The centroid and rare-word rules stopped one company's news from chaining into a single line.
+    2. *Triggers* (`triggers.py`): ≥ 5 progress articles from ≥ 3 sites in 24 h and ≥ 3× the storyline's own
+       7-day rate; a new storyline on ≥ 3 sites; a leadership event on ≥ 2 sites. Refire only on escalation
+       (≥ 2× and +5 articles, 6 h apart) or after 3 quiet days; one judgment per symbol per 2 h. Replay
+       2026-10-15..11-14: the Nvidia story fires on 10/29 12:00 and escalates on 11/08 21:00 (before the Monday
+       drop); a September control fortnight fires 12 times, all on real events.
+    3. *Retrieval cutoff:* quant_ai `news_rag.search_articles(before=…)`, inside both legs before fusion.
+    4. *Judge* (`judge.py`): Claude through the CLI on the subscription (no API key, no tools, empty cwd), a
+       fixed JSON schema, citations checked against the packet. 12 replay judgments: all valid, 13–29 s each.
+       The direction matched the 5-day excess return at every step of the Nvidia story. One miss (a peer judged
+       bullish fell); the control judgments were all "no material effect". Too few to score.
+    5. *Live since 2026-11-15* (`live.py`, :15 / :45): storylines rebuilt over 30 days each run (~40 s), the
+       firing state read back from `quant_data.news_linkage_judgments`. quant_ai `/portfolio/news-linkage`
+       serves the newest valid judgment per symbol (72 h): under the Action pill on the holdings page, under the
+       name on the watchlist, and as one line on the phone card. A hint only.
+    *Known gaps:* articles not yet labelled count as progress unless the title reads as commentary; GD1 rescues
+    arrive nightly; earnings-season catch-all storylines. *Next:* step 6 (themes and other-company effects from
+    the v3 labels), step 7 (score every judgment against 5/20-day excess returns), push alerts only after step 7.
 
 ### Stock Universe
 - [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
