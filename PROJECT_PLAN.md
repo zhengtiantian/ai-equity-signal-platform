@@ -474,8 +474,25 @@ missing piece is propagation, and the honest question is not "can this be captur
        serves the newest valid judgment per symbol (72 h): under the Action pill on the holdings page, under the
        name on the watchlist, and as one line on the phone card. A hint only.
     *Known gaps:* articles not yet labelled count as progress unless the title reads as commentary; GD1 rescues
-    arrive nightly; earnings-season catch-all storylines. *Next:* step 6 (themes and other-company effects from
-    the v3 labels), step 7 (score every judgment against 5/20-day excess returns), push alerts only after step 7.
+    arrive nightly; earnings-season catch-all storylines.
+  - **Progress 2026-11-15: step 7 (scoring) live, v3 label student trained, history relabelled.**
+    7. *Scoring* (`score.py`, run at the start of every live run): each judgment against the stock's excess return
+       over SPY from the first price after it (the open if judged before the US open, the close if during the
+       session, the next open if after), at 1 / 5 / 20 sessions; the same for the other companies Claude named.
+       quant_ai adds the move since the call to each hint and a live track record (shown as too thin under 20
+       scored 5-day calls). Under this rule the replay looks worse than the first rough read: on 11/12 the
+       resignation call was right only before the open; from the open NVDA beat SPY by 9.6% that day. SPY's daily
+       bars had stopped in April 2026 (it left the universe); the price collector now keeps SPY as a benchmark.
+    *v3 labels* (N.9 G9, Colab): one Qwen3-1.7B student answers GD1 v2 sentiment / strength and GD1 v3 event
+    (with `leadership`), 14 themes and the effect on up to five other covered companies. Theme recall was 63%
+    (AI capex 24%) on the first run; with theme-positive rows repeated it reached 73% at 80% precision (AI capex
+    49% at 93%). Against GD1 on the 2002 test articles: all-three 70.5 (production GD1 student 67.9), event 89.7,
+    leadership 59 of 68, theme F1 76.6, other-company direction 78%. MLX, vLLM and the trainer agree on 96.6–99.8%
+    of answers with the same scores. Installed as `gd1_label_v3_q17`; the nightly shadow job writes its themes,
+    impacts and others into `student_gd1`. All 1.78M company-filed articles since 2018 relabelled on Colab (vLLM,
+    relevance and v3 label students, ~28 compute units), written to `student_gd1` with the models marked `:cuda`.
+    *Next:* step 6 (themes and other-company effects in the storylines and the judge), push alerts only after
+    step 7 shows the calls can be trusted.
 
 ### Stock Universe
 - [x] Universe at 100 US symbols — STX / WDC / HXSCL were added to the watchlist but carry no usable news or features, so they are excluded from the reported universe
@@ -2750,7 +2767,9 @@ Work files: `/Volumes/Data4T/colab_students/` (phase0, phase1, phase1/gemini, ph
   a leadership event, or the company with a scandal word; 580 rows in the trial, 536 of them Nvidia.
 - *Next.* The N.6 label schema (v3) is being taught first so history is relabelled once (see N.6).
 
-- Status: [~] G0–G3 done, G4 shadow live; switch-over waits for the N.6 relabel
+- Status: [~] G0–G3 done, G4 shadow live; 2026-11-15 the N.6 v3 label student (G9) replaced the shadow's label
+  student and the history (1.78M articles since 2018) was relabelled into `student_gd1`; switching features,
+  retrieval and the advisor to these labels waits for the user's go
 
 ---
 
