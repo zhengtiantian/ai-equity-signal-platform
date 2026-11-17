@@ -102,7 +102,7 @@ The immediate objective is not live trading. The immediate objective is:
   holding out of sample, Q.7).
 - **Decision support** (quant_ai `markets/`) — holdings derived from the trade log, the portfolio
   risk gate, a daily action per holding from the advice models (English / Chinese), upcoming
-  catalysts, market briefs, indices against the last close, a phone page.
+  catalysts, market briefs, indices against the last close.
 - **AI layer** — hybrid retrieval (MongoDB text + Qdrant dense, RRF) with cross-encoder rerank and
   cited answers (R.1–R.4, R.10–R.12); a ReAct agent whose tools come from the MCP server
   (12 tools); prompt-injection defence at the MCP boundary (S.1–S.2).
@@ -185,7 +185,7 @@ it turns retrieval into numbers.
 | ⭐⭐ | C.1 Daily signal automation | Extremely high | 3 days | ⚠️ Was silently broken 2026-07-21 → 2026-10-22: after the collectors reorganisation (d14f30c) the price and analyst collectors read a stale `news_collectors/finnhub/.env` path, failed every morning, and `score_signals` (downstream) never ran — signals stuck at 2026-07-17. Fixed 2026-10-22 (f97dc75); runs under Airflow |
 | ⭐⭐ | C.3 Signal UI page | Extremely high | 3 days | ✅ Done |
 | ⭐⭐⭐ | **J.2 Daily SLM company match for realtime news** (Finnhub/NewsAPI/Yahoo → symbol field → sentiment features) | 🔴 Fills the data gap | 1.5 days | ✅ Done 2026-10-08 (6B.6a) — `backfill_1_collect_and_match` (02:00 UTC) matches every new `news_articles` doc, intraday sources included (N.0 gave them candidate symbols) |
-| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on any task failure) | 🔴 Operationally required | 0.5 days | ✅ Done 2026-10-22 — `notify_failure` on every task (macOS notification + `airflow_task_failures.log`) and quant_ai's freshness watchdog (`markets/pipeline_health.py`, every 30 min, widget warning) for when nothing runs at all |
+| ⭐⭐⭐ | **J.4 Pipeline failure alert** (Slack webhook on any task failure) | 🔴 Operationally required | 0.5 days | ✅ Done 2026-10-22 — `notify_failure` on every task (macOS notification + `airflow_task_failures.log`) and quant_ai's freshness watchdog (`markets/pipeline_health.py`, every 30 min) for when nothing runs at all |
 | ⭐⭐⭐ | I.1 quant_mcp_server (signals/news/positions/backtest as MCP tools) | Extremely high | 3 days | ✅ Done — 10 read-only tools over stdio; depth gaps now tracked as R.6 |
 | ⭐⭐⭐ | I.2 Claude Desktop integration (quant MCP → query signals from a Claude chat) | High | 0.5 days | ✅ Done — verified over the real MCP protocol |
 | ⭐⭐ | F.2 RAG news search UI (search box over the R.2 retriever) | High | 1 day | [ ] Pending — retrieval superseded by R.1–R.3; "Qdrant already deployed" was never true |
@@ -438,7 +438,7 @@ missing piece is propagation, and the honest question is not "can this be captur
     article (no look-ahead); an agent judges whether the combination changes the impact and writes
     symbol, severity (strongly bearish .. strongly bullish), confidence, a 2-4 step chain, cited URLs, and
     whether the news is new or already priced in. Shown in the symbol's **Action** within minutes (holdings
-    page, phone), strongly bearish/bullish also pushed; one live alert per symbol and theme per day.
+    page), strongly bearish/bullish also pushed; one live alert per symbol and theme per day.
     **A prompt only — it does not change the buy/sell advice**, which the user considers not mature yet.
   - **Labels and training.** A `themes` field in the per-article labels, added in the same prompt change
     as the speed work (prompt order / distilled model) so the backfill is relabelled once; daily
@@ -471,8 +471,8 @@ missing piece is propagation, and the honest question is not "can this be captur
        bullish fell); the control judgments were all "no material effect". Too few to score.
     5. *Live since 2026-11-15* (`live.py`, :15 / :45): storylines rebuilt over 30 days each run (~40 s), the
        firing state read back from `quant_data.news_linkage_judgments`. quant_ai `/portfolio/news-linkage`
-       serves the newest valid judgment per symbol (72 h): under the Action pill on the holdings page, under the
-       name on the watchlist, and as one line on the phone card. A hint only.
+       serves the newest valid judgment per symbol (72 h): under the Action pill on the holdings page and under the
+       name on the watchlist. A hint only.
     *Known gaps:* articles not yet labelled count as progress unless the title reads as commentary; GD1 rescues
     arrive nightly; earnings-season catch-all storylines.
   - **Progress 2026-11-15: step 7 (scoring) live, v3 label student trained, history relabelled.**
@@ -2879,7 +2879,7 @@ geopolitics, no; and right now nothing at all, because the pipeline is down.
       signals moved from 2026-07-17 to 2026-10-22.
 - [x] Catch-up started 2026-10-22: GDELT backfill of 2026-10-08 → today, then match / enrich / features.
 - [x] Alerts: per-task failure notification (`notify_failure`) + freshness watchdog in quant_ai
-      (`/api/markets/pipeline/health`, widget line, one notification a day while stale).
+      (`/api/markets/pipeline/health`, one notification a day while stale).
 - [x] LM Studio kept (verified that mlx-lm reproduces gemma but not qwen3.5, and that llama.cpp
       embeddings drift enough to need a reindex — see below); its server is kept up headless by
       launchd `com.quant.lmstudio-server` so the 03:00 news chain does not depend on the app being open.
@@ -2980,8 +2980,8 @@ sale bought back within four weeks).
 
 **Alerts.** Two levels. Urgent — results just out, a recommended limit reached, a move beyond 1.5x
 the threshold, major news (M&A, regulator, profit warning): a macOS notification and a red banner
-in My Holdings. Normal — everything else: a "new advice" mark in My Holdings only. No widget lines
-and no phone push for now.
+in My Holdings. Normal — everything else: a "new advice" mark in My Holdings only. No phone push
+for now.
 
 **Models.** Monitoring, levels, validation and scoring: code. Analysis and writing: Claude, because
 it needs reasoning and fresh news (the local qwen agreed with Claude at kappa 0.43 in R.11 and is
@@ -3579,7 +3579,7 @@ cluster above its limit).
 
 - [x] Backend, tests, the column for the pilot holding (2026-10-31)
 - [ ] Score the kept answers against doing nothing
-- [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow), the phone page
+- [ ] After the user's review: all holdings, the watchlist (buy limits only once Q.12's checks allow)
 
 ### Q.14 Model optimisation backlog (🟡 recorded 2026-11-01; items 1, 2, 4, 6, tests A1-A4 and the action's risk plan done 2026-11-02; 3 partly; 7 needs live months)
 

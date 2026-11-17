@@ -81,7 +81,7 @@ scheduler runs its code directly.
 | `news_rag.py` | News retrieval: hybrid search, optional cross-encoder rerank. |
 | `portfolio_agent.py` | Portfolio research agent built on the same tools. |
 | `injection_guard.py`, `service_auth.py` | Prompt-injection screening; service-to-service credentials for quant_api. |
-| `markets/` | Portfolio and markets service: holdings and trades (`portfolio.py`), advisor and lot advisor, daily action (`daily_action.py`, `model_advice.py`, `risk_budget.py`, `risk_rules.py`), catalysts and events, earnings pulse watch (`pulse.py`), market briefs, global markets and indices, predictions scoring, keyword review, task monitor and schedule, phone page (`mobile.py`), LAN auth, `api.py` (routes). |
+| `markets/` | Portfolio and markets service: holdings and trades (`portfolio.py`), advisor and lot advisor, daily action (`daily_action.py`, `model_advice.py`, `risk_budget.py`, `risk_rules.py`), catalysts and events, earnings pulse watch (`pulse.py`), market briefs, global markets and indices, predictions scoring, keyword review, task monitor and schedule, LAN auth, `api.py` (routes). |
 | `knowledge/` | Markdown documents embedded for RAG Q&A. |
 | `eval/` | Retrieval and generation evaluation (R series): query sets, judge pools, rerank sweeps, scoring, the Claude reference labels. |
 | `tools/` | News indexing into Qdrant, search benchmarks, rerank, index repair. |
