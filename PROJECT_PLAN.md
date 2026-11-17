@@ -3224,9 +3224,9 @@ while trading at `$75` on a `-30%` crash, and `AAPL` `2024-05-02` `16:53` `low =
 
 | Scrubbed Model (`2019–2022` `sharpe_trade` choice) | Passing `/80` | `2023–2026` OOS acted | OOS Mean | OOS `P10` / Worst | OOS `SR/trade` | Status (2026-10-30) |
 |---|---|---|---|---|---|---|
-| **5-seed LightGBM (`lgbm_seeds`)** | 26 / 80 | 116 | **+1.40%** | `0.00%` / **`-3.18%`** | **0.454** | **Champion** (`margin=0.5, q10>=-1.5, risk`) |
+| **5-seed LightGBM (`lgbm_seeds`)** | 26 / 80 | 116 | **+1.40%** | `0.00%` / **`-3.18%`** | **0.454** | Champion until 2026-11-02, now **Shadow** (DSR 0.712 < 0.95; `margin=0.5, q10>=-1.5, risk`) |
 | **5-seed LGBM + Hurdle LGBM (`avg_lgbm_hurdle`)** | 6 / 80 | 122 | **+1.38%** | `0.00%` / `-5.05%` | **0.463** | Ensemble (`DSR_80 = 0.973`) |
-| **Two-stage Hurdle LGBM (`hurdle_lgbm`)** | 20 / 80 | 163 | **+1.06%** | `0.00%` / `-5.08%` | 0.342 | **Shadow** (`margin=0.5, q10>=-1.0, risk`, `DSR_80 = 0.961`) |
+| **Two-stage Hurdle LGBM (`hurdle_lgbm`)** | 20 / 80 | 163 | **+1.06%** | `0.00%` / `-5.08%` | 0.342 | **Champion** since 2026-11-02 (`margin=0.5, q10>=-1.0, risk`, `DSR_80 = 0.961`; `earnings_pulse.LIVE_MODELS`) |
 | **CatBoost + 5-seed LGBM (`avg_cb_lgbm`)** | 20 / 80 | 61 | **+1.56%** | `0.00%` / `-5.57%` | 0.438 | `87` total trades (`<100` live floor) |
 | **CatBoost (`catboost`, prior champion)** | **0 / 80** | (141) | (+0.96%) | (`0.00%` / `-7.00%`) | (0.348) | **Retired** (`2019–2022` worst `-12.02%` once phantom fills removed) |
 
@@ -3431,7 +3431,7 @@ cost.
 | Stop peer-spillover RL (`learn_peers`) | Pause, not refuted: the evening catch-up signal is there (IC about 0.11, top-bottom quintile about 0.65% gross); it is the assumed 0.5% round trip that eats it, and the spreads below say that is about twice the real cost on liquid names |
 | No larger action spaces, no PPO / DQN | Agree (the single LightGBM over 576 actions showed the winner's curse) |
 | Three layers: signal / position-and-risk / execution | Agree; the missing piece is layer 2 as one gate every module passes (below) |
-| "Pulse model +2.03%, DSR 0.992" | Out of date: that was CatBoost before the phantom-bar scrub; live is the 5-seed LightGBM (+1.40%, 116 trades, worst -3.18%), hurdle LightGBM in shadow. The pulse sells into the spike and buys back; it does not "catch the knife" |
+| "Pulse model +2.03%, DSR 0.992" | Out of date: that was CatBoost before the phantom-bar scrub; live was the 5-seed LightGBM (+1.40%, 116 trades, worst -3.18%) with the hurdle LightGBM in shadow; since 2026-11-02 the hurdle LightGBM is champion (DSR 0.961) and the 5-seed the shadow (DSR 0.712). The pulse sells into the spike and buys back; it does not "catch the knife" |
 | Dip-entry spacing model | As a rule yes, as a trained model no: the per-fill figures overstate it (re-run below) |
 | Swing-lot exit model | Display only: lots are fungible (selling the cheapest lot or the dearest sells the same shares), so "take profit on the cheap lot" is "reduce after a rebound", which `learn_daily` found loses to holding on these names |
 
@@ -3771,6 +3771,89 @@ momentum (Kaminski-Lo); pre-set limit orders curb the disposition effect (Odean)
       rather than timing one stock.
 - [ ] Q.16.11 **Pre-set take-profit / stop orders** at entry from the barriers, against the disposition
       effect (gains that were not taken; a holding averaged down eleven times).
+
+### Q.17 ML / AI / LLM layer: where models earn their place (🟡 recorded 2026-11-17, user's request)
+
+Drafted by Claude and cross-checked with Gemini 4 Carbon (High) over three rounds until both agreed;
+every figure below was checked against the code. Model training, where an item needs it, runs on
+Colab (user, 2026-11-17). Each step starts only after the user's go.
+
+**What the evidence says.** Predicting each stock's direction day by day is a dead end here:
+`daily_advice` (20-day IC 0.004, t 0.5), `learn_daily` (single-step regression on exact outcomes, i.e.
+an offline contextual bandit rather than Fitted Q: 2023-2026 -1.79%, DSR 0) and the factor ridge
+(untouched holdout 2025-11..2026-10 -9.8%/yr vs the universe) all failed. What works is conditional and
+grouped by cause: the earnings pulse (`hurdle_lgbm` champion, DSR 0.961), the 5-session barrier (Brier
+0.6271 vs base 0.6326), drop rebound rates split by cause (`drop_rebound`, where a 17-feature LightGBM
+lost to the grouped rates on 2,455 drops), `news_events` drifts (guidance cut 20d -1.61%, t -4.4;
+5%+ fall without bad news 20d +1.11%, t 3.0) and N.6 as a volatility hint (test lift 1.40, direction a
+coin flip). So: decision hygiene and grouped base rates first, new data sources next, wider ranking
+models last, and every hint scored.
+
+- [ ] Q.17.0 **Score every hint** (cross-cutting). Advisory hints (N.6 and later) against doing nothing
+      at 5 / 20 / 60 sessions. Blocking hints (Q.17.1, Q.17.4, the add-spacing block): blocked means
+      nothing was done, so against "bought one unit at the planned add price when it fired"; a fall after
+      it is reported as loss avoided, a rise as gain missed, separately, never as profit. Hints with a
+      negative net record over a sustained window are retired. Exit / take-profit hints (Q.16.1, Q.16.2,
+      Q.16.11) are scored the same way rather than made a new item.
+- [ ] Q.17.1 **Devil's advocate before an add.** When the user is about to add on a fall (or the
+      add-spacing block fires): the base rates of like cases (`drop_rebound` rates by cause,
+      `news_events` drifts), recent analyst downgrades and target cuts, catalysts within 7 days (Q.8),
+      N.6's latest judgment, and the three strongest bearish facts with source links. Claude CLI; cited URLs
+      verified as in `news_linkage/judge.py`. A hint only. Accept: 100% of cited URLs verified; on >= 10
+      replayed historical drops, guidance and rating cuts recalled >= 90%; scored as a blocking hint.
+- [ ] Q.17.2 **v3 labels and sector residuals, as two ablations.**
+      2a labels only: features read `student_gd1`, kept when `relevant` is true, `prefilter.junk_reason(...)`
+      is None and `slm_company_match_v2._has_direct_mention(...)` holds (keeping `student_gd1_shadow.rule_verdict`'s
+      key-person pass), syndication dedupe kept; re-run `news_events` and the 5-session `barrier_model`.
+      2b target only: collect sector ETF daily bars (11 SPDR sectors + SOXX/SMH, IGV, XBI, KRE ...), map
+      each stock by `universe_rules/names.json` sector / industry; residual = r - beta x r_ETF (rolling 60
+      sessions, beta clipped to [0.2, 2.5]). `news_events` takes the residual target; `barrier_model` keeps
+      its raw-price barrier labels (limits fill on the stock's own price) and takes the ETF return /
+      residual as features. Accept, each step on its own: barrier Brier < 0.6271 (date-bootstrap 95% CI
+      below 0) and core `news_events` kinds keep |t| >= 3.0; a residual-label barrier variant, if tried, is
+      judged by Brier(model) - Brier(its own base rate) beating today's -0.0055. `daily_advice` is not retrained.
+- [ ] Q.17.3 **Analyst revisions.** Stage 1: fetch the rating and price-target history
+      (`upgradeDowngradeHistory`, `analysts.py`, about 2012 on) for the 101 core names (1.5 s apart, a few
+      minutes). Test 20-day net downgrades and target changes (`pt_current / pt_prior - 1` within a row,
+      immune to splits) against 20 / 60-session excess (sector residual once Q.17.2b is done), t clustered
+      by date, defined on 2018-2023 and tested on 2024-2026; rows stamped 00:00:00 (date only) start from
+      the next session's open (unlike `news_events`, which counts 00:00 as pre-market). Womack (1996).
+      Accept: out-of-sample |t| >= 2.5 with the in-sample sign, then it joins the add block and Q.17.4;
+      otherwise it is only shown as a fact in Q.17.1. Stage 2, only if stage 1 passes and Q.17.6 goes ahead:
+      the point-in-time universe's listed names (delisted ones have no yfinance data).
+- [ ] Q.17.4 **Drop meta-labelling.** On >= 2 x ATR drops or an N.6 firing (101 names since 2018: about
+      2,100 drops, 1,288 train / 813 test, fewer independent dates): regularised logistic regression or a
+      very shallow tree (num_leaves <= 7) on v3 event type / themes, storyline progress, the sector's and
+      the market's move that day, days to the report and Q.17.3's signal if it passed. Two baselines: the
+      `news_events` bad-news / no-bad-news split and `drop_rebound`'s table by cause. Targets: the
+      5-session barrier (raw price) and 20-session excess < -3%. Accept: 2024-2026 Brier / log-loss beat
+      both baselines (date CIs excluding 0) with ECE < 3%; otherwise the grouped table goes live instead.
+- [ ] Q.17.5 **Filing changes (Lazy Prices), a small test without an LLM first.** EDGAR 10-K / 10-Q for
+      the 101 core names, 2018-2026 (about 3,000 filings, `edgar` as in `earnings_releases.py`): text
+      similarity of Item 1A and MD&A to the same form a year earlier (10-Q to the same quarter, 10-K to the
+      previous 10-K); returns from the SEC acceptance time. Accept: the least-similar fifth trails over
+      3 / 6 months (t >= 2.5, same sign in 2024-2026), then an avoid flag and a Q.17.4 feature; if not,
+      no factor, and Q.17.1 only shows a holding's latest filing changes as facts, claiming no edge.
+      Cohen, Malloy & Nguyen (2020).
+- [ ] Q.17.6 **Cross-sectional ranking (Q.16.10), last.** The point-in-time universe (`build_universe.py`;
+      648 tickers with daily bars, prices and EPS surprises only, no balance-sheet data) allows a price
+      version now, which doubles as M.4's "does news add to price" baseline; the version with news
+      features waits for N.8's collection fix. Sector-neutral ridge baseline, then a shallow ranker /
+      LambdaRank on 20-session sector residuals; report the share of delisted names missing bars. Accept:
+      out-of-sample 20-day rank IC > 0.03 (Newey-West t >= 2.5), top 20 after costs beat the point-in-time
+      equal-weight pool (t >= 2.0), DSR >= 0.95. Used as a list of replacement candidates.
+
+**Not doing, with what would reopen each.**
+
+| Item | Why not now | Reopen when |
+|---|---|---|
+| RL position sizing (state: volatility percentile, N.6 firing, barrier P(lower first), drawdown, concentration; action: target weight / cash kept; reward: return - lambda x CVaR) | `risk_budget.py` already sizes in closed form so the worst 5% fits the loss budget; volatility-managed exposure (Moreira-Muir, `drop_rebound` A4) gave no return gain (median Sharpe 0.578 vs 0.602 held); too few independent episodes; `learn_daily` already overfit | a plain volatility-target rule beats `risk_budget` out of sample by a clear margin, or Q.17.0 has logged enough live decisions to learn from |
+| Bandit for exit / stop widths | choosing the limit per drop lost 0.16% to the fixed +1.5 / +2 x ATR pair (`drop_rebound`) | Q.17.0's exit records show the fixed pair losing |
+| Text embeddings + ridge on returns (Chen, Kelly & Xiu 2022) | the signal is next-day and small-cap; a manual, long-only, low-turnover account cannot use it; the 490 universe names are not embedded | holding periods shorten to days |
+| Earnings-call Q&A | no free, reliable transcripts; releases are already read by `earnings_releases.py` | a transcript source is available |
+| HAR-RV volatility forecasts for sizing | A4 showed volatility-managed sizing adds no return; EWMA is enough | as for RL sizing |
+| N.6 accumulation / cross-led alerts | no gain in the nine-year calibration | — |
+| Option skew | snapshots only since 2026-11-02 | six months collected |
 
 ---
 
