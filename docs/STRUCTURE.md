@@ -124,7 +124,6 @@ All Java code is under `src/main/java/org/example/quantapi/`.
 | `scripts/core.sh` | Starts the always-on core (login chain, Airflow metadata DB, Qdrant, MLflow) and stops the rest. |
 | `scripts/host_proxy.py` | Host-side proxy bridge for pulling images under the VPN. |
 | `README.md` | Platform overview and results. |
-| `PROJECT_PLAN.md` | Roadmap and research log (Q, R, N series). |
 | `docs/STRUCTURE.md` | This file. |
 
 ## quant_keycloak — identity

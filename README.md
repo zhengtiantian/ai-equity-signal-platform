@@ -289,11 +289,4 @@ bash run_host.sh
 | `scripts/core.sh` | Starts the always-on core (login chain, Airflow metadata DB, Qdrant, MLflow) and stops the rest |
 | `scripts/host_proxy.py` | Host-side HTTP(S) proxy so Docker can pull and build behind a VPN |
 | `docker/airflow/` | Airflow image for the web UI and `airflow-init` (Dockerfile + vendored provider wheel) |
-| `PROJECT_PLAN.md` | Roadmap, status and the detailed spec of every item |
 | `docs/STRUCTURE.md` | Directory-by-directory map of all six repositories and where each part runs |
-
----
-
-## Project Plan
-
-The roadmap, current status and the detailed spec of every item are in [PROJECT_PLAN.md](PROJECT_PLAN.md).

@@ -2,3 +2,4 @@
 docker-compose.override.yml
 .env
 *.bak
+PROJECT_PLAN.md
