@@ -128,8 +128,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # English by default with an EN / 中文 switch in the header (2026-11-21), on top of the weather banner
-    image: xiz001/quant_ui:lang-20261121
+    # Volume column in the holdings and watchlist tables; gold, bitcoin and Brent in the indices (2026-11-21)
+    image: xiz001/quant_ui:volume-20261121
     container_name: quant_ui
     restart: always
     logging: *default-logging
