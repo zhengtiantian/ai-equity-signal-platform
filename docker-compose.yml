@@ -128,8 +128,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # weather banner (2026-11-20): Market panic + chip sector stress + macro headwind banner on Holdings page
-    image: xiz001/quant_ui:weather-20261120
+    # English by default with an EN / 中文 switch in the header (2026-11-21), on top of the weather banner
+    image: xiz001/quant_ui:lang-20261121
     container_name: quant_ui
     restart: always
     logging: *default-logging
