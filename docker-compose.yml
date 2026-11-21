@@ -129,7 +129,7 @@ services:
 
   quant_ui:
     # weather banner (2026-11-20): Market panic + chip sector stress + macro headwind banner on Holdings page
-    image: xiz001/quant_ui:weather-20261120
+    image: xiz001/quant_ui:fdc4c69
     container_name: quant_ui
     restart: always
     logging: *default-logging
