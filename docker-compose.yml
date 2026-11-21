@@ -129,7 +129,7 @@ services:
 
   quant_ui:
     # Holdings tables at two lines per cell, names on hover (2026-11-21), after the volume column and commodities
-    image: xiz001/quant_ui:fee273f
+    image: xiz001/quant_ui:6172546
     container_name: quant_ui
     restart: always
     logging: *default-logging
