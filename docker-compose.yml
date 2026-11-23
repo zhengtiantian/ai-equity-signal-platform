@@ -38,23 +38,18 @@ services:
     networks:
       - project-net
 
-  # Vector store for R.1 — dense retrieval over the news corpus.
-  # Storage is a bind mount on Data4T, never the container layer: the 584G
-  # incident was a container writing its working set into the writable layer,
-  # and a vector index growing there would repeat it exactly. Memory is capped
-  # so the HNSW graph cannot starve mongo's 4GB WiredTiger cache; the VM has
-  # 15.6GB total and mongo's share is already committed above.
+  # Vector store for R.1 / V.6 — dense retrieval over the news corpus.
+  # Storage is a bind mount on Data4T, never the container layer. With 593-stock
+  # expansion (~1.05M vectors) plus INT8 scalar quantization (~1.05GB RAM) and
+  # on-disk vectors/payloads, 3g keeps search fast while leaving ~12.6GB for mongo6.
   qdrant:
     image: qdrant/qdrant:v1.18.3
     container_name: qdrant
     restart: always   # part of core.sh: the daily pipeline needs it (2026-10-22)
     logging: *default-logging
-    mem_limit: 2g
+    mem_limit: 3g
     environment:
       QDRANT__TELEMETRY_DISABLED: "true"
-      # Keep vectors on disk and let the OS page cache manage them. 851K x 768
-      # dims x float32 is ~2.6GB of raw vectors before graph overhead, which does
-      # not fit the 2g cap above if held resident.
       QDRANT__STORAGE__ON_DISK_PAYLOAD: "true"
     ports:
       - "26333:6333"   # HTTP / REST
