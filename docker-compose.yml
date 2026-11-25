@@ -299,7 +299,6 @@ services:
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
       - /Volumes/Data4T/docker-volumes/airflow_logs:/opt/airflow/logs
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - airflow-postgres
     networks:
@@ -322,7 +321,6 @@ services:
     volumes:
       - ../quant_data/airflow/dags:/opt/airflow/dags
       - /Volumes/Data4T/docker-volumes/airflow_logs:/opt/airflow/logs
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - airflow-postgres
     networks:
