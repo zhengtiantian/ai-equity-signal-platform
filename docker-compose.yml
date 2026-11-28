@@ -123,8 +123,8 @@ services:
       start_period: 30s
 
   quant_ui:
-    # Holdings tables at two lines per cell, names on hover (2026-11-21), after the volume column and commodities
-    image: xiz001/quant_ui:6172546
+    # F14 Market Panic Guardrail & HintScores/DevilsAdvocate UI (2026-11-28)
+    image: xiz001/quant_ui:f14-advocate-20261128
     container_name: quant_ui
     restart: always
     logging: *default-logging
