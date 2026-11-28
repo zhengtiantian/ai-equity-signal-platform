@@ -124,7 +124,7 @@ services:
 
   quant_ui:
     # F14 Market Panic Guardrail & HintScores/DevilsAdvocate UI (2026-11-28)
-    image: xiz001/quant_ui:f14-advocate-20261128
+    image: xiz001/quant_ui:1c15625
     container_name: quant_ui
     restart: always
     logging: *default-logging
